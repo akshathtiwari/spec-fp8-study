@@ -38,7 +38,8 @@ else:
 
 # %% Cell 3: Install vLLM (for vLLM cells)
 # This takes 3-5 minutes
-!pip install vllm -q
+# Use cu124 index to avoid CUDA 13 mismatch on newer Colab runtimes
+!pip install vllm --extra-index-url https://download.pytorch.org/whl/cu124 -q
 import vllm
 print(f"vLLM version: {vllm.__version__}")
 
