@@ -19,11 +19,15 @@ print(result.stdout)
 import torch
 if torch.cuda.is_available():
     cap = torch.cuda.get_device_capability()
+    props = torch.cuda.get_device_properties(0)
     print(f"\nCompute capability: {cap[0]}.{cap[1]}")
     print(f"GPU: {torch.cuda.get_device_name()}")
-    print(f"VRAM: {torch.cuda.get_device_properties(0).total_mem / 1024**3:.1f} GB")
-    assert cap[0] >= 8 and cap[1] >= 9, "Need SM89+ (Ada). Got {cap}"
-    print("\n✓ GPU is Ada-class (SM89+). Good to go.")
+    print(f"VRAM: {props.total_memory / 1024**3:.1f} GB")
+    if cap >= (8, 9):
+        print("\n✓ GPU is Ada-class (SM89+). Full FP8 probe will run.")
+    else:
+        print(f"\n⚠ GPU is SM{cap[0]}{cap[1]}, not SM89+.")
+        print("  FP8 cells will be skipped. BF16 smoke test will still work.")
 else:
     print("✗ No CUDA GPU. Change runtime to L4.")
 
