@@ -21,7 +21,7 @@ because the dequant path is gated to SM100 (datacenter Blackwell).
 
 ```bash
 # Clone and install
-git clone https://github.com/<user>/spec-fp8-study.git
+git clone https://github.com/akshathtiwari/spec-fp8-study.git
 cd spec-fp8-study
 pip install -e .
 

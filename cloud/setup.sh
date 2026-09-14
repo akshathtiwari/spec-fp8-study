@@ -33,7 +33,7 @@ if [ -d "${REPO_DIR}" ]; then
     cd "${REPO_DIR}" && git pull
     echo "Updated existing repo"
 else
-    git clone https://github.com/<YOUR_USERNAME>/spec-fp8-study.git "${REPO_DIR}"
+    git clone https://github.com/akshathtiwari/spec-fp8-study.git "${REPO_DIR}"
     echo "Cloned repo"
 fi
 cd "${REPO_DIR}"

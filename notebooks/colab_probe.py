@@ -28,7 +28,7 @@ else:
     print("✗ No CUDA GPU. Change runtime to L4.")
 
 # %% Cell 2: Clone repo and install harness
-!git clone https://github.com/<YOUR_USERNAME>/spec-fp8-study.git
+!git clone https://github.com/akshathtiwari/spec-fp8-study.git
 %cd spec-fp8-study
 !pip install -e . -q
 

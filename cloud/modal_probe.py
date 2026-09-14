@@ -66,7 +66,7 @@ def run_vllm_probe():
     # Clone and install if not present
     if not os.path.exists("/root/spec-fp8-study"):
         subprocess.run(
-            ["git", "clone", "https://github.com/<YOUR_USERNAME>/spec-fp8-study.git",
+            ["git", "clone", "https://github.com/akshathtiwari/spec-fp8-study.git",
              "/root/spec-fp8-study"],
             check=True,
         )
@@ -121,7 +121,7 @@ def run_sglang_probe():
 
     if not os.path.exists("/root/spec-fp8-study"):
         subprocess.run(
-            ["git", "clone", "https://github.com/<YOUR_USERNAME>/spec-fp8-study.git",
+            ["git", "clone", "https://github.com/akshathtiwari/spec-fp8-study.git",
              "/root/spec-fp8-study"],
             check=True,
         )
