@@ -1,0 +1,40 @@
+# Phase 1 — Compatibility matrix
+# Enumerates every mechanism × precision × engine cell on Ada (SM89).
+# The H1 test is the DFlash × fp8_e4m3 cells.
+
+model: Qwen/Qwen3-4B
+model_revision: main
+spec_tokens: 5
+
+axes:
+  engine: [vllm, sglang]
+  engine_ref: [latest]
+  mechanism: [none, ngram, eagle3, dflash, mtp]
+  weight_precision: [bf16, fp8]
+  kv_cache_dtype: [auto, fp8_e4m3]
+  attn_backend: [auto]
+
+defaults:
+  draft_model: null
+  draft_revision: null
+  block_size: null
+  guided_decoding: false
+
+per_mechanism:
+  eagle3:
+    # U3: checkpoint TBD — update once verified
+    draft_model: TBD/Qwen3-4B-EAGLE3
+    draft_revision: main
+  dflash:
+    draft_model: z-lab/Qwen3-4B-DFlash-b16
+    draft_revision: main
+    block_size: 16
+  # ngram: no draft model needed
+  # mtp: uses built-in multi-token heads, no draft model
+  # none: baseline, no speculation
+
+exclude:
+  # Non-speculative baselines: only need the 4 precision combos, not all backends
+  # Keep all 4 precision configs for 'none' as baselines
+  # Skip MTP if model doesn't expose MTP heads (U4 — remove this exclude if it does)
+  # - {mechanism: mtp}  # uncomment if MTP unavailable

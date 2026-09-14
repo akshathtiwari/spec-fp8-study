@@ -1,0 +1,20 @@
+# Minimal test sweep — 2 cells for integration testing
+# Run: ./run.sh probe --sweep sweeps/test_mini.yaml
+
+model: Qwen/Qwen3-0.6B
+model_revision: main
+spec_tokens: 3
+
+axes:
+  engine: [vllm]
+  engine_ref: [latest]
+  mechanism: [none, ngram]
+  weight_precision: [bf16]
+  kv_cache_dtype: [auto]
+  attn_backend: [auto]
+
+defaults:
+  draft_model: null
+  draft_revision: null
+  block_size: null
+  guided_decoding: false
