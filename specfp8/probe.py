@@ -323,5 +323,29 @@ def main():
     run_probe(args.sweep, args.results)
 
 
+def _setup_cuda_ld_path():
+    """Ensure pip-installed CUDA libs are on LD_LIBRARY_PATH.
+
+    On Colab, nvidia pip packages install .so files under
+    site-packages/nvidia/*/lib/ which isn't on the default search path.
+    This must run before any CUDA imports.
+    """
+    import glob
+    import os
+
+    nvidia_dirs = glob.glob("/usr/local/lib/python*/dist-packages/nvidia/*/lib")
+    torch_dirs = glob.glob("/usr/local/lib/python*/dist-packages/torch/lib")
+    cuda_dirs = ["/usr/local/cuda/lib64"]
+    new_dirs = [d for d in nvidia_dirs + torch_dirs + cuda_dirs if os.path.isdir(d)]
+
+    if new_dirs:
+        ld_path = os.environ.get("LD_LIBRARY_PATH", "")
+        existing = set(ld_path.split(":")) if ld_path else set()
+        to_add = [d for d in new_dirs if d not in existing]
+        if to_add:
+            os.environ["LD_LIBRARY_PATH"] = ":".join(to_add) + (":" + ld_path if ld_path else "")
+
+
 if __name__ == "__main__":
+    _setup_cuda_ld_path()
     main()
