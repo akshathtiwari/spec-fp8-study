@@ -38,28 +38,81 @@ def capture() -> EnvInfo:
 
 
 def _query_nvidia_smi() -> dict:
-    """Query nvidia-smi for GPU name, VRAM, driver, and CUDA version."""
-    cmd = [
-        "nvidia-smi",
-        "--query-gpu=name,memory.total,driver_version",
-        "--format=csv,noheader,nounits",
-    ]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
-    # Take the first GPU if multiple
-    line = result.stdout.strip().split("\n")[0]
-    parts = [p.strip() for p in line.split(",")]
+    """Query nvidia-smi for GPU name, VRAM, driver, and CUDA version.
 
-    # CUDA version from nvidia-smi
-    cuda_cmd = ["nvidia-smi", "--query-gpu=driver_version", "--format=csv,noheader"]
-    # Actually get CUDA version from nvcc or nvidia-smi header
+    Tries the structured --query-gpu first; if that fails (exit 12 on
+    some driver versions), falls back to parsing the plain nvidia-smi
+    header table.
+    """
+    try:
+        cmd = [
+            "nvidia-smi",
+            "--query-gpu=name,memory.total,driver_version",
+            "--format=csv,noheader,nounits",
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        line = result.stdout.strip().split("\n")[0]
+        parts = [p.strip() for p in line.split(",")]
+        name, vram_mb, driver = parts[0], float(parts[1]), parts[2]
+    except (subprocess.CalledProcessError, ValueError, IndexError):
+        # Fallback: parse the plain nvidia-smi output
+        name, vram_mb, driver = _parse_nvidia_smi_plain()
+
     cuda_version = _get_cuda_version()
 
     return {
-        "name": parts[0],
-        "vram_mb": float(parts[1]),
-        "driver": parts[2],
+        "name": name,
+        "vram_mb": vram_mb,
+        "driver": driver,
         "cuda": cuda_version,
     }
+
+
+def _parse_nvidia_smi_plain() -> tuple[str, float, str]:
+    """Parse GPU info from plain nvidia-smi output (no --query-gpu)."""
+    result = subprocess.run(
+        ["nvidia-smi"], capture_output=True, text=True, check=True
+    )
+    lines = result.stdout.split("\n")
+
+    name = "unknown"
+    vram_mb = 0.0
+    driver = "unknown"
+
+    for line in lines:
+        # Driver line: "| NVIDIA-SMI 560.35.03    Driver Version: 560.35.03    CUDA Version: 12.6 |"
+        if "Driver Version:" in line:
+            try:
+                driver = line.split("Driver Version:")[1].split()[0].strip()
+            except (IndexError, ValueError):
+                pass
+        # GPU name line: "|   0  Tesla T4   ..." or "|   0  NVIDIA L4   ..."
+        if "MiB" in line and "|" in line:
+            try:
+                # Memory line: "| N/A   47C    P0    27W /  70W |    0MiB / 15360MiB |      0%      Default |"
+                parts = line.split("|")
+                for part in parts:
+                    if "MiB" in part and "/" in part:
+                        total_str = part.split("/")[1].strip().replace("MiB", "").strip()
+                        vram_mb = float(total_str)
+                        break
+            except (IndexError, ValueError):
+                pass
+
+    # Try to get GPU name from torch if nvidia-smi parsing is tricky
+    try:
+        import torch
+        if torch.cuda.is_available():
+            name = torch.cuda.get_device_name(0)
+    except ImportError:
+        # Last resort: grep nvidia-smi output for known GPU names
+        for line in lines:
+            for gpu in ["T4", "L4", "L40S", "A100", "H100", "RTX 4090", "RTX 3090"]:
+                if gpu in line and "%" not in line:
+                    name = line.split("|")[1].strip() if "|" in line else gpu
+                    break
+
+    return name, vram_mb, driver
 
 
 def _get_cuda_version() -> str:
