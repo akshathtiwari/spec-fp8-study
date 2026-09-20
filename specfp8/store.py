@@ -22,18 +22,23 @@ def completed_ids(results_dir: str | Path) -> set[str]:
     return set(completed_cells(results_dir))
 
 
-def completed_cells(results_dir: str | Path) -> dict[str, str | None]:
-    """Map cell_id -> the argv fingerprint that produced that record.
+def completed_cells(results_dir: str | Path) -> dict[str, dict]:
+    """Map cell_id -> {"argv_fingerprint", "status"} for the latest record.
 
     A cell_id hashes the ServerCell config only, so it cannot distinguish
     "this configuration is genuinely unsupported" from "the harness built a
-    bad command line". The fingerprint closes that gap: when the launcher
-    starts emitting a different command for the same config, the old record
-    is stale and the cell is re-run. Records written before fingerprinting
-    map to None and are always re-run.
+    bad command line". The fingerprint closes part of that gap: when the
+    launcher starts emitting a different command for the same config, the
+    old record is stale and the cell is re-run.
+
+    It does not close all of it. An environment fault — a missing CUDA
+    toolkit, an OOM, a bad driver — fails the cell without changing the
+    command, so such a record is indistinguishable from a genuine
+    incompatibility by fingerprint alone. `status` is surfaced here so the
+    caller can choose to retry failures explicitly.
     """
     cells_path = Path(results_dir) / "cells.jsonl"
-    seen: dict[str, str | None] = {}
+    seen: dict[str, dict] = {}
 
     if not cells_path.exists():
         return seen
@@ -52,7 +57,10 @@ def completed_cells(results_dir: str | Path) -> dict[str, str | None]:
                 continue
             if "cell_id" in record:
                 # Later records win: a re-run supersedes the stale result.
-                seen[record["cell_id"]] = record.get("argv_fingerprint")
+                seen[record["cell_id"]] = {
+                    "argv_fingerprint": record.get("argv_fingerprint"),
+                    "status": record.get("outcome", {}).get("status"),
+                }
 
     return seen
 

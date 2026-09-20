@@ -273,7 +273,9 @@ def _make_record(
     return record
 
 
-def run_probe(sweep_path: str, results_dir: str) -> None:
+def run_probe(
+    sweep_path: str, results_dir: str, retry_failed: bool = False
+) -> None:
     """Main probe entry point."""
     results_path = Path(results_dir)
     log_dir = Path("logs")
@@ -292,22 +294,32 @@ def run_probe(sweep_path: str, results_dir: str) -> None:
     done = completed_cells(results_path)
     remaining: list[tuple[ServerCell, str]] = []
     stale = 0
+    retried = 0
     for c in all_cells:
         cid = cell_id(c)
-        if cid not in done:
+        prev = done.get(cid)
+        if prev is None:
             remaining.append((c, cid))
             continue
         # A recorded result only counts if the harness would issue the same
         # command today. Otherwise it reflects an older (possibly broken)
         # launcher and must not be read as a compatibility verdict.
-        if done[cid] == _cell_fingerprint(c):
+        if prev["argv_fingerprint"] != _cell_fingerprint(c):
+            stale += 1
+            remaining.append((c, cid))
             continue
-        stale += 1
-        remaining.append((c, cid))
+        # A failure recorded under a broken environment looks identical to a
+        # genuine incompatibility, so retrying is opt-in.
+        if retry_failed and prev["status"] != "ok":
+            retried += 1
+            remaining.append((c, cid))
+            continue
 
-    print(f"  Already completed: {len(done) - stale}")
+    print(f"  Already completed: {len(done) - stale - retried}")
     if stale:
         print(f"  Stale (launch command changed, re-running): {stale}")
+    if retried:
+        print(f"  Previously failed (--retry-failed, re-running): {retried}")
     print(f"  Remaining: {len(remaining)}")
 
     if not remaining:
@@ -351,8 +363,14 @@ def main():
         "--results", default="results",
         help="Results directory (default: results/)",
     )
+    parser.add_argument(
+        "--retry-failed", action="store_true",
+        help="Re-run cells whose last recorded status was not 'ok'. Use after "
+             "fixing an environment fault, which fails cells without changing "
+             "the launch command and so is invisible to the staleness check.",
+    )
     args = parser.parse_args()
-    run_probe(args.sweep, args.results)
+    run_probe(args.sweep, args.results, retry_failed=args.retry_failed)
 
 
 def _setup_cuda_ld_path():

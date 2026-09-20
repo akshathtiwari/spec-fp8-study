@@ -6,7 +6,8 @@ Setup:
 2. modal setup             # authenticate
 3. modal run cloud/modal_probe.py --engine vllm
 
-This runs the probe on an L40S (SM89, 48GB) using Modal's free $30/mo credits.
+This runs the probe on an L4 (SM89, 24GB) — Ada-class, which is the compute
+capability the study is about. A payment method is required for any GPU.
 Results are persisted to a Modal Volume so they survive across invocations.
 """
 
@@ -129,8 +130,8 @@ def _print_results(results_path="/results/cells.jsonl"):
         "/models": model_vol,
     },
 )
-def run_vllm_probe(sweep_file: str = "compat"):
-    """Run the probe with vLLM engine on L40S."""
+def run_vllm_probe(sweep_file: str = "compat", retry_failed: bool = False):
+    """Run the probe with vLLM engine."""
     import os
 
     os.environ["SPECFP8_MODEL_CACHE"] = "/models"
@@ -156,7 +157,8 @@ def run_vllm_probe(sweep_file: str = "compat"):
     result = subprocess.run(
         ["python", "-m", "specfp8.probe",
          "--sweep", sweep_path,
-         "--results", "/results"],
+         "--results", "/results"]
+        + (["--retry-failed"] if retry_failed else []),
     )
 
     # Commit volume so results persist
@@ -191,8 +193,8 @@ def run_vllm_probe(sweep_file: str = "compat"):
         "/models": model_vol,
     },
 )
-def run_sglang_probe():
-    """Run the probe with SGLang engine on L40S."""
+def run_sglang_probe(retry_failed: bool = False):
+    """Run the probe with SGLang engine."""
     import os
     import subprocess
 
@@ -213,7 +215,8 @@ def run_sglang_probe():
     result = subprocess.run(
         ["python", "-m", "specfp8.probe",
          "--sweep", sweep_path,
-         "--results", "/results"],
+         "--results", "/results"]
+        + (["--retry-failed"] if retry_failed else []),
     )
 
     results_vol.commit()
@@ -283,16 +286,17 @@ def dump_vllm_help() -> str:
 def main(
     engine: str = "vllm",
     sweep: str = "compat",
+    retry_failed: bool = False,
 ):
     """Entry point: modal run cloud/modal_probe.py [--engine vllm|sglang|status|help] [--sweep mini|compat]"""
     if engine == "help":
         print(dump_vllm_help.remote())
         return
     if engine == "vllm":
-        count = run_vllm_probe.remote(sweep_file=sweep)
+        count = run_vllm_probe.remote(sweep_file=sweep, retry_failed=retry_failed)
         print(f"\nDone. {count} cells completed.")
     elif engine == "sglang":
-        run_sglang_probe.remote()
+        run_sglang_probe.remote(retry_failed=retry_failed)
     elif engine == "status":
         check_results.remote()
     else:
