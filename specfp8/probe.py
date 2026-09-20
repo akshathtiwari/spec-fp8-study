@@ -257,10 +257,12 @@ def _make_record(
     if tau is not None:
         record["spec"] = {"tau": round(tau, 3)}
         if spec_stats is not None:
+            rate = spec_stats.acceptance_rate
             record["spec"].update({
                 "accepted_tokens": spec_stats.accepted_tokens,
                 "draft_tokens": spec_stats.draft_tokens,
                 "verification_steps": spec_stats.verification_steps,
+                "acceptance_rate": round(rate, 4) if rate is not None else None,
             })
 
     record["correctness"] = {

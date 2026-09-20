@@ -1,13 +1,20 @@
 """vLLM Prometheus counter mapping.
 
-vLLM counter names (as of v0.20+):
-- vllm:spec_decode_draft_acceptance_rate — but this is a gauge, not raw counts
-- vllm:num_spec_tokens_total — total draft tokens proposed
-- vllm:num_accepted_tokens_total — total accepted tokens
-- vllm:num_spec_decode_steps_total — total verification steps
+Counter names verified against vLLM 0.29.0 by scraping /metrics from a
+live server (cloud/modal_probe.py --engine diagnose):
 
-Counter names may vary across versions. If the expected counters are
-missing, parse() returns None and τ is recorded as null.
+    vllm:spec_decode_num_draft_tokens_total      total draft tokens proposed
+    vllm:spec_decode_num_accepted_tokens_total   accepted *draft* tokens
+    vllm:spec_decode_num_drafts_total            drafts == verification steps
+
+The earlier `vllm:num_spec_tokens_total` family does not exist in 0.29 and
+silently yielded τ = null. Older spellings are kept as fallbacks, but the
+0.29 names are tried first.
+
+`num_accepted_tokens_total` excludes the bonus token: an observed run had
+650 drafts at 3 speculative tokens each (1950 draft tokens) and only 185
+accepted, which is below the 650 floor that including the bonus would
+imply. SpecStats.tau accounts for this — see metrics/base.py.
 """
 
 from __future__ import annotations
@@ -18,24 +25,27 @@ from specfp8.metrics.base import SpecStats
 class VllmMetricsScraper:
     """Maps vLLM Prometheus counters to SpecStats."""
 
-    # Primary counter names (vLLM v0.20+)
-    DRAFT_TOKENS = "vllm:num_spec_tokens_total"
-    ACCEPTED_TOKENS = "vllm:num_accepted_tokens_total"
-    VERIFICATION_STEPS = "vllm:num_spec_decode_steps_total"
+    # Primary counter names (verified on vLLM 0.29.0)
+    DRAFT_TOKENS = "vllm:spec_decode_num_draft_tokens_total"
+    ACCEPTED_TOKENS = "vllm:spec_decode_num_accepted_tokens_total"
+    VERIFICATION_STEPS = "vllm:spec_decode_num_drafts_total"
 
-    # Fallback names (older versions)
+    # Tried in order; earlier entries win.
     FALLBACK_NAMES = {
         "draft": [
+            "vllm:spec_decode_num_draft_tokens_total",
             "vllm:num_spec_tokens_total",
             "vllm_num_spec_tokens_total",
             "num_spec_tokens_total",
         ],
         "accepted": [
+            "vllm:spec_decode_num_accepted_tokens_total",
             "vllm:num_accepted_tokens_total",
             "vllm_num_accepted_tokens_total",
             "num_accepted_tokens_total",
         ],
         "steps": [
+            "vllm:spec_decode_num_drafts_total",
             "vllm:num_spec_decode_steps_total",
             "vllm_num_spec_decode_steps_total",
             "num_spec_decode_steps_total",

@@ -17,16 +17,39 @@ from pydantic import BaseModel
 class SpecStats(BaseModel):
     """Speculative decoding statistics from Prometheus counters."""
 
-    draft_tokens: int
-    accepted_tokens: int
-    verification_steps: int
+    draft_tokens: int           # draft tokens proposed
+    accepted_tokens: int        # accepted DRAFT tokens, excluding the bonus
+    verification_steps: int     # drafts == target forward passes
 
     @property
     def tau(self) -> float | None:
-        """Mean accepted tokens per verification step (τ)."""
+        """Mean accepted length τ: tokens emitted per verification step.
+
+        Every verification step emits the target's own token whether or not
+        any draft is accepted, so τ = 1 + accepted_drafts / steps and is
+        bounded below by 1.0. Engine counters report accepted *draft* tokens
+        only, so the bonus token has to be added back here; dividing the raw
+        counter by steps would give values under 1.0, which cannot be a
+        per-step token count.
+
+        τ = 1.0 means speculation is contributing nothing; the theoretical
+        maximum is 1 + num_speculative_tokens.
+        """
         if self.verification_steps == 0:
             return None
-        return self.accepted_tokens / self.verification_steps
+        return 1.0 + self.accepted_tokens / self.verification_steps
+
+    @property
+    def acceptance_rate(self) -> float | None:
+        """Fraction of proposed draft tokens that were accepted.
+
+        Distinct from τ: this measures draft *quality* independent of how
+        many tokens each draft proposes, so it stays comparable across
+        mechanisms configured with different speculation depths.
+        """
+        if self.draft_tokens == 0:
+            return None
+        return self.accepted_tokens / self.draft_tokens
 
 
 class MetricsScraper(Protocol):

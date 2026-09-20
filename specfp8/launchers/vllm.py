@@ -149,17 +149,29 @@ class VllmLauncher:
         return result
 
     def kv_capacity(self, handle: ServerHandle) -> int | None:
-        """Parse num_gpu_blocks from vLLM startup log."""
+        """Parse KV cache capacity, in tokens, from the vLLM startup log."""
         try:
             with open(handle.log_path) as f:
                 content = f.read()
         except FileNotFoundError:
             return None
 
-        # vLLM logs: "# GPU blocks: 8192, # CPU blocks: 512"
+        # vLLM 0.29 reports tokens directly, which is what this returns:
+        #   "GPU KV cache size: 159,664 tokens, Maximum concurrency for ..."
+        match = re.search(
+            r"GPU KV cache size:\s*([\d,]+)\s*tokens", content
+        )
+        if match:
+            return int(match.group(1).replace(",", ""))
+
+        # Older releases logged blocks instead. A block count is not a token
+        # count, so it is only usable alongside the block size.
         match = re.search(r"# GPU blocks:\s*(\d+)", content)
         if match:
-            return int(match.group(1))
+            blocks = int(match.group(1))
+            size_match = re.search(r"block_size[=:\s]+(\d+)", content)
+            if size_match:
+                return blocks * int(size_match.group(1))
 
         return None
 
