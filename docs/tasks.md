@@ -108,10 +108,40 @@ Build order follows design §12. Each task is one reviewable unit.
 
 ### 1.8 Integration test on GPU
 
-- [ ] T18 End-to-end: `./run.sh probe --sweep sweeps/test_mini.yaml` on a real GPU.
+- [x] T18 End-to-end: `./run.sh probe --sweep sweeps/test_mini.yaml` on a real GPU.
       `test_mini.yaml` has 2 cells: `{none, ngram} × bf16 × auto × vllm`.
       Confirm: results written, cell_ids stable, resume works (re-run skips both),
       budget.log populated.
+      **Done** on Modal L4 (SM89, 22.5GB, CUDA 13.0, torch 2.13.0+cu130,
+      vLLM 0.29.0). Both cells `ok`: KV capacity 168,240 / 159,664 tokens,
+      τ = null for `none` (correct — no speculation) and τ = 1.47 for `ngram`,
+      no degenerate or empty outputs. Resume, staleness and budget.log all
+      exercised. Required fixing the vLLM 0.29 CLI surface, the spec counter
+      names, the τ definition, KV-capacity parsing, and the Qwen3 thinking
+      mode — see T18a.
+
+- [ ] T18a **Test 1's premise does not hold on this stack — blocks T19's third
+      outcome.** With `temperature: 0`, BF16, same model, same seed, speculative
+      (ngram) and non-speculative outputs agree on only **11/32 = 34.4%** of
+      prompts, and the divergences are semantic, not cosmetic ("heart of the
+      Pacific" vs "island of the sun"). Design §4 assumes ≥95% exact match at
+      matched precision and uses any shortfall as the sharp instrument for
+      detecting a broken FP8 kernel. At a 34.4% floor that instrument cannot
+      detect anything: FP8 damage would be indistinguishable from the baseline.
+      Two further observations: task accuracy for the *same* config changed
+      across boots (18.75% → 25.0%), so some of this is boot-to-boot
+      nondeterminism rather than speculation per se.
+      Likely cause: speculative decoding is lossless in distribution (rejection
+      sampling preserves the target distribution) but greedy argmax can flip on
+      near-ties when verification-batch numerics differ from single-token decode
+      numerics, and one flipped token diverges the rest of the text.
+      **Decisive experiment:** run the identical `none` cell twice and compare.
+      Divergence there isolates general nondeterminism; agreement there makes it
+      speculation-specific.
+      **If confirmed, Test 1 must be replaced** by a distributional or
+      task-level criterion (accuracy within CI of the matched baseline,
+      divergence-point distribution) rather than exact match. Compare with
+      `modal run cloud/modal_probe.py --engine compare`.
 - [ ] T19 **The H1 test.** Run DFlash + `kv_cache_dtype: fp8_e4m3` on SM89 (RTX 4090
       or L4 or L40S). Record the three possible outcomes:
       - Clean success → H1 refuted, headline B
