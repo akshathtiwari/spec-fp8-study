@@ -19,33 +19,37 @@ app = modal.App("specfp8-probe")
 results_vol = modal.Volume.from_name("specfp8-results", create_if_missing=True)
 model_vol = modal.Volume.from_name("specfp8-models", create_if_missing=True)
 
-# Container image with vLLM
-vllm_image = (
-    modal.Image.debian_slim(python_version="3.11")
-    .apt_install("git")
-    .pip_install(
-        "vllm",
-        "httpx",
-        "pydantic>=2.0",
-        "pyyaml",
-        "pandas",
-        "torch",
-    )
-)
+# A CUDA *devel* base is required, not a slim image: vLLM's engine core needs
+# nvcc at /usr/local/cuda to compile kernels, and aborts with
+# "Could not find nvcc and default cuda_home='/usr/local/cuda' doesn't exist"
+# without it. Disabling compilation instead would change what is being
+# measured, so the toolkit has to be present.
+#
+# The CUDA major version must match the one the engine's torch wheel was built
+# against (torch 2.13.0+cu130 -> CUDA 13). Base image and engine version are
+# both pinned so a third party gets the same stack.
+CUDA_BASE = "nvidia/cuda:13.0.3-devel-ubuntu24.04"
+VLLM_VERSION = "0.29.0"
+SGLANG_VERSION = "0.5.20"
 
-# Container image with SGLang
-sglang_image = (
-    modal.Image.debian_slim(python_version="3.11")
-    .apt_install("git")
-    .pip_install(
-        "sglang[all]",
-        "httpx",
-        "pydantic>=2.0",
-        "pyyaml",
-        "pandas",
-        "torch",
+HARNESS_DEPS = ["httpx", "pydantic>=2.0", "pyyaml", "pandas"]
+
+
+def _engine_image(engine_pkg: str) -> modal.Image:
+    """CUDA devel base + one engine + the harness's own dependencies.
+
+    torch is left to the engine's own pin rather than requested separately,
+    so the resolver cannot pair the engine with a mismatched build.
+    """
+    return (
+        modal.Image.from_registry(CUDA_BASE, add_python="3.11")
+        .apt_install("git")
+        .pip_install(engine_pkg, *HARNESS_DEPS)
     )
-)
+
+
+vllm_image = _engine_image(f"vllm=={VLLM_VERSION}")
+sglang_image = _engine_image(f"sglang[all]=={SGLANG_VERSION}")
 
 
 def _setup_repo():
@@ -90,12 +94,20 @@ def _print_results(results_path="/results/cells.jsonl"):
         print("No results yet.")
         return 0
 
+    # cells.jsonl is append-only, so a re-run leaves the superseded record in
+    # place. Keep only the last record per cell_id or retries look like
+    # extra cells.
+    latest = {}
     with open(results_path) as f:
-        lines = f.readlines()
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            rec = json.loads(line)
+            latest[rec["cell_id"]] = rec
 
-    print(f"\nCompleted {len(lines)} cells:")
-    for line in lines:
-        rec = json.loads(line)
+    print(f"\nCompleted {len(latest)} cells:")
+    for rec in latest.values():
         cfg = rec["config"]
         status = rec["outcome"]["status"]
         tau = rec.get("spec", {}).get("tau", "-")
@@ -105,7 +117,7 @@ def _print_results(results_path="/results/cells.jsonl"):
               f"{cfg['weight_precision']}|{cfg['kv_cache_dtype']} "
               f"→ {status} {tau_str}")
 
-    return len(lines)
+    return len(latest)
 
 
 @app.function(
