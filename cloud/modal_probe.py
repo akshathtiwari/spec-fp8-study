@@ -318,6 +318,81 @@ def diagnose(mechanism: str = "ngram") -> str:
     return "\n".join(out)
 
 
+@app.function(volumes={"/results": results_vol})
+def compare_outputs() -> str:
+    """Compare stored per-request outputs across cells, pairwise by index.
+
+    This is Test 1 in miniature: at temperature 0, speculative decoding is
+    supposed to be output-equivalent to non-speculative decoding, and the
+    design leans on that (exact-match threshold 0.95) as the sharp
+    instrument for detecting a broken kernel. Worth checking directly
+    against stored text rather than inferring it from aggregate accuracy.
+    """
+    import json
+    import os
+
+    req_dir = "/results/requests"
+    if not os.path.isdir(req_dir):
+        return "No per-request outputs stored yet."
+
+    cells = {}
+    for fn in sorted(os.listdir(req_dir)):
+        if not fn.endswith(".jsonl"):
+            continue
+        with open(os.path.join(req_dir, fn)) as f:
+            cells[fn[:-6]] = [json.loads(line) for line in f if line.strip()]
+
+    # Label each cell by its config so the comparison is readable.
+    labels = {}
+    cells_path = "/results/cells.jsonl"
+    if os.path.exists(cells_path):
+        with open(cells_path) as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                r = json.loads(line)
+                c = r["config"]
+                labels[r["cell_id"]] = (
+                    f"{c['mechanism']}|{c['weight_precision']}|{c['kv_cache_dtype']}"
+                )
+
+    out = [f"{len(cells)} cells with stored outputs"]
+    for cid, recs in cells.items():
+        out.append(f"  {cid} ({labels.get(cid, '?')}): {len(recs)} requests")
+
+    ids = list(cells)
+    for i in range(len(ids)):
+        for j in range(i + 1, len(ids)):
+            a, b = cells[ids[i]], cells[ids[j]]
+            la = labels.get(ids[i], ids[i])
+            lb = labels.get(ids[j], ids[j])
+            n = min(len(a), len(b))
+            same = sum(
+                1 for k in range(n)
+                if a[k]["output_text"] == b[k]["output_text"]
+            )
+            out.append(f"\n### {la}  vs  {lb}")
+            out.append(f"  exact match: {same}/{n} = {same/max(n,1):.1%}")
+            shown = 0
+            for k in range(n):
+                if a[k]["output_text"] == b[k]["output_text"]:
+                    continue
+                if shown >= 2:
+                    break
+                shown += 1
+                ta, tb = a[k]["output_text"], b[k]["output_text"]
+                # Report where they first diverge, not just that they did.
+                p = next(
+                    (x for x in range(min(len(ta), len(tb))) if ta[x] != tb[x]),
+                    min(len(ta), len(tb)),
+                )
+                out.append(f"  [{k}] diverges at char {p}")
+                out.append(f"      common: ...{ta[max(0,p-60):p]!r}")
+                out.append(f"      {la}: {ta[p:p+90]!r}")
+                out.append(f"      {lb}: {tb[p:p+90]!r}")
+    return "\n".join(out)
+
+
 @app.function(
     volumes={"/results": results_vol},
 )
@@ -386,6 +461,9 @@ def main(
     """Entry point: modal run cloud/modal_probe.py [--engine vllm|sglang|status|help] [--sweep mini|compat]"""
     if engine == "help":
         print(dump_vllm_help.remote())
+        return
+    if engine == "compare":
+        print(compare_outputs.remote())
         return
     if engine == "diagnose":
         print(diagnose.remote(mechanism=sweep if sweep != "compat" else "ngram"))
