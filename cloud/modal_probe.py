@@ -224,6 +224,94 @@ def run_sglang_probe(retry_failed: bool = False):
 
 
 @app.function(
+    image=vllm_image,
+    gpu="L4",
+    timeout=3600,
+    volumes={"/models": model_vol},
+)
+def diagnose(mechanism: str = "ngram") -> str:
+    """Boot one cell and dump the raw signals the probe depends on.
+
+    The probe reported KV capacity None, tau null, and 0% task accuracy.
+    Each of those depends on a string the harness expects the engine to
+    emit — a log line, a counter name, an answer format — and all three are
+    currently guesses. This boots a server once and prints what the engine
+    actually produces, so they can be fixed against evidence rather than
+    re-guessed one GPU run at a time.
+    """
+    import asyncio
+    import os
+
+    os.environ["SPECFP8_MODEL_CACHE"] = "/models"
+    _setup_repo()
+
+    from specfp8.cells import expand, cell_id
+    from specfp8.client import probe_run
+    from specfp8.correctness import get_all_prompts, get_gsm8k_answers
+    from specfp8.launchers.base import find_free_port
+    from specfp8.launchers.vllm import VllmLauncher
+    from specfp8.metrics.base import scrape_prometheus
+
+    cell = next(
+        c for c in expand("sweeps/test_mini.yaml") if c.mechanism == mechanism
+    )
+    launcher = VllmLauncher()
+    port = find_free_port()
+    out: list[str] = [f"### cell: {cell.mechanism} {cell.weight_precision}"]
+    out.append("argv: " + " ".join(launcher.argv(cell, port)))
+
+    handle = launcher.start(cell, cell_id(cell), port, "logs")
+    try:
+        health = launcher.wait_healthy(handle, timeout_s=600)
+        out.append(f"healthy={health.ok} status={health.status}")
+        if not health.ok:
+            return "\n".join(out)
+
+        # (1) KV capacity: which startup lines actually mention blocks/cache?
+        out.append("\n### startup log lines mentioning blocks/cache/memory")
+        with open(handle.log_path) as f:
+            for line in f:
+                low = line.lower()
+                if any(k in low for k in
+                       ("gpu block", "kv cache", "num_gpu_blocks",
+                        "kv_cache_size", "concurrency", "gpu memory")):
+                    out.append("  " + line.rstrip()[:200])
+
+        # (2) tau: the real counter names, before and after load
+        raw_before = scrape_prometheus(f"{handle.base_url}/metrics")
+        prompts = get_all_prompts()[:5]
+        result = asyncio.run(
+            probe_run(handle.base_url, cell.model, prompts,
+                      {"temperature": 0, "max_tokens": 256},
+                      n_warmup=1, timeout_s=180.0)
+        )
+        raw_after = scrape_prometheus(f"{handle.base_url}/metrics")
+
+        out.append("\n### spec/accept/draft counters (before -> after)")
+        keys = sorted(
+            k for k in set(raw_before) | set(raw_after)
+            if any(t in k.lower()
+                   for t in ("spec", "accept", "draft", "num_token"))
+        )
+        for k in keys or ["<none matched>"]:
+            out.append(f"  {k}: {raw_before.get(k)} -> {raw_after.get(k)}")
+        out.append(f"  (total counters exposed: {len(raw_after)})")
+
+        # (3) accuracy: what the model actually returns vs what is expected
+        answers = get_gsm8k_answers()[:5]
+        out.append("\n### generated outputs vs expected answers")
+        for i, (text, want) in enumerate(zip(result.outputs, answers)):
+            req = result.requests[i]
+            out.append(f"\n--- [{i}] ok={req.ok} tokens={req.output_tokens} "
+                       f"expected={want!r}")
+            out.append(f"    {text[:700]!r}")
+    finally:
+        launcher.stop(handle)
+
+    return "\n".join(out)
+
+
+@app.function(
     volumes={"/results": results_vol},
 )
 def check_results():
@@ -291,6 +379,9 @@ def main(
     """Entry point: modal run cloud/modal_probe.py [--engine vllm|sglang|status|help] [--sweep mini|compat]"""
     if engine == "help":
         print(dump_vllm_help.remote())
+        return
+    if engine == "diagnose":
+        print(diagnose.remote(mechanism=sweep if sweep != "compat" else "ngram"))
         return
     if engine == "vllm":
         count = run_vllm_probe.remote(sweep_file=sweep, retry_failed=retry_failed)
