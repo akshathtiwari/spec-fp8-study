@@ -18,3 +18,14 @@ defaults:
   draft_revision: null
   block_size: null
   guided_decoding: false
+
+# Smoke-test floors. This sweep runs Qwen3-0.6B for speed, and a 0.6B model
+# scores far below a 4B one on GSM8K with thinking disabled — measured at
+# ~13-19% here while producing clean, non-degenerate text. The defaults in
+# specfp8.correctness are calibrated for the 4B target and would mark this
+# healthy server "broken" for being small. These floors only gate the
+# fluent-nonsense backstop; Tests 1 and 2 compare against a matched baseline
+# and are unaffected.
+correctness:
+  floor_correct: 0.10
+  floor_degraded: 0.05

@@ -161,21 +161,36 @@ def compute_verdict(
     degenerate_count: int,
     empty_count: int,
     n_prompts: int = 32,
+    floor_correct: float = GSM8K_FLOOR_CORRECT,
+    floor_degraded: float = GSM8K_FLOOR_DEGRADED,
 ) -> Literal["correct", "degraded", "broken"]:
-    """Determine the correctness verdict from test results."""
+    """Determine the correctness verdict from test results.
+
+    The GSM8K floors are parameters rather than fixed constants because the
+    accuracy a healthy model reaches depends on which model it is: the
+    defaults are calibrated for a 4B target, and applying them to a much
+    smaller model marks a perfectly healthy server "broken" for being small.
+    Sweeps declare the floors appropriate to their model so the assumption is
+    explicit and reviewable.
+
+    The floors only ever catch fluent nonsense. Detecting damage caused by
+    the configuration under test is Test 1's and Test 2's job, and those are
+    relative to a matched baseline, so they do not depend on this
+    calibration.
+    """
 
     # Broken conditions: any strong signal of failure
     if empty_count > n_prompts * 0.25:
         return "broken"
     if degenerate_count > n_prompts * 0.25:
         return "broken"
-    if task_accuracy is not None and task_accuracy < GSM8K_FLOOR_DEGRADED:
+    if task_accuracy is not None and task_accuracy < floor_degraded:
         return "broken"
 
     # Degraded: Test 1 fails threshold or GSM8K below expected
     if exact_match_rate < EXACT_MATCH_THRESHOLD:
         return "degraded"
-    if task_accuracy is not None and task_accuracy < GSM8K_FLOOR_CORRECT:
+    if task_accuracy is not None and task_accuracy < floor_correct:
         return "degraded"
 
     return "correct"

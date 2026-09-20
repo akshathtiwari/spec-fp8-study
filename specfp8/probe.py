@@ -40,6 +40,7 @@ from specfp8.metrics.vllm import VllmMetricsScraper
 from specfp8.store import (
     append,
     append_budget_log,
+    append_requests,
     argv_fingerprint,
     completed_cells,
 )
@@ -88,6 +89,7 @@ def probe_one_cell(
     env: EnvInfo,
     results_dir: Path,
     log_dir: Path,
+    floors: dict[str, float] | None = None,
 ) -> dict:
     """Probe a single ServerCell: boot, correctness test, τ measurement."""
     launcher = get_launcher(cell.engine)
@@ -160,6 +162,25 @@ def probe_one_cell(
         # Scrape metrics AFTER
         stats_after = scrape_spec_stats(handle.base_url, scraper)
 
+        # Persist every generated output. A verdict derived from these is only
+        # auditable if the text behind it is on disk.
+        append_requests(
+            cid,
+            [
+                {
+                    "index": i,
+                    "ok": r.ok,
+                    "output_tokens": r.output_tokens,
+                    "ttft_ms": round(r.ttft_ms, 3),
+                    "e2e_ms": round(r.e2e_ms, 3),
+                    "output_text": r.output_text,
+                    "error": r.error,
+                }
+                for i, r in enumerate(probe_result.requests)
+            ],
+            results_dir,
+        )
+
         # Compute τ
         tau = None
         spec_stats = None
@@ -191,6 +212,7 @@ def probe_one_cell(
             task_accuracy=task_accuracy,
             degenerate_count=degenerate_count,
             empty_count=empty_count,
+            **(floors or {}),
         )
 
         print(f"  Task accuracy: {task_accuracy:.2%}" if task_accuracy is not None else "  Task accuracy: N/A")
@@ -301,6 +323,9 @@ def run_probe(
 
     print(f"\nExpanding sweep: {sweep_path}")
     all_cells = cells_mod.expand(sweep_path)
+    floors = cells_mod.load_correctness_floors(sweep_path)
+    if floors:
+        print(f"  Correctness floors (from sweep): {floors}")
     print(f"  Total cells: {len(all_cells)}")
 
     done = completed_cells(results_path)
@@ -347,7 +372,7 @@ def run_probe(
     for i, (cell, cid) in enumerate(remaining):
         print(f"\n[{i+1}/{len(remaining)}]")
 
-        record = probe_one_cell(cell, cid, env, results_path, log_dir)
+        record = probe_one_cell(cell, cid, env, results_path, log_dir, floors)
         append(record, results_path)
 
         cell_time = record.get("wallclock_s", 0)

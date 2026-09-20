@@ -122,6 +122,25 @@ def expand(yaml_path: str | Path) -> list[ServerCell]:
     return cells
 
 
+def load_correctness_floors(yaml_path: str | Path) -> dict[str, float]:
+    """Read a sweep's GSM8K accuracy floors, if it declares any.
+
+    Healthy-model accuracy depends on model size, so the floors belong with
+    the sweep that names the model rather than in a global constant. Returns
+    only the keys the sweep sets; callers fall back to the defaults in
+    specfp8.correctness for the rest.
+    """
+    with open(yaml_path) as f:
+        spec = yaml.safe_load(f)
+
+    section = (spec.get("correctness") or {})
+    return {
+        k: float(section[k])
+        for k in ("floor_correct", "floor_degraded")
+        if k in section
+    }
+
+
 def expand_run_cells(yaml_path: str | Path) -> list[RunCell]:
     """Expand a performance sweep YAML into RunCells.
 
