@@ -59,6 +59,7 @@ def completed_cells(results_dir: str | Path) -> dict[str, dict]:
                 # Later records win: a re-run supersedes the stale result.
                 seen[record["cell_id"]] = {
                     "argv_fingerprint": record.get("argv_fingerprint"),
+                    "sampling_params": record.get("sampling_params"),
                     "status": record.get("outcome", {}).get("status"),
                 }
 

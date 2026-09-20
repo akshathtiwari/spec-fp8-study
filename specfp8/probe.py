@@ -48,6 +48,13 @@ from specfp8.store import (
 SAMPLING_PARAMS = {
     "temperature": 0,
     "max_tokens": 256,
+    # Qwen3 is a reasoning model: left in thinking mode it spends the whole
+    # 256-token budget inside <think> and never states an answer, so GSM8K
+    # extraction finds nothing and every cell scores 0% and reads "broken".
+    # The non-thinking chat template makes the gate deterministic and keeps
+    # answers extractable within the budget. Reasoning workloads are a
+    # separate question for the performance sweep, not the correctness gate.
+    "chat_template_kwargs": {"enable_thinking": False},
 }
 
 
@@ -242,6 +249,9 @@ def _make_record(
         # provenance for a third party, and the resume staleness check.
         "argv": argv,
         "argv_fingerprint": argv_fingerprint(argv),
+        # Sampling settings change both tau and task accuracy, so they are
+        # part of the result, not an implicit constant of the harness.
+        "sampling_params": SAMPLING_PARAMS,
         "outcome": {
             "status": status,
             "error_verbatim": error,
@@ -303,10 +313,13 @@ def run_probe(
         if prev is None:
             remaining.append((c, cid))
             continue
-        # A recorded result only counts if the harness would issue the same
-        # command today. Otherwise it reflects an older (possibly broken)
-        # launcher and must not be read as a compatibility verdict.
-        if prev["argv_fingerprint"] != _cell_fingerprint(c):
+        # A recorded result only counts if the harness would produce it the
+        # same way today. Otherwise it reflects an older (possibly broken)
+        # harness and must not be read as a compatibility verdict. Sampling
+        # settings count here alongside the command: they do not change argv
+        # but they do change tau and task accuracy.
+        if (prev["argv_fingerprint"] != _cell_fingerprint(c)
+                or prev["sampling_params"] != SAMPLING_PARAMS):
             stale += 1
             remaining.append((c, cid))
             continue

@@ -242,12 +242,30 @@ def _is_degenerate(text: str) -> bool:
     return False
 
 
+def strip_reasoning(text: str) -> str:
+    """Drop reasoning-model <think> blocks, leaving only the final answer.
+
+    Without this the "last number in text" fallback happily reads a number
+    out of the middle of a reasoning trace and scores it as the answer.
+
+    An unterminated <think> means the model was still reasoning when it hit
+    the token limit and never stated an answer, so this returns empty rather
+    than guessing — the honest outcome is "no answer", not a number lifted
+    from the trace.
+    """
+    text = re.sub(r"<think>.*?</think>", " ", text, flags=re.DOTALL)
+    if "<think>" in text:
+        return ""
+    return text
+
+
 def extract_gsm8k_answer(text: str) -> float | None:
     """Extract the final numeric answer from a GSM8K-style response.
 
     Looks for patterns like "#### 42", "The answer is 42", or the last
-    number in the text.
+    number in the text. Reasoning blocks are removed first.
     """
+    text = strip_reasoning(text)
     if not text.strip():
         return None
 
