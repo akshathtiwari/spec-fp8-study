@@ -71,6 +71,13 @@ def _setup_repo():
 
     os.chdir(repo_dir)
     subprocess.run(["pip", "install", "-e", ".", "-q"], check=True)
+
+    # An editable install landing in site-packages is not visible to the
+    # already-running interpreter, so callers that import specfp8 in-process
+    # (rather than spawning `python -m specfp8.probe`) would not find it.
+    import sys
+    if repo_dir not in sys.path:
+        sys.path.insert(0, repo_dir)
     return repo_dir
 
 
