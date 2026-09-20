@@ -69,10 +69,12 @@ def expand(yaml_path: str | Path) -> list[ServerCell]:
     with open(yaml_path) as f:
         spec = yaml.safe_load(f)
 
+    # A section that is present but comment-only parses as None, not as an
+    # empty collection — normalise so callers always get something iterable.
     axes = spec["axes"]
-    defaults = spec.get("defaults", {})
-    per_mechanism = spec.get("per_mechanism", {})
-    excludes = spec.get("exclude", [])
+    defaults = spec.get("defaults") or {}
+    per_mechanism = spec.get("per_mechanism") or {}
+    excludes = spec.get("exclude") or []
     top_level = {
         k: spec[k]
         for k in ("model", "model_revision", "spec_tokens")
@@ -130,7 +132,7 @@ def expand_run_cells(yaml_path: str | Path) -> list[RunCell]:
         spec = yaml.safe_load(f)
 
     server_cells = expand(yaml_path)
-    run_axes = spec.get("run_axes", {})
+    run_axes = spec.get("run_axes") or {}
 
     workloads = run_axes.get("workload", ["gsm8k"])
     concurrencies = run_axes.get("concurrency", [1])

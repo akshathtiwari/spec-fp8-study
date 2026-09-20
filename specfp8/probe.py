@@ -37,7 +37,12 @@ from specfp8.launchers.vllm import VllmLauncher
 from specfp8.metrics.base import scrape_spec_stats, delta as metrics_delta
 from specfp8.metrics.sglang import SglangMetricsScraper
 from specfp8.metrics.vllm import VllmMetricsScraper
-from specfp8.store import append, append_budget_log, completed_ids
+from specfp8.store import (
+    append,
+    append_budget_log,
+    argv_fingerprint,
+    completed_cells,
+)
 
 
 SAMPLING_PARAMS = {
@@ -62,6 +67,12 @@ def get_metrics_scraper(engine: str):
         return SglangMetricsScraper()
     else:
         raise ValueError(f"Unknown engine: {engine}")
+
+
+def _cell_fingerprint(cell: ServerCell) -> str:
+    """Fingerprint of the command this harness would launch for `cell`."""
+    launcher = get_launcher(cell.engine)
+    return argv_fingerprint(launcher.argv(cell, 0))
 
 
 def probe_one_cell(
@@ -220,12 +231,17 @@ def _make_record(
     outputs: list[str] | None = None,
 ) -> dict:
     """Build a result record for cells.jsonl."""
+    argv = get_launcher(cell.engine).argv(cell, 0)
     record = {
         "cell_id": cid,
         "ts": datetime.now(timezone.utc).isoformat(),
         "phase": "probe",
         "env": env.model_dump(),
         "config": cell.model_dump(),
+        # Verbatim launch command (port/cache-dir normalised) plus its hash:
+        # provenance for a third party, and the resume staleness check.
+        "argv": argv,
+        "argv_fingerprint": argv_fingerprint(argv),
         "outcome": {
             "status": status,
             "error_verbatim": error,
@@ -273,9 +289,25 @@ def run_probe(sweep_path: str, results_dir: str) -> None:
     all_cells = cells_mod.expand(sweep_path)
     print(f"  Total cells: {len(all_cells)}")
 
-    done = completed_ids(results_path)
-    remaining = [(c, cell_id(c)) for c in all_cells if cell_id(c) not in done]
-    print(f"  Already completed: {len(done)}")
+    done = completed_cells(results_path)
+    remaining: list[tuple[ServerCell, str]] = []
+    stale = 0
+    for c in all_cells:
+        cid = cell_id(c)
+        if cid not in done:
+            remaining.append((c, cid))
+            continue
+        # A recorded result only counts if the harness would issue the same
+        # command today. Otherwise it reflects an older (possibly broken)
+        # launcher and must not be read as a compatibility verdict.
+        if done[cid] == _cell_fingerprint(c):
+            continue
+        stale += 1
+        remaining.append((c, cid))
+
+    print(f"  Already completed: {len(done) - stale}")
+    if stale:
+        print(f"  Stale (launch command changed, re-running): {stale}")
     print(f"  Remaining: {len(remaining)}")
 
     if not remaining:

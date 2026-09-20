@@ -8,6 +8,7 @@ full cell list.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
@@ -18,11 +19,24 @@ from datetime import datetime, timezone
 
 def completed_ids(results_dir: str | Path) -> set[str]:
     """Scan cells.jsonl once and return the set of completed cell_ids."""
+    return set(completed_cells(results_dir))
+
+
+def completed_cells(results_dir: str | Path) -> dict[str, str | None]:
+    """Map cell_id -> the argv fingerprint that produced that record.
+
+    A cell_id hashes the ServerCell config only, so it cannot distinguish
+    "this configuration is genuinely unsupported" from "the harness built a
+    bad command line". The fingerprint closes that gap: when the launcher
+    starts emitting a different command for the same config, the old record
+    is stale and the cell is re-run. Records written before fingerprinting
+    map to None and are always re-run.
+    """
     cells_path = Path(results_dir) / "cells.jsonl"
-    ids: set[str] = set()
+    seen: dict[str, str | None] = {}
 
     if not cells_path.exists():
-        return ids
+        return seen
 
     with open(cells_path) as f:
         for line in f:
@@ -31,15 +45,42 @@ def completed_ids(results_dir: str | Path) -> set[str]:
                 continue
             try:
                 record = json.loads(line)
-                if "cell_id" in record:
-                    ids.add(record["cell_id"])
             except json.JSONDecodeError:
                 # Skip malformed lines (e.g., from a partial write that
                 # somehow survived — shouldn't happen with atomic rename,
                 # but defensive)
                 continue
+            if "cell_id" in record:
+                # Later records win: a re-run supersedes the stale result.
+                seen[record["cell_id"]] = record.get("argv_fingerprint")
 
-    return ids
+    return seen
+
+
+#: argv flags whose values vary between runs without changing what is measured.
+_VOLATILE_FLAGS = {"--port", "--download-dir"}
+
+
+def argv_fingerprint(argv: list[str]) -> str:
+    """Stable hash of a launch command, ignoring run-to-run noise.
+
+    Port and download directory change on every invocation and across
+    machines, so they are excluded — two runs of the same configuration on
+    different hosts must produce the same fingerprint.
+    """
+    kept: list[str] = []
+    skip_next = False
+    for tok in argv:
+        if skip_next:
+            skip_next = False
+            continue
+        if tok in _VOLATILE_FLAGS:
+            skip_next = True
+            continue
+        kept.append(tok)
+
+    joined = "\x00".join(kept)
+    return hashlib.sha256(joined.encode()).hexdigest()[:16]
 
 
 def append(record: dict, results_dir: str | Path) -> None:

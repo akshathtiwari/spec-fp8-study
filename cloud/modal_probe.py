@@ -22,6 +22,7 @@ model_vol = modal.Volume.from_name("specfp8-models", create_if_missing=True)
 # Container image with vLLM
 vllm_image = (
     modal.Image.debian_slim(python_version="3.11")
+    .apt_install("git")
     .pip_install(
         "vllm",
         "httpx",
@@ -35,6 +36,7 @@ vllm_image = (
 # Container image with SGLang
 sglang_image = (
     modal.Image.debian_slim(python_version="3.11")
+    .apt_install("git")
     .pip_install(
         "sglang[all]",
         "httpx",
@@ -108,7 +110,7 @@ def _print_results(results_path="/results/cells.jsonl"):
 
 @app.function(
     image=vllm_image,
-    gpu=modal.gpu.L40S(),
+    gpu="L4",
     timeout=4 * 3600,
     volumes={
         "/results": results_vol,
@@ -170,7 +172,7 @@ def run_vllm_probe(sweep_file: str = "compat"):
 
 @app.function(
     image=sglang_image,
-    gpu=modal.gpu.L40S(),
+    gpu="L4",
     timeout=4 * 3600,
     volumes={
         "/results": results_vol,
@@ -211,7 +213,58 @@ def run_sglang_probe():
 )
 def check_results():
     """Check results from the Modal volume."""
+    import json
+    import os
+    results_path = "/results/cells.jsonl"
+    if os.path.exists(results_path):
+        with open(results_path) as f:
+            for line in f:
+                rec = json.loads(line)
+                print(json.dumps(rec, indent=2))
+                print("---")
+    else:
+        print("No results file found.")
     _print_results()
+
+
+@app.function(image=vllm_image, gpu="L4", timeout=900)
+def dump_vllm_help() -> str:
+    """Introspect vLLM's CLI surface so launcher flags can be verified
+    against the exact installed version. Needs a GPU: vLLM infers the
+    device type while constructing the arg parser."""
+    import subprocess
+    import vllm
+
+    out = [f"VLLM_VERSION={vllm.__version__}", "=" * 70]
+
+    # Authoritative flag list: every --flag vllm serve accepts
+    r = subprocess.run(
+        ["vllm", "serve", "--help=all"], capture_output=True, text=True
+    )
+    import re
+    flags = sorted(set(re.findall(r"--[a-z0-9][a-z0-9-]+", r.stdout)))
+    out += ["## all vllm serve flags", *(f"  {f}" for f in flags), "=" * 70]
+
+    # Choices for the flags this study actually varies
+    for section in ["dtype", "seed", "quantization", "revision",
+                    "kv-cache-dtype", "attention-backend", "download-dir"]:
+        rr = subprocess.run(
+            ["vllm", "serve", f"--help={section}"], capture_output=True, text=True
+        )
+        out += [f"## --help={section}", rr.stdout.strip()[:1200], "-" * 50]
+    out.append("=" * 70)
+
+    # SpeculativeConfig fields — needed to build --speculative-config JSON
+    try:
+        from vllm.config import SpeculativeConfig
+        import dataclasses
+        out.append("## SpeculativeConfig fields")
+        for f in dataclasses.fields(SpeculativeConfig):
+            out.append(f"  {f.name}: {f.type}")
+    except Exception as e:
+        out.append(f"SpeculativeConfig introspection failed: {e}")
+
+    return "\n".join(out)
 
 
 @app.local_entrypoint()
@@ -219,7 +272,10 @@ def main(
     engine: str = "vllm",
     sweep: str = "compat",
 ):
-    """Entry point: modal run cloud/modal_probe.py [--engine vllm|sglang|status] [--sweep mini|compat]"""
+    """Entry point: modal run cloud/modal_probe.py [--engine vllm|sglang|status|help] [--sweep mini|compat]"""
+    if engine == "help":
+        print(dump_vllm_help.remote())
+        return
     if engine == "vllm":
         count = run_vllm_probe.remote(sweep_file=sweep)
         print(f"\nDone. {count} cells completed.")

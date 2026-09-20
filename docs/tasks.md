@@ -42,8 +42,9 @@ Build order follows design §12. Each task is one reviewable unit.
       `HealthResult` model per design §3. Abstract `argv()`, `start()`,
       `wait_healthy()`, `kv_capacity()`, `stop()`.
 - [x] T8  `specfp8/launchers/vllm.py` — vLLM launcher. `argv()` builds the
-      `python -m vllm.entrypoints.openai.api_server` command with all ServerCell
-      fields mapped to CLI flags. `start()` spawns subprocess, streams stderr to
+      `vllm serve <model>` command with all ServerCell fields mapped to CLI flags
+      (speculative settings go in the `--speculative-config` JSON blob, per the
+      vLLM 0.29 surface). `start()` spawns subprocess, streams stderr to
       `logs/<cell_id>.log`. `wait_healthy()` polls `/health`, watches child, returns
       `HealthResult` with verbatim error on failure. `kv_capacity()` parses
       `num_gpu_blocks` from startup log. `stop()` sends SIGTERM, waits 10s, SIGKILL.

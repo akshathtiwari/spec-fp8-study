@@ -6,6 +6,7 @@ health-checks via /health, parses KV capacity from startup logs.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import subprocess
@@ -26,13 +27,15 @@ class VllmLauncher:
     """Launcher for vLLM's OpenAI-compatible API server."""
 
     def argv(self, cell: ServerCell, port: int) -> list[str]:
+        # vLLM 0.29 CLI surface: `vllm serve <model>`. The per-flag
+        # speculative args of earlier releases were collapsed into a single
+        # --speculative-config JSON blob, and --guided-decoding-backend into
+        # --structured-outputs-config. Request logging is off by default.
         cmd = [
-            "python", "-m", "vllm.entrypoints.openai.api_server",
-            "--model", cell.model,
+            "vllm", "serve", cell.model,
             "--port", str(port),
             "--dtype", "bfloat16",
             "--seed", "42",
-            "--disable-log-requests",
         ]
 
         # Model revision
@@ -52,40 +55,13 @@ class VllmLauncher:
             cmd += ["--attention-backend", cell.attn_backend]
 
         # Speculative decoding
-        if cell.mechanism == "ngram":
-            cmd += [
-                "--speculative-model", "[ngram]",
-                "--num-speculative-tokens", str(cell.spec_tokens or 5),
-                "--ngram-prompt-lookup-max", str(cell.spec_tokens or 5),
-            ]
-        elif cell.mechanism == "eagle3":
-            if cell.draft_model:
-                cmd += [
-                    "--speculative-model", cell.draft_model,
-                    "--num-speculative-tokens", str(cell.spec_tokens or 5),
-                    "--speculative-draft-tensor-parallel-size", "1",
-                ]
-                if cell.draft_revision:
-                    cmd += ["--speculative-model-revision", cell.draft_revision]
-        elif cell.mechanism == "dflash":
-            if cell.draft_model:
-                cmd += [
-                    "--speculative-model", cell.draft_model,
-                    "--num-speculative-tokens", str(cell.spec_tokens or 5),
-                ]
-                if cell.draft_revision:
-                    cmd += ["--speculative-model-revision", cell.draft_revision]
-                if cell.block_size:
-                    cmd += ["--speculative-dflash-block-size", str(cell.block_size)]
-        elif cell.mechanism == "mtp":
-            cmd += [
-                "--num-speculative-tokens", str(cell.spec_tokens or 5),
-                "--speculative-model", "[mtp]",
-            ]
+        spec = self.speculative_config(cell)
+        if spec is not None:
+            cmd += ["--speculative-config", json.dumps(spec)]
 
         # Guided decoding
         if cell.guided_decoding:
-            cmd += ["--guided-decoding-backend", "xgrammar"]
+            cmd += ["--structured-outputs-config", json.dumps({"backend": "xgrammar"})]
 
         # Model cache
         model_cache = os.environ.get("SPECFP8_MODEL_CACHE")
@@ -93,6 +69,41 @@ class VllmLauncher:
             cmd += ["--download-dir", model_cache]
 
         return cmd
+
+    def speculative_config(self, cell: ServerCell) -> dict | None:
+        """Build the --speculative-config payload for this cell.
+
+        Returns None for mechanism=none. Field names match
+        vllm.config.SpeculativeConfig in 0.29.
+        """
+        if cell.mechanism == "none":
+            return None
+
+        spec: dict = {
+            "method": cell.mechanism,
+            "num_speculative_tokens": cell.spec_tokens or 5,
+        }
+
+        if cell.mechanism == "ngram":
+            # n-gram match window — distinct from the number of tokens proposed
+            spec["prompt_lookup_max"] = cell.block_size or 4
+            spec["prompt_lookup_min"] = 1
+            return spec
+
+        # Draft-model-backed mechanisms (eagle3, dflash) need a checkpoint.
+        # mtp reads the draft head from the target checkpoint, so draft_model
+        # is optional there.
+        if cell.draft_model:
+            spec["model"] = cell.draft_model
+            if cell.draft_revision:
+                spec["revision"] = cell.draft_revision
+            spec["draft_tensor_parallel_size"] = 1
+        elif cell.mechanism != "mtp":
+            raise ValueError(
+                f"mechanism={cell.mechanism} requires draft_model to be set"
+            )
+
+        return spec
 
     def start(
         self, cell: ServerCell, cell_id: str, port: int, log_dir: str | Path
