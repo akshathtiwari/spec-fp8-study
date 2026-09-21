@@ -87,9 +87,9 @@ another sweep landed and an audit found it covering 18 of 22 cells.
 }
 ```
 
-`reconstructed: true` is load-bearing honesty: the first three runs predate run
-manifests and were partitioned afterwards from timestamps, so their boundaries
-are inferred. Future runs record this live.
+`reconstructed: true` is load-bearing honesty: no run so far stamped a run id on
+its cells, so every boundary here is inferred from timestamp gaps. Stamping it
+live is the proper fix and is not yet done; until it is, the field says so.
 
 ---
 
@@ -99,12 +99,12 @@ are inferred. Future runs record this live.
 analysis/out/
 ├── README.md          which script regenerates what
 └── tables/*.md|csv    one file per analysis
-
-`provenance.md` is the table to read first: provenance fields were added
-during the study, each after finding a concrete way results could be silently
-mixed, so it records which cells carry which guarantees rather than leaving an
-absent field to be discovered.
 ```
+
+`provenance.md` is the table to read first: provenance fields were added during
+the study, each after finding a concrete way results could be silently mixed, so
+it records which cells carry which guarantees rather than leaving an absent
+field to be discovered.
 
 Every file carries a header naming the script, the input, and the code SHA. These
 files are committed so the paper's tables are diffable across revisions, but they
