@@ -1,0 +1,64 @@
+# Tier 1 — does H1's mechanism actually get exercised?
+#
+# H1 is a claim about FlashInfer specifically: its FP8 attention kernels are
+# compiled `*_sm90_*` only, so DFlash's non-causal attention with an FP8 KV
+# cache is accepted at config time and has no SM89 codepath at runtime.
+#
+# Every cell in sweeps/h1.yaml ran with attn_backend=auto, so the backend that
+# actually served is unknown and FlashInfer's FP8 path may never have been
+# invoked. "No crash under auto" therefore does not refute H1 — it may only
+# mean vLLM routed around the gap. R1 lists attention backend as an axis of
+# the compatibility matrix; this sweep is that axis.
+#
+# Checked on CPU against this exact image (modal_probe --engine backends):
+#   flashinfer 0.6.18 present, triton 3.7.1 present, flash_attn ABSENT.
+# FlashInfer being installed is what makes this a real test rather than a
+# test of a missing dependency. FLASH_ATTN is excluded because it cannot be
+# selected at all in a stock `pip install vllm==0.29.0`; that is a matrix
+# entry established from the import check, not something worth GPU time.
+#
+# 12 cells = {none, dflash} x {auto, fp8_e4m3} x {auto, FLASHINFER, TRITON_ATTN}.
+# The controls are what make it interpretable:
+#   none  x fp8_e4m3 x FLASHINFER  — causal path, FP8 KV. H1 says this works.
+#   dflash x fp8_e4m3 x FLASHINFER — non-causal path, FP8 KV. H1 says this breaks.
+#   dflash x auto     x FLASHINFER — non-causal, BF16 KV. Proves the backend
+#                                    itself is usable, so a failure above is
+#                                    about FP8 and not about FlashInfer.
+#   *      x *        x auto       — records which backend vLLM picks, with
+#                                    logs now persisted.
+# Weights are held at bf16 so the only moving parts are KV precision, the
+# drafting path, and the backend.
+
+model: Qwen/Qwen3-4B
+model_revision: main
+spec_tokens: 5
+
+axes:
+  engine: [vllm]
+  engine_ref: [vllm-0.29.0]
+  mechanism: [none, dflash]
+  weight_precision: [bf16]
+  kv_cache_dtype: [auto, fp8_e4m3]
+  attn_backend: [auto, FLASHINFER, TRITON_ATTN]
+
+defaults:
+  draft_model: null
+  draft_revision: null
+  block_size: null
+  guided_decoding: false
+
+per_mechanism:
+  dflash:
+    draft_model: z-lab/Qwen3-4B-DFlash-b16
+    draft_revision: main
+    block_size: 16
+
+# The accuracy arm is deliberately not acting as a quality gate here. At 16
+# GSM8K prompts one question is worth 6.25%, so it cannot resolve quality
+# differences at all (T19a), and Qwen3-4B measured 25-43.75% with thinking
+# disabled. Leaving the 4B defaults in place would mark every healthy server
+# "broken" and obscure the backend result, which is the only question this
+# sweep is asking. Floors are set to catch fluent nonsense and nothing more.
+correctness:
+  floor_correct: 0.10
+  floor_degraded: 0.05
