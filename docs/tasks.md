@@ -223,6 +223,58 @@ Build order follows design §12. Each task is one reviewable unit.
       floors from the *measured* bf16/auto/none baseline rather than an assumed
       4B number. Until then no quality claim about FP8 is supportable.
 
+- [x] T19b **DONE — backend axis resolved. H1 is refuted on its own terms.**
+      `sweeps/backend.yaml`, 12 cells, Modal L4 (SM89), vLLM 0.29.0 +
+      flashinfer 0.6.18, Qwen3-4B, bf16 weights. Backend attributed from
+      persisted logs, not inferred. **All 12 cells served.**
+
+      | mech | kv | requested | **actual** | tau | KV tokens |
+      |---|---|---|---|---|---|
+      | none | auto | auto | **FLASH_ATTN** | - | 77,168 |
+      | none | auto | FLASHINFER | FLASHINFER | - | 73,888 |
+      | none | auto | TRITON_ATTN | TRITON_ATTN | - | 77,168 |
+      | none | fp8_e4m3 | auto | **FLASHINFER** | - | 147,776 |
+      | none | fp8_e4m3 | FLASHINFER | FLASHINFER | - | 147,776 |
+      | none | fp8_e4m3 | TRITON_ATTN | TRITON_ATTN | - | 153,872 |
+      | dflash | auto | auto | **FLASH_ATTN** | 2.703 | 58,080 |
+      | dflash | auto | FLASHINFER | FLASHINFER | 2.716 | 58,416 |
+      | dflash | auto | TRITON_ATTN | TRITON_ATTN | 2.651 | 58,528 |
+      | dflash | fp8_e4m3 | auto | **FLASHINFER** | 2.695 | 115,920 |
+      | **dflash** | **fp8_e4m3** | **FLASHINFER** | **FLASHINFER** | **2.697** | 116,832 |
+      | dflash | fp8_e4m3 | TRITON_ATTN | TRITON_ATTN | 2.745 | 116,832 |
+
+      1. **Backend selection is conditioned on KV dtype.** `auto` picks
+         FLASH_ATTN at BF16 KV and switches to FLASHINFER when FP8 KV is
+         requested. Log line: `Using FLASH_ATTN attention backend out of
+         potential backends: ['FLASH_ATTN', 'FLASHINFER', 'TRITON_ATTN',
+         'FLEX_ATTENTION']`.
+      2. **The h1.yaml sweep therefore did exercise FlashInfer** — its
+         `fp8_e4m3` cells ran on it. The worry that H1's mechanism was never
+         tested was unfounded, but checking it is what produced this matrix.
+      3. **H1 refuted on both failure modes.** FlashInfer + FP8 KV +
+         non-causal drafting serves at tau = 2.697, against 2.716 for the same
+         backend at BF16. No crash, and tau intact rules out silent
+         corruption — a broken kernel would collapse acceptance.
+      4. **Every backend works.** FP8 KV + dflash succeeds on FLASHINFER
+         (2.697) and TRITON_ATTN (2.745). tau spans 2.651-2.745 across all
+         six dflash conditions, so backend choice moves tau (3.6%) slightly
+         more than FP8 does.
+      5. **The two open issues are version-specific, not architectural.**
+         #44879 is 0.22.1 on an L4 — the same GPU class we ran; #54690 is
+         0.28.0. Both paths work on 0.29.0. Note flashinfer#5272 is still
+         open, so whatever fixed this is something else and needs identifying
+         before filing (R16).
+
+- [ ] T19d **Two backends in the SM89 candidate set are still untested.**
+      The engine lists `['FLASH_ATTN', 'FLASHINFER', 'TRITON_ATTN',
+      'FLEX_ATTENTION']`. FLASH_ATTN is the BF16 default but `auto` switches
+      away from it the moment FP8 KV is requested, so **FLASH_ATTN x fp8_e4m3
+      never ran** — a hole directly under the default configuration.
+      FLEX_ATTENTION is untouched. `sweeps/backend.yaml` excluded FLASH_ATTN
+      on the wrong premise that it was unavailable: the absent `flash_attn`
+      pip package is not vLLM's FlashAttention, which is vendored. Add both
+      to close the backend axis.
+
 - [ ] T19c **Order sweep cells by information value, not by Cartesian expansion.**
       `cells.expand` emits the axis product in declaration order, so in
       `sweeps/backend.yaml` all six `none` cells run before any `dflash` cell —
@@ -232,7 +284,7 @@ Build order follows design §12. Each task is one reviewable unit.
       run first. Either allow a sweep to declare a priority ordering, or sort
       so that each axis's levels are interleaved rather than blocked.
 
-- [ ] T19b **Identify the attention backend, and persist launch logs.**
+- [x] T19b-orig **Identify the attention backend, and persist launch logs.**
       H1 predicted a FlashInfer SM90-only dispatch failure; it did not happen,
       and the paper needs to say what actually served — a different backend
       (FlashAttention/Triton), a newer FlashInfer with an SM89 variant, or a
