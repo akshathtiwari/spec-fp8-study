@@ -51,6 +51,24 @@ def load_correctness_prompts() -> tuple[list[dict], list[dict]]:
     return data["mtbench"], data["gsm8k"]
 
 
+def prompt_set_fingerprint() -> str:
+    """Stable hash of the exact prompt set and reference answers in use.
+
+    Results are only comparable if they were scored against the same prompts.
+    F013 found the GSM8K half had been silently wrong, so a changed prompt set
+    must invalidate prior results rather than sit alongside them looking
+    equally authoritative.
+    """
+    import hashlib
+    mt, gsm = load_correctness_prompts()
+    payload = json.dumps(
+        {"mtbench": [p["prompt"] for p in mt],
+         "gsm8k": [[p["prompt"], p["answer"]] for p in gsm]},
+        sort_keys=True, separators=(",", ":"),
+    )
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
 def get_all_prompts() -> list[str]:
     """Return the 32 prompt strings in fixed order (MT-Bench then GSM8K)."""
     mt, gsm = load_correctness_prompts()

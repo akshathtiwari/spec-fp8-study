@@ -23,6 +23,7 @@ from specfp8.cells import ServerCell, cell_id
 from specfp8.client import probe_run
 from specfp8.correctness import (
     get_all_prompts,
+    prompt_set_fingerprint,
     get_gsm8k_answers,
     run_correctness,
 )
@@ -325,6 +326,7 @@ def _make_record(
         # Sampling settings change both tau and task accuracy, so they are
         # part of the result, not an implicit constant of the harness.
         "sampling_params": SAMPLING_PARAMS,
+        "prompt_set_fingerprint": prompt_set_fingerprint(),
         "engine_version": engine_version,
         "outcome": {
             "status": status,
@@ -396,7 +398,8 @@ def run_probe(
         # settings count here alongside the command: they do not change argv
         # but they do change tau and task accuracy.
         if (prev["argv_fingerprint"] != _cell_fingerprint(c)
-                or prev["sampling_params"] != SAMPLING_PARAMS):
+                or prev["sampling_params"] != SAMPLING_PARAMS
+                or prev["prompt_set_fingerprint"] != prompt_set_fingerprint()):
             stale += 1
             remaining.append((c, cid))
             continue

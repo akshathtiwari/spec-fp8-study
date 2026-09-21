@@ -40,7 +40,8 @@ wrong turns and what caught them — is part of the evidence.
 | [`F005`](F005-retraction-capacity-fingerprint.md) | RETRACTED — KV capacity is not a reliable attention-backend fingerprint | retracted | high |
 | [`F010`](F010-retraction-flash-attn-absent.md) | RETRACTED — "FlashAttention is unavailable in stock vLLM" was wrong | retracted | high |
 | [`F011`](F011-retraction-ag-rs-backend.md) | RETRACTED — backend attribution reported AG_RS, a regex artifact | retracted | high |
+| [`F013`](F013-gate-prompts-were-corrupted.md) | The correctness gate's GSM8K reference answers were partly wrong | retracted | high |
 
 ---
 
-12 findings: 5 result, 3 method, 1 gap, 3 retraction.
+13 findings: 5 result, 3 method, 1 gap, 4 retraction.
