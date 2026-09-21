@@ -61,6 +61,16 @@ tau comparisons are only meaningful with the backend held fixed, and F003 shows
   repeats) is unmet. The differences discussed are small enough that repeats
   could change the ordering.
 
+- **tau values are tied to the prompt set that produced them.** These were
+  measured over the pre-2026-09-21 gate prompts, whose GSM8K half was later
+  found to be corrupted and replaced (F013). Re-measuring the identical
+  configuration `dflash|bf16|auto|FLASHINFER` over the corrected prompts gives
+  tau 2.77 against 2.716 here — a 2% shift from the workload alone. Acceptance
+  depends on what is being generated, so absolute tau must not be compared
+  across tables built on different prompt sets. The *comparison* in this
+  finding is unaffected, because every cell in it was measured over the same
+  set; only the absolute values move.
+
 ## How to reproduce
 
 ```bash
