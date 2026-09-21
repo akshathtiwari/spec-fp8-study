@@ -62,11 +62,42 @@ def completed_cells(results_dir: str | Path) -> dict[str, dict]:
                     "sampling_params": record.get("sampling_params"),
                     "prompt_set_fingerprint": record.get("prompt_set_fingerprint"),
                     "quality_config_fingerprint":
-                        record.get("quality_config_fingerprint"),
+                        _recorded_quality_fingerprint(record),
                     "status": record.get("outcome", {}).get("status"),
                 }
 
     return seen
+
+
+def quality_config_fingerprint(max_tokens: int, prompt_fingerprint: str) -> str:
+    """Identity of a quality measurement's settings.
+
+    Defined here, over explicit arguments, so that the value recorded during a
+    run and the value derived from an older record cannot drift apart. A
+    fingerprint computed two ways in two places is a fingerprint that will
+    eventually disagree with itself.
+    """
+    payload = f"{max_tokens}|{prompt_fingerprint}"
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
+def _recorded_quality_fingerprint(record: dict) -> str | None:
+    """The quality-config fingerprint for a record, derived if not stored.
+
+    Records written before the field existed still carry the inputs it is
+    built from, so the fingerprint is reconstructible. Treating those as
+    unknown would discard sound measurements and pay to repeat them — which is
+    the opposite of what a staleness check is for.
+    """
+    stored = record.get("quality_config_fingerprint")
+    if stored:
+        return stored
+    quality = record.get("quality") or {}
+    max_tokens = quality.get("max_tokens")
+    prompt_fp = quality.get("prompt_set_fingerprint")
+    if max_tokens and prompt_fp:
+        return quality_config_fingerprint(max_tokens, prompt_fp)
+    return None
 
 
 #: argv flags whose values vary between runs without changing what is measured.

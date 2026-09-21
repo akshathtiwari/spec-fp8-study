@@ -103,10 +103,9 @@ def _quality_config_fingerprint() -> str:
     to batching (F009), so including it would invalidate good results on a
     harmless throughput tweak.
     """
-    import hashlib
     from specfp8.quality import QUALITY_MAX_TOKENS, quality_fingerprint
-    payload = f"{QUALITY_MAX_TOKENS}|{quality_fingerprint()}"
-    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+    from specfp8.store import quality_config_fingerprint
+    return quality_config_fingerprint(QUALITY_MAX_TOKENS, quality_fingerprint())
 
 
 def _cell_fingerprint(cell: ServerCell) -> str:
