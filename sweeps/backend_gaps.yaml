@@ -1,0 +1,46 @@
+# T19d — close the attention-backend axis.
+#
+# The engine lists four candidates on SM89:
+#   ['FLASH_ATTN', 'FLASHINFER', 'TRITON_ATTN', 'FLEX_ATTENTION']
+# sweeps/backend.yaml covered FLASHINFER and TRITON_ATTN. The other two were
+# left untested, and one of those gaps sits directly under the default
+# configuration: FLASH_ATTN is what `auto` selects at BF16 KV, but `auto`
+# switches to FlashInfer the moment FP8 KV is requested (findings/F003), so
+# FLASH_ATTN x fp8_e4m3 is unreachable without forcing it and has never run.
+#
+# FLASH_ATTN was originally excluded on a wrong premise -- that it was
+# unavailable, because the standalone flash_attn pip package is absent. vLLM
+# vendors its own FlashAttention-2 (findings/F010).
+#
+# 8 cells = {none, dflash} x {auto, fp8_e4m3} x {FLASH_ATTN, FLEX_ATTENTION},
+# weights held at bf16 so only the drafting path, KV precision and backend move.
+# No quality stage: this asks whether the combination runs, which the gate and
+# tau answer, and quality is settled separately in findings/F016.
+
+model: Qwen/Qwen3-4B
+model_revision: main
+spec_tokens: 5
+
+axes:
+  engine: [vllm]
+  engine_ref: [vllm-0.29.0]
+  mechanism: [none, dflash]
+  weight_precision: [bf16]
+  kv_cache_dtype: [auto, fp8_e4m3]
+  attn_backend: [FLASH_ATTN, FLEX_ATTENTION]
+
+defaults:
+  draft_model: null
+  draft_revision: null
+  block_size: null
+  guided_decoding: false
+
+per_mechanism:
+  dflash:
+    draft_model: z-lab/Qwen3-4B-DFlash-b16
+    draft_revision: main
+    block_size: 16
+
+correctness:
+  floor_correct: 0.10
+  floor_degraded: 0.05
