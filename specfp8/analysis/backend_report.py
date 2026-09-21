@@ -30,6 +30,26 @@ _PATTERNS = [
 #: Lines worth showing a human when nothing matches.
 _CANDIDATE = re.compile(r"backend|flashinfer|attention", re.IGNORECASE)
 
+#: Valid attention backend names, from AttentionBackendEnum on vLLM 0.29.0.
+#: A capture is only trusted if it is one of these. Without this guard the
+#: patterns happily matched `AG_RS` — an all-gather/reduce-scatter comms
+#: setting, not an attention backend — and reported it as the backend that
+#: served, which is worse than reporting nothing: a confident wrong
+#: attribution would misassign the study's central result.
+_VALID = {
+    "AMX_MLA", "CPU_ATTN", "CPU_MLA", "CUSTOM", "CUTLASS_MLA", "CUTLASS_MSA",
+    "FLASHINFER", "FLASHINFER_MLA", "FLASHINFER_MLA_SPARSE",
+    "FLASHINFER_MLA_SPARSE_DSV4", "FLASHINFER_MLA_SPARSE_SM120", "FLASHMLA",
+    "FLASHMLA_SPARSE", "FLASHMLA_SPARSE_DSV4", "FLASH_ATTN",
+    "FLASH_ATTN_DIFFKV", "FLASH_ATTN_MLA", "FLASH_ATTN_MLA_SPARSE",
+    "FLEX_ATTENTION", "HPC_ATTN", "MINIMAX_M3_SPARSE", "NO_ATTENTION",
+    "ROCM_AITER_FA", "ROCM_AITER_MLA", "ROCM_AITER_MLA_SPARSE",
+    "ROCM_AITER_TRITON_MLA", "ROCM_AITER_UNIFIED_ATTN", "ROCM_ATTN",
+    "ROCM_FLASHMLA_SPARSE_DSV4", "TOKENSPEED_MLA", "TORCH_SDPA",
+    "TRITON_ATTN", "TRITON_ATTN_DIFFKV", "TRITON_MLA", "TRITON_MSA",
+    "TURBOQUANT", "XPU_MLA_SPARSE",
+}
+
 
 def backend_from_log(log_path: str | Path) -> tuple[str | None, list[str]]:
     """Return (backend_name_or_None, candidate_lines)."""
@@ -44,15 +64,16 @@ def backend_from_log(log_path: str | Path) -> tuple[str | None, list[str]]:
             if not _CANDIDATE.search(line):
                 continue
             stripped = line.rstrip()
-            if len(candidates) < 40:
+            if len(candidates) < 60:
                 candidates.append(stripped[:240])
             if found is None:
                 for pat in _PATTERNS:
                     m = pat.search(stripped)
                     if m:
                         name = m.group(1).upper()
-                        # Guard against matching prose like "backend is"
-                        if name not in {"IS", "THE", "A", "AN", "FOR", "TO"}:
+                        # Only accept a real backend name. Anything else is a
+                        # coincidental match on an unrelated setting.
+                        if name in _VALID:
                             found = name
                             break
     return found, candidates
