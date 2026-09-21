@@ -1,0 +1,50 @@
+# tau measurement reproducibility.
+#
+# Every tau in this study is a single measurement with no dispersion, which is
+# the easiest thing for a reviewer to attack: the 2.65-2.77 spread reported
+# across backends may be a real effect or may be noise, and nothing collected
+# so far can tell the difference.
+#
+# Naive repeats would not settle it. Decoding is greedy at temperature 0 and a
+# fresh server is bit-identical run to run (findings/F009), so three repeats
+# may well return three identical values and "error bars" of exactly zero.
+# That is the point: this run asks whether tau is reproducible at all.
+#
+#   reproducible  -> the cross-backend differences are real, not noise, and
+#                    the comparisons in F006 get stronger rather than needing
+#                    error bars.
+#   not reproducible -> genuine measurement variance exists and must be
+#                    reported as dispersion everywhere tau appears.
+#
+# 4 cells x 3 repeats. cells.jsonl is append-only, so each repeat leaves its
+# own record and the spread is read straight off them. Only the two backends
+# that support FP8 KV are included (findings/F017); the other two cannot run
+# half of this grid.
+
+model: Qwen/Qwen3-4B
+model_revision: main
+spec_tokens: 5
+
+axes:
+  engine: [vllm]
+  engine_ref: [vllm-0.29.0]
+  mechanism: [dflash]
+  weight_precision: [bf16]
+  kv_cache_dtype: [auto, fp8_e4m3]
+  attn_backend: [FLASHINFER, TRITON_ATTN]
+
+defaults:
+  draft_model: null
+  draft_revision: null
+  block_size: null
+  guided_decoding: false
+
+per_mechanism:
+  dflash:
+    draft_model: z-lab/Qwen3-4B-DFlash-b16
+    draft_revision: main
+    block_size: 16
+
+correctness:
+  floor_correct: 0.10
+  floor_degraded: 0.05

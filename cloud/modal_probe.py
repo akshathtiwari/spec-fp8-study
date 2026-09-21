@@ -167,7 +167,7 @@ def _print_results(results_path="/results/cells.jsonl"):
     },
 )
 def run_vllm_probe(sweep_file: str = "compat", retry_failed: bool = False,
-                   quality: bool = False):
+                   quality: bool = False, repeats: int = 1):
     """Run the probe with vLLM engine."""
     import os
 
@@ -208,7 +208,10 @@ def run_vllm_probe(sweep_file: str = "compat", retry_failed: bool = False,
     )
     committer.start()
     try:
-        result = subprocess.run(
+        for attempt in range(max(1, repeats)):
+            if repeats > 1:
+                print(f"\n===== repeat {attempt + 1} of {repeats} =====")
+            result = subprocess.run(
             # -u is load-bearing: Python block-buffers stdout when it is a
             # pipe, so without it the probe's per-cell progress does not
             # reach Modal's logs until the process exits. A GPU run that
@@ -218,8 +221,11 @@ def run_vllm_probe(sweep_file: str = "compat", retry_failed: bool = False,
              "--sweep", sweep_path,
              "--results", "/results"]
             + (["--retry-failed"] if retry_failed else [])
-            + (["--quality"] if quality else []),
-        )
+            + (["--quality"] if quality else [])
+            # Every repeat after the first must bypass the staleness skip,
+            # otherwise the cells it just completed are treated as done.
+            + (["--force"] if repeats > 1 else []),
+            )
     finally:
         stop_commits.set()
         committer.join(timeout=5)
@@ -281,7 +287,10 @@ def run_sglang_probe(retry_failed: bool = False):
     )
     committer.start()
     try:
-        result = subprocess.run(
+        for attempt in range(max(1, repeats)):
+            if repeats > 1:
+                print(f"\n===== repeat {attempt + 1} of {repeats} =====")
+            result = subprocess.run(
             # -u is load-bearing: Python block-buffers stdout when it is a
             # pipe, so without it the probe's per-cell progress does not
             # reach Modal's logs until the process exits. A GPU run that
@@ -759,6 +768,7 @@ def main(
     sweep: str = "compat",
     retry_failed: bool = False,
     quality: bool = False,
+    repeats: int = 1,
 ):
     """Entry point: modal run cloud/modal_probe.py [--engine vllm|sglang|status|help] [--sweep mini|compat]"""
     if engine == "help":
@@ -787,7 +797,7 @@ def main(
         return
     if engine == "vllm":
         count = run_vllm_probe.remote(sweep_file=sweep, retry_failed=retry_failed,
-                                      quality=quality)
+                                      quality=quality, repeats=repeats)
         print(f"\nDone. {count} cells completed.")
     elif engine == "sglang":
         run_sglang_probe.remote(retry_failed=retry_failed)

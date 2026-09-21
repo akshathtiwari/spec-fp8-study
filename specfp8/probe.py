@@ -409,6 +409,7 @@ def _make_record(
 def run_probe(
     sweep_path: str, results_dir: str, retry_failed: bool = False,
     quality: bool = False, quality_concurrency: int = 32,
+    force: bool = False,
 ) -> None:
     """Main probe entry point."""
     results_path = Path(results_dir)
@@ -434,7 +435,7 @@ def run_probe(
     retried = 0
     for c in all_cells:
         cid = cell_id(c)
-        prev = done.get(cid)
+        prev = done.get(cid) if not force else None
         if prev is None:
             remaining.append((c, cid))
             continue
@@ -530,6 +531,12 @@ def main():
              "the launch command and so is invisible to the staleness check.",
     )
     parser.add_argument(
+        "--force", action="store_true",
+        help="Re-run every cell regardless of staleness. cells.jsonl is "
+             "append-only, so repeated forced runs leave one record per run "
+             "per cell — which is how measurement reproducibility is tested.",
+    )
+    parser.add_argument(
         "--quality", action="store_true",
         help="Also run the powered task-accuracy measurement (256 GSM8K "
              "problems) against each booted server. Costs a few minutes per "
@@ -544,7 +551,8 @@ def main():
     args = parser.parse_args()
     run_probe(args.sweep, args.results, retry_failed=args.retry_failed,
               quality=args.quality,
-              quality_concurrency=args.quality_concurrency)
+              quality_concurrency=args.quality_concurrency,
+              force=args.force)
 
 
 def _setup_cuda_ld_path():
