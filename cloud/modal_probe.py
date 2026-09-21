@@ -205,7 +205,12 @@ def run_vllm_probe(sweep_file: str = "compat", retry_failed: bool = False):
     committer.start()
     try:
         result = subprocess.run(
-            ["python", "-m", "specfp8.probe",
+            # -u is load-bearing: Python block-buffers stdout when it is a
+            # pipe, so without it the probe's per-cell progress does not
+            # reach Modal's logs until the process exits. A GPU run that
+            # cannot be observed while it bills is indistinguishable from a
+            # hung one.
+            ["python", "-u", "-m", "specfp8.probe",
              "--sweep", sweep_path,
              "--results", "/results"]
             + (["--retry-failed"] if retry_failed else []),
@@ -272,7 +277,12 @@ def run_sglang_probe(retry_failed: bool = False):
     committer.start()
     try:
         result = subprocess.run(
-            ["python", "-m", "specfp8.probe",
+            # -u is load-bearing: Python block-buffers stdout when it is a
+            # pipe, so without it the probe's per-cell progress does not
+            # reach Modal's logs until the process exits. A GPU run that
+            # cannot be observed while it bills is indistinguishable from a
+            # hung one.
+            ["python", "-u", "-m", "specfp8.probe",
              "--sweep", sweep_path,
              "--results", "/results"]
             + (["--retry-failed"] if retry_failed else []),
