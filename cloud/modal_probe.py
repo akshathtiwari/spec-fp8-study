@@ -548,6 +548,16 @@ def determinism_check() -> str:
     return "\n".join(out)
 
 
+@app.function(
+    image=vllm_image, volumes={"/results": results_vol}, timeout=15 * 60
+)
+def backend_report() -> str:
+    """Report which attention backend served each cell. CPU only."""
+    _setup_repo()
+    from specfp8.analysis.backend_report import analyse, format_report
+    return format_report(analyse("/results"))
+
+
 @app.function(image=vllm_image, timeout=15 * 60, max_containers=1)
 def list_attention_backends() -> str:
     """Enumerate the attention backends this vLLM accepts.
@@ -747,6 +757,9 @@ def main(
     """Entry point: modal run cloud/modal_probe.py [--engine vllm|sglang|status|help] [--sweep mini|compat]"""
     if engine == "help":
         print(dump_vllm_help.remote())
+        return
+    if engine == "which-backend":
+        print(backend_report.remote())
         return
     if engine == "backends":
         print(list_attention_backends.remote())
