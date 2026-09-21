@@ -1,0 +1,119 @@
+{
+  "runs": [
+    {
+      "run_id": "2026-09-20T13-17Z_test_mini",
+      "sweep": "sweeps/test_mini.yaml",
+      "engine": "vllm",
+      "engine_version": null,
+      "engine_ref_declared": "latest",
+      "model": "Qwen/Qwen3-0.6B",
+      "gpu": "NVIDIA L4",
+      "compute_cap": "8.9",
+      "vram_gb": 22.5,
+      "cuda": "13.0",
+      "torch": "2.13.0+cu130",
+      "driver": "580.95.05",
+      "started": "2026-09-20T13:17:00.952110+00:00",
+      "ended": "2026-09-20T14:29:14.116850+00:00",
+      "n_records": 10,
+      "n_unique_cells": 2,
+      "attn_backends": [
+        "auto"
+      ],
+      "status_counts": {
+        "broken": 4,
+        "launch_failed": 4,
+        "ok": 2
+      },
+      "gpu_seconds": 1891.7,
+      "cell_ids": [
+        "2f9cee187d619c49",
+        "beca2fa4ae01e5e6"
+      ],
+      "reconstructed": true,
+      "reconstruction_note": "Run boundaries inferred from >20min timestamp gaps; these runs predate live run manifests."
+    },
+    {
+      "run_id": "2026-09-21T04-32Z_h1",
+      "sweep": "sweeps/h1.yaml",
+      "engine": "vllm",
+      "engine_version": "0.29.0",
+      "engine_ref_declared": "vllm-0.29.0",
+      "model": "Qwen/Qwen3-4B",
+      "gpu": "NVIDIA L4",
+      "compute_cap": "8.9",
+      "vram_gb": 22.5,
+      "cuda": "13.0",
+      "torch": "2.13.0+cu130",
+      "driver": "580.95.05",
+      "started": "2026-09-21T04:32:51.283261+00:00",
+      "ended": "2026-09-21T05:36:52.438360+00:00",
+      "n_records": 16,
+      "n_unique_cells": 8,
+      "attn_backends": [
+        "auto"
+      ],
+      "status_counts": {
+        "broken": 8,
+        "launch_failed": 7,
+        "timeout": 1
+      },
+      "gpu_seconds": 3817.2,
+      "cell_ids": [
+        "20224e954c5db2f6",
+        "343abe64ba218187",
+        "4decfb6735aee2f6",
+        "66da0689042ca795",
+        "6d744b9cd1cdd0ca",
+        "708289287b1b9d6d",
+        "b3e035b6c9baf615",
+        "eca0867b82c947ad"
+      ],
+      "reconstructed": true,
+      "reconstruction_note": "Run boundaries inferred from >20min timestamp gaps; these runs predate live run manifests."
+    },
+    {
+      "run_id": "2026-09-21T07-41Z_backend",
+      "sweep": "sweeps/backend.yaml",
+      "engine": "vllm",
+      "engine_version": "0.29.0",
+      "engine_ref_declared": "vllm-0.29.0",
+      "model": "Qwen/Qwen3-4B",
+      "gpu": "NVIDIA L4",
+      "compute_cap": "8.9",
+      "vram_gb": 22.5,
+      "cuda": "13.0",
+      "torch": "2.13.0+cu130",
+      "driver": "580.95.05",
+      "started": "2026-09-21T07:41:34.326107+00:00",
+      "ended": "2026-09-21T08:55:19.580066+00:00",
+      "n_records": 12,
+      "n_unique_cells": 12,
+      "attn_backends": [
+        "FLASHINFER",
+        "TRITON_ATTN",
+        "auto"
+      ],
+      "status_counts": {
+        "ok": 12
+      },
+      "gpu_seconds": 4973.4,
+      "cell_ids": [
+        "02f47ab1d7e7f6b9",
+        "0a453cb98909e610",
+        "154965a1bfbfe3af",
+        "20224e954c5db2f6",
+        "5824814b68901229",
+        "66da0689042ca795",
+        "6d744b9cd1cdd0ca",
+        "9e05fa1354abf37b",
+        "aaeb804d4d2a584f",
+        "c6519fb025e64635",
+        "eca0867b82c947ad",
+        "fa7996fe5764f060"
+      ],
+      "reconstructed": true,
+      "reconstruction_note": "Run boundaries inferred from >20min timestamp gaps; these runs predate live run manifests."
+    }
+  ]
+}

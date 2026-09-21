@@ -1,4 +1,6 @@
-results/
+# results/ is committed — it is ~1.5MB and every finding cites it
+# (see docs/data-model.md). Only transient scratch is ignored.
+results/**/*.tmp
 logs/
 *.pyc
 __pycache__/

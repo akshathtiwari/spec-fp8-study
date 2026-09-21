@@ -1,0 +1,8 @@
+{"ts":"2026-09-20T13:17:20.996615+00:00","phase":"probe","session_gpu_s":44.1,"cumulative_gpu_s":44.1}
+{"ts":"2026-09-20T13:35:51.631598+00:00","phase":"probe","session_gpu_s":258.4,"cumulative_gpu_s":258.4}
+{"ts":"2026-09-20T13:56:14.082341+00:00","phase":"probe","session_gpu_s":556.4,"cumulative_gpu_s":556.4}
+{"ts":"2026-09-20T14:18:11.245197+00:00","phase":"probe","session_gpu_s":510.3,"cumulative_gpu_s":510.3}
+{"ts":"2026-09-20T14:29:15.154394+00:00","phase":"probe","session_gpu_s":522.5,"cumulative_gpu_s":522.5}
+{"ts":"2026-09-21T04:38:27.852620+00:00","phase":"probe","session_gpu_s":627.2,"cumulative_gpu_s":627.2}
+{"ts":"2026-09-21T05:36:53.985500+00:00","phase":"probe","session_gpu_s":3190.0,"cumulative_gpu_s":3190.0}
+{"ts":"2026-09-21T08:55:20.919241+00:00","phase":"probe","session_gpu_s":4973.4,"cumulative_gpu_s":4973.4}
