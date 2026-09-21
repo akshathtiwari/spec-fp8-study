@@ -167,12 +167,70 @@ Build order follows design §12. Each task is one reviewable unit.
       measuring accumulated cache state as much as the configuration. Either
       re-boot per correctness arm or restrict correctness claims to
       fresh-server cells.
-- [ ] T19 **The H1 test.** Run DFlash + `kv_cache_dtype: fp8_e4m3` on SM89 (RTX 4090
-      or L4 or L40S). Record the three possible outcomes:
-      - Clean success → H1 refuted, headline B
-      - Crash with verbatim error → H1 confirmed, headline A
-      - Launches but Test 1 fails (silent corruption) → H1 confirmed, headline A+
-      This single cell is the paper's pivot point.
+- [x] T19 **The H1 test — H1 is REFUTED. Headline B.**
+      `sweeps/h1.yaml`, Modal L4 (SM89, 22.03 GiB), vLLM 0.29.0 (version read
+      from `/version`, not assumed), Qwen3-4B, DFlash draft
+      `z-lab/Qwen3-4B-DFlash-b16`, temperature 0, thinking disabled.
+      All 8 cells booted and served; **no cell crashed**.
+
+      | mechanism | weight | kv_cache | KV tokens | τ | accept |
+      |---|---|---|---|---|---|
+      | none   | bf16 | auto     |  77,168 | –     | –      |
+      | none   | bf16 | fp8_e4m3 | 147,776 | –     | –      |
+      | none   | fp8  | auto     | 104,768 | –     | –      |
+      | none   | fp8  | fp8_e4m3 | 204,384 | –     | –      |
+      | dflash | bf16 | auto     |  58,080 | 2.685 | 0.3371 |
+      | dflash | bf16 | fp8_e4m3 | 115,920 | 2.699 | 0.3398 |
+      | dflash | fp8  | auto     |  77,872 | 2.690 | 0.3380 |
+      | dflash | fp8  | fp8_e4m3 | 155,232 | 2.680 | 0.3361 |
+
+      Three results, in order of how well they are supported:
+
+      1. **DFlash + fp8_e4m3 KV dispatches and serves on SM89.** The predicted
+         runtime kernel failure did not occur. This is the pivot: the paper is
+         headline B, not A.
+      2. **FP8 KV buys ~1.96× KV capacity** (1.915/1.951/1.996/1.993×), against
+         a theoretical 2.0× for 16→8 bit. Stacking FP8 weights and FP8 KV gives
+         2.65× over the BF16 baseline (77,168 → 204,384), because smaller
+         weights also free memory for cache.
+      3. **τ is invariant to precision.** Across all four DFlash cells τ spans
+         2.680–2.699 (range 0.019, 0.7%) and acceptance 0.3361–0.3398 (1.1%).
+         Neither FP8 weights nor FP8 KV measurably changes speculative
+         acceptance.
+
+      Also visible: DFlash costs 25% of KV capacity (77,168 → 58,080 at
+      bf16/auto) because the draft model occupies memory the cache would
+      otherwise use. That is the operator tradeoff the study set out to
+      quantify, and FP8 KV more than pays for it.
+
+      **Not established, and must not be claimed:**
+      - *No quality damage.* Every cell reads `broken`, but only because the
+        GSM8K floors inherited for a 4B target are wrong here — accuracy runs
+        25–43.75% on **16** prompts, where one question is 6.25%, so the whole
+        spread is 4/16 to 7/16 and the arm cannot resolve FP8 damage at all.
+        See T19a.
+      - *Why it works.* `attn_backend` was `auto` and the logs that name the
+        chosen backend live only inside the container. Without that, the
+        refutation has no mechanism. See T19b.
+      - *Generality.* One GPU (L4), one engine version (0.29.0). Says nothing
+        about RTX 4090, L40S, or whether issues #54690 / #44879 were fixed
+        versus never applying to this path.
+
+- [ ] T19a **The accuracy arm is underpowered.** 16 GSM8K prompts gives 6.25%
+      resolution, so it cannot distinguish 31% from 44%, let alone detect the
+      subtler damage FP8 would cause. Two fixes, both needed: raise the GSM8K
+      prompt count until the interval is narrow enough to matter, and set the
+      floors from the *measured* bf16/auto/none baseline rather than an assumed
+      4B number. Until then no quality claim about FP8 is supportable.
+
+- [ ] T19b **Identify the attention backend, and persist launch logs.**
+      H1 predicted a FlashInfer SM90-only dispatch failure; it did not happen,
+      and the paper needs to say what actually served — a different backend
+      (FlashAttention/Triton), a newer FlashInfer with an SM89 variant, or a
+      fix landed since the issues were filed. `log_path` is recorded in every
+      result but the logs themselves are never copied to the results volume,
+      so this evidence was lost when the container exited. Persist them, then
+      re-read the backend selection line.
 
 ### 1.9 Cross-engine comparison
 
