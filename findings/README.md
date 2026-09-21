@@ -26,6 +26,7 @@ wrong turns and what caught them — is part of the evidence.
 | [`F001`](F001-tau-definition.md) | tau must add the bonus token; the engine counter excludes it | established | high |
 | [`F007`](F007-exact-match-saturates.md) | Exact-match equivalence testing saturates and cannot gate FP8 correctness | established | high |
 | [`F012`](F012-harness-faults-are-not-verdicts.md) | A leaked GPU process was recording host faults as compatibility verdicts | established | high |
+| [`F014`](F014-token-budget-confounds-accuracy.md) | A 256-token budget truncates GSM8K reasoning and is scored as no answer | established | high |
 
 ## Known gaps
 
@@ -44,4 +45,4 @@ wrong turns and what caught them — is part of the evidence.
 
 ---
 
-13 findings: 5 result, 3 method, 1 gap, 4 retraction.
+14 findings: 5 result, 4 method, 1 gap, 4 retraction.

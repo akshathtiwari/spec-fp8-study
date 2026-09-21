@@ -156,7 +156,10 @@ def _print_results(results_path="/results/cells.jsonl"):
 @app.function(
     image=vllm_image,
     gpu="L4",
-    timeout=90 * 60,
+    # 120 min: the quality stage adds several minutes per cell on top of boot
+    # and gate. Resume plus per-60s volume commits cap the cost of hitting
+    # this at one re-run cell, so headroom is cheaper than a clipped sweep.
+    timeout=120 * 60,
     **GPU_GUARDRAILS,
     volumes={
         "/results": results_vol,

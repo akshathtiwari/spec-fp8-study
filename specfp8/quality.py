@@ -32,6 +32,18 @@ from specfp8.correctness import extract_gsm8k_answer
 
 PROMPTS = Path(__file__).parent / "workloads" / "quality_prompts.json"
 
+#: The quality stage overrides the gate's token budget rather than inheriting
+#: it. Measured on Qwen3-4B with thinking disabled, 27% of the gate's GSM8K
+#: generations hit a 256-token cap mid-reasoning, and the rate is higher on the
+#: harder problems in this set. A truncated generation is scored as no answer,
+#: so at that budget the measurement reports how often the model runs out of
+#: tokens rather than how often it is right — and if a precision change alters
+#: verbosity, that confound lands directly on the comparison it is meant to
+#: make. 768 leaves headroom for the verbose markdown reasoning this model
+#: produces. Raise if `unparseable` stays high; it is a measurement artifact,
+#: never a result.
+QUALITY_MAX_TOKENS = 768
+
 
 def load_quality_prompts() -> tuple[list[str], list[float]]:
     """Return (prompts, reference answers) in pinned order."""
@@ -82,11 +94,14 @@ def run_quality(
     base_url: str,
     model: str,
     sampling_params: dict,
-    concurrency: int = 16,
-    timeout_s: float = 180.0,
+    concurrency: int = 32,
+    timeout_s: float = 300.0,
     limit: int | None = None,
 ) -> dict:
     """Run the quality set against an already-booted server."""
+    # Own token budget: see QUALITY_MAX_TOKENS.
+    sampling_params = {**sampling_params, "max_tokens": QUALITY_MAX_TOKENS}
+
     prompts, answers = load_quality_prompts()
     if limit:
         prompts, answers = prompts[:limit], answers[:limit]
@@ -113,6 +128,10 @@ def run_quality(
         "unparseable": unparseable,
         "request_failures": failed,
         "concurrency": concurrency,
+        "max_tokens": QUALITY_MAX_TOKENS,
+        "truncated": sum(
+            1 for r in results if r.output_tokens >= QUALITY_MAX_TOKENS - 1
+        ),
         "prompt_set_fingerprint": quality_fingerprint(),
         "per_item": [None if v is None else bool(v) for v in per_item],
         "records": [

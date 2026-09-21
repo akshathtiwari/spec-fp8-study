@@ -108,7 +108,7 @@ def probe_one_cell(
     log_dir: Path,
     floors: dict[str, float] | None = None,
     run_quality_stage: bool = False,
-    quality_concurrency: int = 16,
+    quality_concurrency: int = 32,
 ) -> dict:
     """Probe a single ServerCell: boot, correctness test, τ measurement."""
     launcher = get_launcher(cell.engine)
@@ -244,6 +244,7 @@ def probe_one_cell(
             acc, hw = q["accuracy"], q["ci95_halfwidth"]
             print(f"  Quality: {acc:.1%} +/- {hw:.1%} "
                   f"(n={q['n']}, unparseable={q['unparseable']}, "
+                  f"truncated={q['truncated']}, "
                   f"failures={q['request_failures']})")
 
         # Compute τ
@@ -389,7 +390,7 @@ def _make_record(
 
 def run_probe(
     sweep_path: str, results_dir: str, retry_failed: bool = False,
-    quality: bool = False, quality_concurrency: int = 16,
+    quality: bool = False, quality_concurrency: int = 32,
 ) -> None:
     """Main probe entry point."""
     results_path = Path(results_dir)
@@ -506,7 +507,7 @@ def main():
              "cell; the 32-prompt gate alone cannot resolve quality (F008).",
     )
     parser.add_argument(
-        "--quality-concurrency", type=int, default=16,
+        "--quality-concurrency", type=int, default=32,
         help="Concurrency for the quality measurement (default 16). Safe to "
              "raise: task accuracy, unlike exact match, does not require "
              "concurrency 1.",
