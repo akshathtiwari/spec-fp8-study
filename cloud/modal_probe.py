@@ -548,6 +548,16 @@ def determinism_check() -> str:
     return "\n".join(out)
 
 
+@app.function(
+    image=vllm_image, volumes={"/results": results_vol}, timeout=15 * 60
+)
+def correctness_matrix(model: str = "Qwen/Qwen3-4B") -> str:
+    """Run Tests 1 and 2 over stored outputs. CPU only — no GPU needed."""
+    _setup_repo()
+    from specfp8.analysis.correctness_matrix import analyse, format_report
+    return format_report(analyse("/results", model=model or None))
+
+
 @app.function(volumes={"/results": results_vol}, timeout=10 * 60)
 def compare_outputs() -> str:
     """Compare stored per-request outputs across cells, pairwise by index.
@@ -692,6 +702,9 @@ def main(
     """Entry point: modal run cloud/modal_probe.py [--engine vllm|sglang|status|help] [--sweep mini|compat]"""
     if engine == "help":
         print(dump_vllm_help.remote())
+        return
+    if engine == "correctness":
+        print(correctness_matrix.remote(model=sweep if sweep != "compat" else "Qwen/Qwen3-4B"))
         return
     if engine == "prefetch":
         print(prefetch_models.remote(sweep_file=sweep))
