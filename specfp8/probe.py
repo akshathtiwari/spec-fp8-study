@@ -31,6 +31,8 @@ from specfp8.launchers.base import (
     HealthResult,
     ServerHandle,
     find_free_port,
+    gpu_free_mib,
+    wait_for_gpu_free,
 )
 from specfp8.launchers.sglang import SglangLauncher
 from specfp8.launchers.vllm import VllmLauncher
@@ -57,6 +59,18 @@ SAMPLING_PARAMS = {
     # separate question for the performance sweep, not the correctness gate.
     "chat_template_kwargs": {"enable_thinking": False},
 }
+
+
+#: A cell needs roughly the model weights plus KV cache free before it can
+#: even start. Set below the smallest workable headroom rather than tuned per
+#: model: the point is to catch a leaked server holding the device, not to
+#: predict each cell's exact footprint.
+MIN_FREE_GPU_MIB = 8000.0
+
+#: Booting a large model from a cold weight cache includes the download, which
+#: can dominate. Sized for a 4B target pulled over the network; the probe is
+#: still bounded overall by the runner's own timeout.
+HEALTH_TIMEOUT_S = 900
 
 
 def get_launcher(engine: str):
@@ -105,6 +119,29 @@ def probe_one_cell(
 
     cell_start = time.monotonic()
 
+    # Pre-flight: the GPU must actually be free before this cell can be a
+    # test of anything. If a previous server leaked, the engine aborts with
+    # an out-of-memory error that is indistinguishable, in the record, from
+    # the configuration being unsupported — which would quietly corrupt the
+    # compatibility matrix. Fail as a harness fault instead, so the cell is
+    # re-run rather than believed.
+    free_mib = wait_for_gpu_free(MIN_FREE_GPU_MIB, timeout_s=180.0)
+    if free_mib is not None and free_mib < MIN_FREE_GPU_MIB:
+        print(f"  GPU only has {free_mib:.0f} MiB free "
+              f"(need {MIN_FREE_GPU_MIB:.0f}) — harness fault, not a verdict")
+        return _make_record(
+            cid, cell, env,
+            status="harness_error",
+            error=(
+                f"Only {free_mib:.0f} MiB GPU memory free before launch, "
+                f"below the {MIN_FREE_GPU_MIB:.0f} MiB required. A previous "
+                f"server most likely failed to release the device. This is a "
+                f"harness/host fault and says nothing about whether this "
+                f"configuration is supported."
+            ),
+            wallclock_s=time.monotonic() - cell_start,
+        )
+
     # Attempt launch
     try:
         handle = launcher.start(cell, cid, port, log_dir)
@@ -118,7 +155,7 @@ def probe_one_cell(
 
     try:
         # Wait for healthy
-        health = launcher.wait_healthy(handle, timeout_s=300)
+        health = launcher.wait_healthy(handle, timeout_s=HEALTH_TIMEOUT_S)
 
         if not health.ok:
             return _make_record(
@@ -134,6 +171,11 @@ def probe_one_cell(
         # KV capacity
         kv_cap = launcher.kv_capacity(handle)
         print(f"  KV capacity: {kv_cap}")
+
+        # The engine version that actually answered. `engine_ref` in the sweep
+        # is a declared intent nothing verifies; this is measured.
+        engine_version = launcher.engine_version(handle)
+        print(f"  Engine version: {engine_version}")
 
         # Scrape metrics BEFORE
         stats_before = scrape_spec_stats(handle.base_url, scraper)
@@ -235,6 +277,7 @@ def probe_one_cell(
             verdict=verdict,
             log_path=handle.log_path,
             outputs=probe_result.outputs,
+            engine_version=engine_version,
         )
 
     finally:
@@ -258,6 +301,7 @@ def _make_record(
     empty_count: int = 0,
     verdict: str = "",
     outputs: list[str] | None = None,
+    engine_version: str | None = None,
 ) -> dict:
     """Build a result record for cells.jsonl."""
     argv = get_launcher(cell.engine).argv(cell, 0)
@@ -274,6 +318,7 @@ def _make_record(
         # Sampling settings change both tau and task accuracy, so they are
         # part of the result, not an implicit constant of the harness.
         "sampling_params": SAMPLING_PARAMS,
+        "engine_version": engine_version,
         "outcome": {
             "status": status,
             "error_verbatim": error,
@@ -346,6 +391,12 @@ def run_probe(
         if (prev["argv_fingerprint"] != _cell_fingerprint(c)
                 or prev["sampling_params"] != SAMPLING_PARAMS):
             stale += 1
+            remaining.append((c, cid))
+            continue
+        # A harness fault is not a measurement of anything, so it is always
+        # re-run rather than waiting for --retry-failed.
+        if prev["status"] == "harness_error":
+            retried += 1
             remaining.append((c, cid))
             continue
         # A failure recorded under a broken environment looks identical to a

@@ -121,6 +121,9 @@ class VllmLauncher:
             stdout=log_file,
             stderr=subprocess.STDOUT,
             env={**os.environ},
+            # Own process group, so stop_process can signal the engine's
+            # worker processes too rather than orphaning them on the GPU.
+            start_new_session=True,
         )
 
         handle = ServerHandle(
@@ -147,6 +150,16 @@ class VllmLauncher:
         boot_start = getattr(handle, "_boot_start", time.monotonic())
         handle.boot_time_s = time.monotonic() - boot_start
         return result
+
+    def engine_version(self, handle: ServerHandle) -> str | None:
+        """Read the serving vLLM version from its /version endpoint."""
+        import httpx
+        try:
+            resp = httpx.get(f"{handle.base_url}/version", timeout=10)
+            resp.raise_for_status()
+            return resp.json().get("version")
+        except Exception:
+            return None
 
     def kv_capacity(self, handle: ServerHandle) -> int | None:
         """Parse KV cache capacity, in tokens, from the vLLM startup log."""

@@ -102,6 +102,9 @@ class SglangLauncher:
             stdout=log_file,
             stderr=subprocess.STDOUT,
             env={**os.environ},
+            # Own process group, so stop_process can signal the engine's
+            # worker processes too rather than orphaning them on the GPU.
+            start_new_session=True,
         )
 
         handle = ServerHandle(
@@ -137,6 +140,22 @@ class SglangLauncher:
         boot_start = getattr(handle, "_boot_start", time.monotonic())
         handle.boot_time_s = time.monotonic() - boot_start
         return result
+
+    def engine_version(self, handle: ServerHandle) -> str | None:
+        """Read the serving SGLang version from /get_server_info."""
+        import httpx
+        for path, key in (("/get_server_info", "version"),
+                          ("/get_server_args", "version")):
+            try:
+                resp = httpx.get(f"{handle.base_url}{path}", timeout=10)
+                resp.raise_for_status()
+                data = resp.json()
+            except Exception:
+                continue
+            for k in (key, "sglang_version", "server_version"):
+                if isinstance(data, dict) and data.get(k):
+                    return str(data[k])
+        return None
 
     def kv_capacity(self, handle: ServerHandle) -> int | None:
         """Parse KV capacity from SGLang startup log."""

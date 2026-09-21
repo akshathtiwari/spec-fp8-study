@@ -58,7 +58,9 @@ sglang_image = _engine_image(f"sglang[all]=={SGLANG_VERSION}")
 # Timeouts are sized to the work rather than left permissive — the probe
 # resumes from the results volume, so hitting one costs a re-run of the
 # in-flight cell, not the sweep.
-GPU_GUARDRAILS = dict(max_containers=1, max_inputs=1, scaledown_window=60)
+GPU_GUARDRAILS = dict(
+    max_containers=1, single_use_containers=True, scaledown_window=60
+)
 
 
 def _commit_periodically(stop_event, every_s: int = 60):
@@ -373,6 +375,53 @@ def diagnose(mechanism: str = "ngram") -> str:
 
 @app.function(
     image=vllm_image,
+    timeout=60 * 60,
+    max_containers=1,
+    volumes={"/models": model_vol},
+)
+def prefetch_models(sweep_file: str = "h1") -> str:
+    """Download every checkpoint a sweep needs, on CPU, before any GPU run.
+
+    Weights were being pulled inside the GPU container: the first H1 cell
+    spent its entire 300s health budget downloading ~8GB of Qwen3-4B while
+    an L4 billed by the second, then timed out without ever serving. The
+    bytes are identical whichever container fetches them, so fetch them
+    where the GPU is not running and let the cells start warm.
+    """
+    import os
+    _setup_repo()
+    from specfp8.cells import expand
+
+    named = {"mini": "sweeps/test_mini.yaml"}
+    source = named.get(sweep_file, f"sweeps/{sweep_file}.yaml")
+    cells = expand(source)
+    wanted = sorted(
+        {c.model for c in cells}
+        | {c.draft_model for c in cells if c.draft_model}
+    )
+
+    from huggingface_hub import snapshot_download
+    out = [f"{source}: {len(wanted)} checkpoint(s) to warm"]
+    for repo in wanted:
+        try:
+            # cache_dir matches what the launcher passes as --download-dir,
+            # so the engine finds these instead of re-downloading.
+            path = snapshot_download(repo_id=repo, cache_dir="/models")
+            size = sum(
+                os.path.getsize(os.path.join(d, f))
+                for d, _, fs in os.walk(path) for f in fs
+                if os.path.exists(os.path.join(d, f))
+            )
+            out.append(f"  OK      {repo}  ({size / 1024**3:.2f} GiB)")
+        except Exception as e:
+            out.append(f"  FAILED  {repo}  -> {type(e).__name__}: {e}")
+
+    model_vol.commit()
+    return "\n".join(out)
+
+
+@app.function(
+    image=vllm_image,
     gpu="L4",
     timeout=45 * 60,
     **GPU_GUARDRAILS,
@@ -633,6 +682,9 @@ def main(
     """Entry point: modal run cloud/modal_probe.py [--engine vllm|sglang|status|help] [--sweep mini|compat]"""
     if engine == "help":
         print(dump_vllm_help.remote())
+        return
+    if engine == "prefetch":
+        print(prefetch_models.remote(sweep_file=sweep))
         return
     if engine == "determinism":
         print(determinism_check.remote())

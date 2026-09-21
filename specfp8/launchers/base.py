@@ -67,6 +67,15 @@ class Launcher(Protocol):
         """Poll health endpoint until ready or failed."""
         ...
 
+    def engine_version(self, handle: ServerHandle) -> str | None:
+        """Version of the engine actually serving, read over HTTP.
+
+        Asked of the running server rather than the harness environment: the
+        harness never imports the engine, and the sweep's `engine_ref` is a
+        declared intent that nothing verifies. This is what actually answered.
+        """
+        ...
+
     def kv_capacity(self, handle: ServerHandle) -> int | None:
         """Parse KV-token capacity from startup log. None if unavailable."""
         ...
@@ -130,19 +139,98 @@ def poll_health(
 
 
 def stop_process(handle: ServerHandle) -> None:
-    """SIGTERM, wait 10s, SIGKILL if still alive."""
+    """Terminate the server's whole process group: SIGTERM, then SIGKILL.
+
+    Signalling only the direct child is not enough. Both engines fork
+    separate worker processes (vLLM 0.29 runs `EngineCore` and `APIServer`
+    as distinct pids), and those workers are the ones holding GPU memory.
+    Killing the parent alone orphans them: they survive, keep ~20GB
+    resident, and every later cell fails to allocate — which then gets
+    recorded as if the *configuration* were unsupported.
+
+    Launchers start servers with `start_new_session=True`, so the whole
+    tree shares a process group that can be signalled at once.
+    """
+    import os
     import signal
 
     proc = handle.get_process()
     if proc is None or proc.poll() is not None:
         return
 
-    proc.send_signal(signal.SIGTERM)
     try:
-        proc.wait(timeout=10)
+        pgid = os.getpgid(proc.pid)
+    except (ProcessLookupError, PermissionError):
+        pgid = None
+
+    def signal_tree(sig) -> None:
+        if pgid is not None:
+            try:
+                os.killpg(pgid, sig)
+                return
+            except (ProcessLookupError, PermissionError):
+                pass
+        try:
+            proc.send_signal(sig)
+        except (ProcessLookupError, OSError):
+            pass
+
+    signal_tree(signal.SIGTERM)
+    try:
+        proc.wait(timeout=20)
     except subprocess.TimeoutExpired:
-        proc.kill()
-        proc.wait(timeout=5)
+        signal_tree(signal.SIGKILL)
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            pass
+
+    # The parent can exit while workers are still tearing down, so make sure
+    # nothing is left in the group before the caller boots the next server.
+    if pgid is not None:
+        for _ in range(20):
+            try:
+                os.killpg(pgid, 0)
+            except (ProcessLookupError, PermissionError):
+                return
+            time.sleep(0.5)
+        try:
+            os.killpg(pgid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+
+
+def gpu_free_mib() -> float | None:
+    """Free GPU memory in MiB, or None if it cannot be determined.
+
+    Uses nvidia-smi rather than torch.cuda.mem_get_info on purpose: the
+    torch call would create a CUDA context inside the harness process and
+    consume a few hundred MiB of the very memory being measured.
+    """
+    try:
+        result = subprocess.run(
+            ["nvidia-smi", "--query-gpu=memory.free",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, check=True, timeout=30,
+        )
+        return float(result.stdout.strip().split("\n")[0])
+    except Exception:
+        return None
+
+
+def wait_for_gpu_free(min_mib: float, timeout_s: float = 120.0) -> float | None:
+    """Wait for at least `min_mib` of GPU memory to be free.
+
+    A killed server does not release its CUDA context instantly, so booting
+    the next cell immediately can fail on memory that is about to come back.
+    Returns the last observed free memory (None if unknown).
+    """
+    deadline = time.monotonic() + timeout_s
+    free = gpu_free_mib()
+    while free is not None and free < min_mib and time.monotonic() < deadline:
+        time.sleep(2)
+        free = gpu_free_mib()
+    return free
 
 
 def _tail_log(log_path: str, n_lines: int) -> str:
