@@ -165,6 +165,67 @@ def append_requests(
     return str(out_path)
 
 
+def persist_log(
+    cell_id: str,
+    log_path: str,
+    results_dir: str | Path,
+    max_bytes: int = 4_000_000,
+) -> str | None:
+    """Copy a server's launch log into the results directory.
+
+    Launchers write logs beside the working directory, which on rented
+    hardware vanishes when the container exits. Every record stores a
+    `log_path`, so without this a result points at evidence that no longer
+    exists — including the attention-backend selection lines and the
+    verbatim error behind each failed cell, which are precisely what a
+    reader needs to check a compatibility claim.
+
+    Oversized logs are truncated in the middle rather than at one end: the
+    head carries configuration and backend selection, the tail carries the
+    failure, and the interesting parts are at both ends.
+    """
+    src = Path(log_path)
+    if not src.is_file():
+        return None
+
+    out_dir = Path(results_dir) / "logs"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    dest = out_dir / f"{cell_id}.log"
+
+    try:
+        data = src.read_bytes()
+    except OSError:
+        return None
+
+    if len(data) > max_bytes:
+        head = max_bytes * 3 // 4
+        tail = max_bytes - head
+        omitted = len(data) - max_bytes
+        data = (
+            data[:head]
+            + f"\n\n... [{omitted} bytes omitted by persist_log] ...\n\n".encode()
+            + data[-tail:]
+        )
+
+    fd, tmp = tempfile.mkstemp(dir=out_dir, prefix=f".{cell_id}_", suffix=".tmp")
+    try:
+        os.write(fd, data)
+        os.fsync(fd)
+        os.close(fd)
+        fd = -1
+        os.replace(tmp, dest)
+    finally:
+        if fd >= 0:
+            os.close(fd)
+        if os.path.exists(tmp):
+            try:
+                os.unlink(tmp)
+            except OSError:
+                pass
+
+    return str(dest)
+
+
 def append_budget_log(
     phase: str,
     session_gpu_s: float,

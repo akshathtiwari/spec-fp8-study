@@ -45,6 +45,7 @@ from specfp8.store import (
     append_requests,
     argv_fingerprint,
     completed_cells,
+    persist_log,
 )
 
 
@@ -281,7 +282,13 @@ def probe_one_cell(
         )
 
     finally:
+        # Stop first, then copy: the log is only complete once the server has
+        # finished writing it, and this runs on every exit path so failed
+        # cells — the ones whose logs matter most — are captured too.
         launcher.stop(handle)
+        saved = persist_log(cid, handle.log_path, results_dir)
+        if saved:
+            print(f"  Log saved: {saved}")
 
 
 def _make_record(
