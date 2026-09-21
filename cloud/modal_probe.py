@@ -571,9 +571,25 @@ def list_attention_backends() -> str:
     r = subprocess.run(
         [sys.executable, "-c", script], capture_output=True, text=True
     )
+    # Whether FlashInfer is even importable decides what a FLASHINFER cell
+    # failure would mean: a missing SM89 kernel (H1's claim) or simply an
+    # absent optional dependency (no evidence either way).
+    probe = (
+        "import importlib\n"
+        "for mod in ('flashinfer','flash_attn','triton'):\n"
+        "    try:\n"
+        "        m = importlib.import_module(mod)\n"
+        "        print(f'  {mod}: {getattr(m, \"__version__\", \"?\")}')\n"
+        "    except Exception as e:\n"
+        "        print(f'  {mod}: ABSENT ({type(e).__name__})')\n"
+    )
+    r2 = subprocess.run(
+        [sys.executable, "-c", probe], capture_output=True, text=True
+    )
     return (
         f"### AttentionBackendEnum members\n{r.stdout}\n"
-        f"### stderr\n{r.stderr[-1500:]}"
+        f"### backend libraries present\n{r2.stdout}{r2.stderr[-500:]}\n"
+        f"### stderr\n{r.stderr[-800:]}"
     )
 
 
