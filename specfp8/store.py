@@ -61,6 +61,8 @@ def completed_cells(results_dir: str | Path) -> dict[str, dict]:
                     "argv_fingerprint": record.get("argv_fingerprint"),
                     "sampling_params": record.get("sampling_params"),
                     "prompt_set_fingerprint": record.get("prompt_set_fingerprint"),
+                    "quality_config_fingerprint":
+                        record.get("quality_config_fingerprint"),
                     "status": record.get("outcome", {}).get("status"),
                 }
 

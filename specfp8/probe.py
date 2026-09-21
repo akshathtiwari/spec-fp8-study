@@ -94,6 +94,21 @@ def get_metrics_scraper(engine: str):
         raise ValueError(f"Unknown engine: {engine}")
 
 
+def _quality_config_fingerprint() -> str:
+    """Identity of the quality measurement's settings.
+
+    Only the inputs that change the measured number belong here: the token
+    budget (a truncated generation scores as no answer, see F014) and the
+    prompt set. Concurrency is deliberately excluded — task accuracy is robust
+    to batching (F009), so including it would invalidate good results on a
+    harmless throughput tweak.
+    """
+    import hashlib
+    from specfp8.quality import QUALITY_MAX_TOKENS, quality_fingerprint
+    payload = f"{QUALITY_MAX_TOKENS}|{quality_fingerprint()}"
+    return hashlib.sha256(payload.encode()).hexdigest()[:16]
+
+
 def _cell_fingerprint(cell: ServerCell) -> str:
     """Fingerprint of the command this harness would launch for `cell`."""
     launcher = get_launcher(cell.engine)
@@ -240,6 +255,9 @@ def probe_one_cell(
                 concurrency=quality_concurrency, timeout_s=180.0,
             )
             append_quality(cid, q.pop("records"), results_dir)
+            # Recorded so a later change to the quality settings invalidates
+            # this measurement instead of leaving it alongside newer ones.
+            q["config_fingerprint"] = _quality_config_fingerprint()
             quality = q
             acc, hw = q["accuracy"], q["ci95_halfwidth"]
             print(f"  Quality: {acc:.1%} +/- {hw:.1%} "
@@ -377,6 +395,7 @@ def _make_record(
 
     if quality is not None:
         record["quality"] = quality
+        record["quality_config_fingerprint"] = quality.get("config_fingerprint")
 
     record["correctness"] = {
         "task_accuracy": round(task_accuracy, 4) if task_accuracy is not None else None,
@@ -431,6 +450,17 @@ def run_probe(
             stale += 1
             remaining.append((c, cid))
             continue
+        # A recorded cell that lacks the quality measurement, or carries one
+        # taken under different settings, is not usable when quality is being
+        # collected — otherwise a single sweep yields a dataset mixing
+        # measurements that are not comparable.
+        if quality:
+            prev_q = prev.get("quality_config_fingerprint")
+            if prev_q != _quality_config_fingerprint():
+                stale += 1
+                remaining.append((c, cid))
+                continue
+
         # A harness fault is not a measurement of anything, so it is always
         # re-run rather than waiting for --retry-failed.
         if prev["status"] == "harness_error":
