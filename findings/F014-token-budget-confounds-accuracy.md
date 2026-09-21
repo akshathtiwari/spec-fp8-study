@@ -2,7 +2,8 @@
 id: F014
 title: A 256-token budget truncates GSM8K reasoning and is scored as no answer
 kind: method
-status: established
+superseded_by: [F015]
+status: superseded
 confidence: high
 date: 2026-09-21
 evidence:
@@ -10,6 +11,14 @@ evidence:
   analysis: []
   code_sha: 86e97b0
 ---
+
+## Superseded by F015
+
+The fix in this finding stands: 256 tokens did truncate 27% of
+generations and the quality stage does need its own budget. But the
+attribution of `unparseable` to truncation was **wrong** — raising the budget
+cut truncation from 69 to 1 while `unparseable` held at ~120. The real cause
+was an extractor defect (F015).
 
 ## Claim
 

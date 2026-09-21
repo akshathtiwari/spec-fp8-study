@@ -175,8 +175,10 @@ def t_capacity() -> None:
 
 
 def t_quality() -> None:
-    from specfp8.analysis.quality_compare import analyse, format_report
+    from specfp8.analysis.quality_compare import analyse, format_report, load_quality
+    from specfp8.quality import wilson_ci
     cells = latest_cells()
+    rescored = load_quality(RESULTS)
     L = [header("Powered task accuracy (256 GSM8K problems)",
                 ["results/cells.jsonl", "results/quality/"])]
     rows = [r for r in cells.values() if r.get("quality")]
@@ -185,10 +187,14 @@ def t_quality() -> None:
                  "`--quality` to populate `results/quality/`.\n")
         write("quality.md", "\n".join(L))
         return
-    L.append("Accuracy with a Wilson 95% interval. `unparseable` counts "
-             "generations from which no answer could be extracted — a "
-             "different failure from a wrong answer, so they are reported "
-             "separately and excluded from the paired test.\n")
+    L.append("Accuracy with a Wilson 95% interval. **Scored from the stored "
+             "generation text at analysis time, not from the verdict written "
+             "during the run** — an extractor defect discarded 58.6% of "
+             "correct answers (findings/F015) and affected records still "
+             "carry their stale verdicts. `unparseable` counts generations "
+             "from which no answer could be extracted, a different failure "
+             "from a wrong answer, so they are reported separately and "
+             "excluded from the paired test.\n")
     L.append("| mech | weight | kv | backend | n | accuracy | 95% CI | "
              "unparseable |")
     L.append("|---|---|---|---|---|---|---|---|")
@@ -196,11 +202,19 @@ def t_quality() -> None:
             r["config"]["mechanism"], r["config"]["weight_precision"],
             r["config"]["kv_cache_dtype"])):
         c, q = r["config"], r["quality"]
-        lo, hi = q["ci95"]
+        items = rescored.get(r["cell_id"])
+        if items:
+            n = len(items)
+            k = sum(1 for v in items if v is True)
+            unp = sum(1 for v in items if v is None)
+            lo, hi = wilson_ci(k, n)
+            acc = k / n
+        else:
+            n, unp, acc = q["n"], q["unparseable"], q["accuracy"]
+            lo, hi = q["ci95"]
         L.append(f"| {c['mechanism']} | {c['weight_precision']} | "
                  f"{c['kv_cache_dtype']} | {c.get('attn_backend','auto')} | "
-                 f"{q['n']} | {q['accuracy']:.1%} | "
-                 f"{lo:.1%}–{hi:.1%} | {q['unparseable']} |")
+                 f"{n} | {acc:.1%} | {lo:.1%}–{hi:.1%} | {unp} |")
     L.append("\n## Paired comparison (McNemar, exact binomial)\n")
     L.append("```\n" + format_report(analyse(RESULTS)) + "\n```\n")
     write("quality.md", "\n".join(L))

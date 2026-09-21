@@ -25,8 +25,23 @@ from itertools import combinations
 from pathlib import Path
 
 
-def load_quality(results_dir: str | Path) -> dict[str, list[bool | None]]:
-    """cell_id -> per-problem correctness, ordered by problem index."""
+def load_quality(
+    results_dir: str | Path, rescore: bool = True
+) -> dict[str, list[bool | None]]:
+    """cell_id -> per-problem correctness, ordered by problem index.
+
+    Scores from the stored generation text by default rather than trusting the
+    `correct` field written at probe time. Scoring is a pure function of that
+    text, so improving it must not require re-running a GPU — and it has had
+    to improve: an extractor defect discarded 58.6% of correct answers
+    (findings/F015), and every affected record still carries its stale verdict.
+
+    Pass `rescore=False` only to inspect what was originally recorded.
+    """
+    from specfp8.quality import load_quality_prompts
+    from specfp8.correctness import extract_gsm8k_answer
+
+    _, answers = load_quality_prompts()
     qdir = Path(results_dir) / "quality"
     out: dict[str, list[bool | None]] = {}
     if not qdir.is_dir():
@@ -39,7 +54,19 @@ def load_quality(results_dir: str | Path) -> dict[str, list[bool | None]]:
                 if line:
                     rows.append(json.loads(line))
         rows.sort(key=lambda r: r.get("index", 0))
-        out[path.stem] = [r.get("correct") for r in rows]
+        if not rescore:
+            out[path.stem] = [r.get("correct") for r in rows]
+            continue
+        scored: list[bool | None] = []
+        for r in rows:
+            idx = r.get("index", 0)
+            if idx >= len(answers):
+                scored.append(None)
+                continue
+            got = extract_gsm8k_answer(r.get("output_text", ""))
+            scored.append(None if got is None
+                          else abs(got - answers[idx]) < 0.01)
+        out[path.stem] = scored
     return out
 
 

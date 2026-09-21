@@ -26,7 +26,7 @@ wrong turns and what caught them — is part of the evidence.
 | [`F001`](F001-tau-definition.md) | tau must add the bonus token; the engine counter excludes it | established | high |
 | [`F007`](F007-exact-match-saturates.md) | Exact-match equivalence testing saturates and cannot gate FP8 correctness | established | high |
 | [`F012`](F012-harness-faults-are-not-verdicts.md) | A leaked GPU process was recording host faults as compatibility verdicts | established | high |
-| [`F014`](F014-token-budget-confounds-accuracy.md) | A 256-token budget truncates GSM8K reasoning and is scored as no answer | established | high |
+| [`F014`](F014-token-budget-confounds-accuracy.md) | A 256-token budget truncates GSM8K reasoning and is scored as no answer | superseded | high |
 
 ## Known gaps
 
@@ -42,7 +42,8 @@ wrong turns and what caught them — is part of the evidence.
 | [`F010`](F010-retraction-flash-attn-absent.md) | RETRACTED — "FlashAttention is unavailable in stock vLLM" was wrong | retracted | high |
 | [`F011`](F011-retraction-ag-rs-backend.md) | RETRACTED — backend attribution reported AG_RS, a regex artifact | retracted | high |
 | [`F013`](F013-gate-prompts-were-corrupted.md) | The correctness gate's GSM8K reference answers were partly wrong | retracted | high |
+| [`F015`](F015-extractor-discarded-correct-answers.md) | The answer extractor silently discarded 58.6% of correct answers | retracted | high |
 
 ---
 
-14 findings: 5 result, 4 method, 1 gap, 4 retraction.
+15 findings: 5 result, 4 method, 1 gap, 5 retraction.

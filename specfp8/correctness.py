@@ -292,34 +292,57 @@ def strip_reasoning(text: str) -> str:
     return text
 
 
+#: A number must start with a digit. The previous `[\d,]+` also matched a
+#: bare comma, which is how the sentence opener "So," came to be captured as
+#: an answer.
+_NUMBER = r"-?\d[\d,]*(?:\.\d+)?"
+
+
 def extract_gsm8k_answer(text: str) -> float | None:
     """Extract the final numeric answer from a GSM8K-style response.
 
-    Looks for patterns like "#### 42", "The answer is 42", or the last
-    number in the text. Reasoning blocks are removed first.
+    Three strategies, most explicit first: the `#### N` convention, an explicit
+    answer statement, then the last number in the text. Reasoning blocks are
+    removed first.
+
+    Two properties matter and were both missing before:
+
+    **Every stage falls through on failure.** A stage that matches but cannot
+    parse must not abort the search — it previously returned None immediately,
+    so a spurious match on "So," discarded answers that the last-number
+    fallback would have found. Roughly 59% of this study's GSM8K generations
+    were scored as unanswered for that reason (findings/F015).
+
+    **The last match wins, not the first.** Models restate intermediate results
+    with the same connectives they use for the conclusion, so scanning forward
+    tends to find working rather than the answer.
     """
     text = strip_reasoning(text)
     if not text.strip():
         return None
 
-    # Pattern 1: "#### <number>"
-    match = re.search(r"####\s*(-?[\d,]+\.?\d*)", text)
-    if match:
-        return _parse_number(match.group(1))
+    # 1. The GSM8K convention, if the model happens to follow it.
+    for m in reversed(list(re.finditer(rf"####\s*({_NUMBER})", text))):
+        value = _parse_number(m.group(1))
+        if value is not None:
+            return value
 
-    # Pattern 2: "the answer is <number>"
-    match = re.search(
-        r"(?:the\s+answer\s+is|therefore|thus|so)\s*:?\s*\$?(-?[\d,]+\.?\d*)",
-        text,
-        re.IGNORECASE,
+    # 2. An explicit answer statement. Word boundaries keep "so" and "thus"
+    #    from matching inside ordinary prose.
+    statement = (
+        rf"(?:the\s+answer\s+is|\banswer\s*[:=]|\btherefore\b,?"
+        rf"|\bthus\b,?|\bso\b,?)\s*\$?\s*({_NUMBER})"
     )
-    if match:
-        return _parse_number(match.group(1))
+    for m in reversed(list(re.finditer(statement, text, re.IGNORECASE))):
+        value = _parse_number(m.group(1))
+        if value is not None:
+            return value
 
-    # Pattern 3: last number in text
-    numbers = re.findall(r"-?[\d,]+\.?\d*", text)
-    if numbers:
-        return _parse_number(numbers[-1])
+    # 3. Last resort: the final number anywhere in the text.
+    for token in reversed(re.findall(_NUMBER, text)):
+        value = _parse_number(token)
+        if value is not None:
+            return value
 
     return None
 
