@@ -20,6 +20,10 @@ from pathlib import Path
 
 #: Ordered most-specific first. Each must capture the backend name in group 1.
 _PATTERNS = [
+    # vLLM 0.29 announces: "Using FLASH_ATTN attention backend out of
+    # potential backends: [...]". The word "attention" sits between the name
+    # and "backend", so a `Using X backend` pattern alone silently misses it.
+    re.compile(r"Using\s+([A-Za-z0-9_]+)\s+attention\s+backend", re.IGNORECASE),
     re.compile(r"Using\s+([A-Za-z0-9_]+)\s+backend", re.IGNORECASE),
     re.compile(r"Using\s+backend\s+([A-Za-z0-9_]+)", re.IGNORECASE),
     re.compile(r"attention[_ ]backend[\"'\s:=]+([A-Za-z0-9_]+)", re.IGNORECASE),
