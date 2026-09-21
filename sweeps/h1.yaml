@@ -1,0 +1,46 @@
+# T19 — the H1 test.
+#
+# H1: FlashInfer's FP8 attention kernels are compiled for SM90 only, with no
+# SM89 variant, so config validation accepts fp8_e4m3 on Ada and kernel
+# dispatch then fails at runtime. This sweep isolates that claim to the
+# smallest set of cells that can answer it.
+#
+# 8 cells = {none, dflash} x {bf16, fp8} x {auto, fp8_e4m3}. The `none` arm is
+# not padding: it is the matched non-speculative baseline each dflash cell is
+# compared against, and it separates "FP8 KV is broken" from "FP8 KV is broken
+# *with speculation*".
+#
+# eagle3 and mtp are deliberately excluded — the EAGLE3 checkpoint in
+# compat.yaml is still a TBD placeholder (T41-T43) and would only burn GPU
+# time on a 404.
+
+model: Qwen/Qwen3-4B
+model_revision: main
+spec_tokens: 5
+
+axes:
+  engine: [vllm]
+  engine_ref: [vllm-0.29.0]
+  mechanism: [none, dflash]
+  weight_precision: [bf16, fp8]
+  kv_cache_dtype: [auto, fp8_e4m3]
+  attn_backend: [auto]
+
+defaults:
+  draft_model: null
+  draft_revision: null
+  block_size: null
+  guided_decoding: false
+
+per_mechanism:
+  dflash:
+    draft_model: z-lab/Qwen3-4B-DFlash-b16
+    draft_revision: main
+    block_size: 16
+
+# Floors left at the specfp8.correctness defaults, which were calibrated for a
+# 4B target. They are unverified for Qwen3-4B with thinking disabled: if the
+# bf16/auto/none baseline lands below 0.70 the floors are wrong rather than the
+# server, and should be recalibrated against that measured baseline. The H1
+# question is whether the kernel dispatches at all, which does not depend on
+# this calibration.

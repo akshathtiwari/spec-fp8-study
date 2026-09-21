@@ -169,20 +169,30 @@ def run_vllm_probe(sweep_file: str = "compat", retry_failed: bool = False):
     _print_gpu_info()
     repo_dir = _setup_repo()
 
-    if sweep_file == "mini":
-        # Smoke test: 2 cells, ~10 min
-        sweep_path = "sweeps/test_mini.yaml"
-        print("\n=== Running smoke test (test_mini.yaml) ===")
-    else:
-        # Full vLLM probe: create vLLM-only sweep
-        import yaml
-        with open("sweeps/compat.yaml") as f:
-            spec = yaml.safe_load(f)
+    # Accept any sweep by name; "mini" is an alias kept for muscle memory.
+    named = {"mini": "sweeps/test_mini.yaml"}
+    source = named.get(sweep_file, f"sweeps/{sweep_file}.yaml")
+    if not os.path.exists(source):
+        raise FileNotFoundError(
+            f"No sweep at {source}. Available: "
+            f"{sorted(os.listdir('sweeps'))}"
+        )
+
+    # This container only has vLLM installed, so drop any sglang cells rather
+    # than letting them fail as if they were incompatible configurations.
+    import yaml
+    with open(source) as f:
+        spec = yaml.safe_load(f)
+    engines = spec.get("axes", {}).get("engine", [])
+    if list(engines) != ["vllm"]:
         spec["axes"]["engine"] = ["vllm"]
-        sweep_path = "/tmp/compat_vllm.yaml"
+        sweep_path = f"/tmp/{os.path.basename(source)}"
         with open(sweep_path, "w") as f:
             yaml.dump(spec, f)
-        print("\n=== Running full vLLM probe ===")
+        print(f"\n=== Running {source} (vLLM cells only) ===")
+    else:
+        sweep_path = source
+        print(f"\n=== Running {source} ===")
 
     import subprocess
     import threading

@@ -8,7 +8,7 @@ spec_tokens: 5
 
 axes:
   engine: [vllm, sglang]
-  engine_ref: [latest]
+  engine_ref: [vllm-0.29.0]
   mechanism: [none, ngram, eagle3, dflash, mtp]
   weight_precision: [bf16, fp8]
   kv_cache_dtype: [auto, fp8_e4m3]

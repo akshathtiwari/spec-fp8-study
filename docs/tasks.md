@@ -135,13 +135,38 @@ Build order follows design §12. Each task is one reviewable unit.
       sampling preserves the target distribution) but greedy argmax can flip on
       near-ties when verification-batch numerics differ from single-token decode
       numerics, and one flipped token diverges the rest of the text.
-      **Decisive experiment:** run the identical `none` cell twice and compare.
-      Divergence there isolates general nondeterminism; agreement there makes it
-      speculation-specific.
-      **If confirmed, Test 1 must be replaced** by a distributional or
-      task-level criterion (accuracy within CI of the matched baseline,
-      divergence-point distribution) rather than exact match. Compare with
-      `modal run cloud/modal_probe.py --engine compare`.
+      **Experiment run** (`--engine determinism`, L4, Qwen3-0.6B, BF16):
+      - same config, **fresh** server vs fresh server: **32/32 = 100.0%**
+      - same server, **second** pass: **29/32 = 90.6%**
+
+      So the engine is exactly reproducible given identical server state, and
+      what perturbs it is *accumulated* state — pass B hits KV left behind by
+      pass A. Prefix caching is the prime suspect (enabled by default in
+      vLLM 0.29); the mechanism is that a cached prefix and a freshly computed
+      one give slightly different logits, which flips argmax on near-ties, and
+      one flipped token diverges everything after it.
+
+      Two consequences, one good and one bad:
+
+      1. **The harness is sound.** Every probe cell boots a fresh server and
+         makes one pass, which is the 100% condition. Cross-cell comparisons
+         are therefore reproducible, and the 34.4% spec-vs-nonspec gap is
+         *real signal attributable to speculation*, not measurement noise.
+      2. **Test 1 still cannot be used as specified.** vLLM's speculative path
+         is not token-identical to the non-speculative one at temperature 0 on
+         this stack, so the ≥95% exact-match threshold fails at the BF16
+         baseline, before FP8 enters. The threshold has to be recalibrated
+         against the *measured BF16 spec baseline* rather than against 100% —
+         the question becomes whether FP8 degrades agreement materially below
+         that baseline, which `sweeps/h1.yaml` collects the matched arms for.
+
+- [ ] T18b **Phase 2 hazard from the same finding.** `group_by_server` boots
+      once and runs many RunCells against that server, which is exactly the
+      90.6% condition. Harmless for throughput and latency, but any
+      correctness or token-identity claim drawn from a reused server is
+      measuring accumulated cache state as much as the configuration. Either
+      re-boot per correctness arm or restrict correctness claims to
+      fresh-server cells.
 - [ ] T19 **The H1 test.** Run DFlash + `kv_cache_dtype: fp8_e4m3` on SM89 (RTX 4090
       or L4 or L40S). Record the three possible outcomes:
       - Clean success → H1 refuted, headline B
