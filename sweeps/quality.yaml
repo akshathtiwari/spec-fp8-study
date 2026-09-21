@@ -1,0 +1,50 @@
+# Tier 2 — powered task-accuracy measurement across the precision grid.
+#
+# Purpose: decide whether FP8 damages answer quality. The gate cannot answer
+# this: at 16 problems its interval is +/-24 points (findings/F008), and until
+# today its reference answers were partly wrong (findings/F013). This sweep
+# pairs the full R4 precision 2x2 with the 256-problem quality set.
+#
+# attn_backend is PINNED to FLASHINFER, which is the point of this sweep's
+# design. With `auto`, vLLM selects FlashAttention-2 at BF16 KV and switches to
+# FlashInfer when FP8 KV is requested (findings/F003), so a bf16-vs-fp8
+# comparison under `auto` changes the backend at the same time as the precision
+# and cannot attribute a difference to either. FlashInfer is chosen because it
+# serves both KV dtypes here and is what `auto` would land on for FP8 anyway.
+#
+# 8 cells = {none, dflash} x {bf16, fp8} weights x {auto, fp8_e4m3} KV.
+# Comparisons are paired (McNemar) over identical problems in identical order,
+# holding model, mechanism and backend fixed — see
+# specfp8/analysis/quality_compare.py.
+
+model: Qwen/Qwen3-4B
+model_revision: main
+spec_tokens: 5
+
+axes:
+  engine: [vllm]
+  engine_ref: [vllm-0.29.0]
+  mechanism: [none, dflash]
+  weight_precision: [bf16, fp8]
+  kv_cache_dtype: [auto, fp8_e4m3]
+  attn_backend: [FLASHINFER]
+
+defaults:
+  draft_model: null
+  draft_revision: null
+  block_size: null
+  guided_decoding: false
+
+per_mechanism:
+  dflash:
+    draft_model: z-lab/Qwen3-4B-DFlash-b16
+    draft_revision: main
+    block_size: 16
+
+# The gate's own accuracy arm is not the quality measurement and is not used as
+# a quality gate here; floors are set only to catch fluent nonsense. The
+# measurement that matters is the 256-problem run, reported with a Wilson
+# interval and compared pairwise.
+correctness:
+  floor_correct: 0.10
+  floor_degraded: 0.05

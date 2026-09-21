@@ -174,9 +174,42 @@ def t_capacity() -> None:
     write("kv_capacity.md", "\n".join(L) + "\n")
 
 
+def t_quality() -> None:
+    from specfp8.analysis.quality_compare import analyse, format_report
+    cells = latest_cells()
+    L = [header("Powered task accuracy (256 GSM8K problems)",
+                ["results/cells.jsonl", "results/quality/"])]
+    rows = [r for r in cells.values() if r.get("quality")]
+    if not rows:
+        L.append("No quality measurements yet. Run the probe with "
+                 "`--quality` to populate `results/quality/`.\n")
+        write("quality.md", "\n".join(L))
+        return
+    L.append("Accuracy with a Wilson 95% interval. `unparseable` counts "
+             "generations from which no answer could be extracted — a "
+             "different failure from a wrong answer, so they are reported "
+             "separately and excluded from the paired test.\n")
+    L.append("| mech | weight | kv | backend | n | accuracy | 95% CI | "
+             "unparseable |")
+    L.append("|---|---|---|---|---|---|---|---|")
+    for r in sorted(rows, key=lambda r: (
+            r["config"]["mechanism"], r["config"]["weight_precision"],
+            r["config"]["kv_cache_dtype"])):
+        c, q = r["config"], r["quality"]
+        lo, hi = q["ci95"]
+        L.append(f"| {c['mechanism']} | {c['weight_precision']} | "
+                 f"{c['kv_cache_dtype']} | {c.get('attn_backend','auto')} | "
+                 f"{q['n']} | {q['accuracy']:.1%} | "
+                 f"{lo:.1%}–{hi:.1%} | {q['unparseable']} |")
+    L.append("\n## Paired comparison (McNemar, exact binomial)\n")
+    L.append("```\n" + format_report(analyse(RESULTS)) + "\n```\n")
+    write("quality.md", "\n".join(L))
+
+
 def main() -> None:
     print(f"Regenerating tables from {RESULTS} at code {code_sha()}")
-    for fn in (t_runs, t_compat, t_backend, t_correctness, t_capacity):
+    for fn in (t_runs, t_compat, t_backend, t_correctness, t_capacity,
+               t_quality):
         try:
             fn()
         except Exception as e:

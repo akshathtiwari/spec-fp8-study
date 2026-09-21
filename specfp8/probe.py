@@ -43,6 +43,7 @@ from specfp8.metrics.vllm import VllmMetricsScraper
 from specfp8.store import (
     append,
     append_budget_log,
+    append_quality,
     append_requests,
     argv_fingerprint,
     completed_cells,
@@ -106,6 +107,8 @@ def probe_one_cell(
     results_dir: Path,
     log_dir: Path,
     floors: dict[str, float] | None = None,
+    run_quality_stage: bool = False,
+    quality_concurrency: int = 16,
 ) -> dict:
     """Probe a single ServerCell: boot, correctness test, τ measurement."""
     launcher = get_launcher(cell.engine)
@@ -225,6 +228,24 @@ def probe_one_cell(
             results_dir,
         )
 
+        # Optional powered quality measurement, on the same booted server so
+        # it costs generation time rather than another boot.
+        quality = None
+        if run_quality_stage:
+            from specfp8.quality import run_quality
+            print(f"  Running quality measurement "
+                  f"({quality_concurrency} concurrent)...")
+            q = run_quality(
+                handle.base_url, cell.model, SAMPLING_PARAMS,
+                concurrency=quality_concurrency, timeout_s=180.0,
+            )
+            append_quality(cid, q.pop("records"), results_dir)
+            quality = q
+            acc, hw = q["accuracy"], q["ci95_halfwidth"]
+            print(f"  Quality: {acc:.1%} +/- {hw:.1%} "
+                  f"(n={q['n']}, unparseable={q['unparseable']}, "
+                  f"failures={q['request_failures']})")
+
         # Compute τ
         tau = None
         spec_stats = None
@@ -280,6 +301,7 @@ def probe_one_cell(
             log_path=handle.log_path,
             outputs=probe_result.outputs,
             engine_version=engine_version,
+            quality=quality,
         )
 
     finally:
@@ -310,6 +332,7 @@ def _make_record(
     verdict: str = "",
     outputs: list[str] | None = None,
     engine_version: str | None = None,
+    quality: dict | None = None,
 ) -> dict:
     """Build a result record for cells.jsonl."""
     argv = get_launcher(cell.engine).argv(cell, 0)
@@ -351,6 +374,9 @@ def _make_record(
                 "acceptance_rate": round(rate, 4) if rate is not None else None,
             })
 
+    if quality is not None:
+        record["quality"] = quality
+
     record["correctness"] = {
         "task_accuracy": round(task_accuracy, 4) if task_accuracy is not None else None,
         "degenerate_count": degenerate_count,
@@ -362,7 +388,8 @@ def _make_record(
 
 
 def run_probe(
-    sweep_path: str, results_dir: str, retry_failed: bool = False
+    sweep_path: str, results_dir: str, retry_failed: bool = False,
+    quality: bool = False, quality_concurrency: int = 16,
 ) -> None:
     """Main probe entry point."""
     results_path = Path(results_dir)
@@ -433,7 +460,9 @@ def run_probe(
     for i, (cell, cid) in enumerate(remaining):
         print(f"\n[{i+1}/{len(remaining)}]")
 
-        record = probe_one_cell(cell, cid, env, results_path, log_dir, floors)
+        record = probe_one_cell(cell, cid, env, results_path, log_dir, floors,
+                                run_quality_stage=quality,
+                                quality_concurrency=quality_concurrency)
         append(record, results_path)
 
         cell_time = record.get("wallclock_s", 0)
@@ -470,8 +499,22 @@ def main():
              "fixing an environment fault, which fails cells without changing "
              "the launch command and so is invisible to the staleness check.",
     )
+    parser.add_argument(
+        "--quality", action="store_true",
+        help="Also run the powered task-accuracy measurement (256 GSM8K "
+             "problems) against each booted server. Costs a few minutes per "
+             "cell; the 32-prompt gate alone cannot resolve quality (F008).",
+    )
+    parser.add_argument(
+        "--quality-concurrency", type=int, default=16,
+        help="Concurrency for the quality measurement (default 16). Safe to "
+             "raise: task accuracy, unlike exact match, does not require "
+             "concurrency 1.",
+    )
     args = parser.parse_args()
-    run_probe(args.sweep, args.results, retry_failed=args.retry_failed)
+    run_probe(args.sweep, args.results, retry_failed=args.retry_failed,
+              quality=args.quality,
+              quality_concurrency=args.quality_concurrency)
 
 
 def _setup_cuda_ld_path():

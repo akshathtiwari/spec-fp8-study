@@ -166,6 +166,32 @@ def append_requests(
     return str(out_path)
 
 
+def append_quality(
+    cell_id: str, records: list[dict], results_dir: str | Path
+) -> str:
+    """Write per-problem quality records for a cell. Returns the path."""
+    results_dir = Path(results_dir)
+    out_dir = results_dir / "quality"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    out_path = out_dir / f"{cell_id}.jsonl"
+
+    fd, tmp_path = tempfile.mkstemp(dir=out_dir, prefix=f".{cell_id}_", suffix=".tmp")
+    try:
+        content = "".join(
+            json.dumps(r, separators=(",", ":")) + "\n" for r in records
+        )
+        os.write(fd, content.encode())
+        os.fsync(fd)
+        os.close(fd)
+        fd = -1
+        os.replace(tmp_path, out_path)
+    finally:
+        if fd >= 0:
+            os.close(fd)
+
+    return str(out_path)
+
+
 def persist_log(
     cell_id: str,
     log_path: str,

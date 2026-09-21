@@ -163,7 +163,8 @@ def _print_results(results_path="/results/cells.jsonl"):
         "/models": model_vol,
     },
 )
-def run_vllm_probe(sweep_file: str = "compat", retry_failed: bool = False):
+def run_vllm_probe(sweep_file: str = "compat", retry_failed: bool = False,
+                   quality: bool = False):
     """Run the probe with vLLM engine."""
     import os
 
@@ -213,7 +214,8 @@ def run_vllm_probe(sweep_file: str = "compat", retry_failed: bool = False):
             ["python", "-u", "-m", "specfp8.probe",
              "--sweep", sweep_path,
              "--results", "/results"]
-            + (["--retry-failed"] if retry_failed else []),
+            + (["--retry-failed"] if retry_failed else [])
+            + (["--quality"] if quality else []),
         )
     finally:
         stop_commits.set()
@@ -753,6 +755,7 @@ def main(
     engine: str = "vllm",
     sweep: str = "compat",
     retry_failed: bool = False,
+    quality: bool = False,
 ):
     """Entry point: modal run cloud/modal_probe.py [--engine vllm|sglang|status|help] [--sweep mini|compat]"""
     if engine == "help":
@@ -780,7 +783,8 @@ def main(
         print(diagnose.remote(mechanism=sweep if sweep != "compat" else "ngram"))
         return
     if engine == "vllm":
-        count = run_vllm_probe.remote(sweep_file=sweep, retry_failed=retry_failed)
+        count = run_vllm_probe.remote(sweep_file=sweep, retry_failed=retry_failed,
+                                      quality=quality)
         print(f"\nDone. {count} cells completed.")
     elif engine == "sglang":
         run_sglang_probe.remote(retry_failed=retry_failed)
