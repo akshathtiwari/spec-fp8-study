@@ -52,6 +52,29 @@ def _engine_image(engine_pkg: str) -> modal.Image:
 vllm_image = _engine_image(f"vllm=={VLLM_VERSION}")
 sglang_image = _engine_image(f"sglang[all]=={SGLANG_VERSION}")
 
+# Cost guardrails. GPU time bills per second, so every GPU function is capped:
+# one container so a mistake can never fan out across GPUs, one input per
+# container so none is kept warm between calls, and a short idle window.
+# Timeouts are sized to the work rather than left permissive — the probe
+# resumes from the results volume, so hitting one costs a re-run of the
+# in-flight cell, not the sweep.
+GPU_GUARDRAILS = dict(max_containers=1, max_inputs=1, scaledown_window=60)
+
+
+def _commit_periodically(stop_event, every_s: int = 60):
+    """Commit the results volume while a long run is in progress.
+
+    Committing only after the sweep finishes means a timeout, a crash, or a
+    preemption throws away every cell already completed and pays for them
+    again on the next run. Committing as we go caps that loss at the cell
+    currently in flight.
+    """
+    while not stop_event.wait(every_s):
+        try:
+            results_vol.commit()
+        except Exception as e:  # a failed commit must not kill the probe
+            print(f"  (periodic volume commit failed: {e})")
+
 
 def _setup_repo():
     """Clone (or pull) the repo and install the harness."""
@@ -131,7 +154,8 @@ def _print_results(results_path="/results/cells.jsonl"):
 @app.function(
     image=vllm_image,
     gpu="L4",
-    timeout=4 * 3600,
+    timeout=90 * 60,
+    **GPU_GUARDRAILS,
     volumes={
         "/results": results_vol,
         "/models": model_vol,
@@ -161,15 +185,23 @@ def run_vllm_probe(sweep_file: str = "compat", retry_failed: bool = False):
         print("\n=== Running full vLLM probe ===")
 
     import subprocess
-    result = subprocess.run(
-        ["python", "-m", "specfp8.probe",
-         "--sweep", sweep_path,
-         "--results", "/results"]
-        + (["--retry-failed"] if retry_failed else []),
+    import threading
+    stop_commits = threading.Event()
+    committer = threading.Thread(
+        target=_commit_periodically, args=(stop_commits,), daemon=True
     )
-
-    # Commit volume so results persist
-    results_vol.commit()
+    committer.start()
+    try:
+        result = subprocess.run(
+            ["python", "-m", "specfp8.probe",
+             "--sweep", sweep_path,
+             "--results", "/results"]
+            + (["--retry-failed"] if retry_failed else []),
+        )
+    finally:
+        stop_commits.set()
+        committer.join(timeout=5)
+        results_vol.commit()
 
     count = _print_results()
 
@@ -194,7 +226,8 @@ def run_vllm_probe(sweep_file: str = "compat", retry_failed: bool = False):
 @app.function(
     image=sglang_image,
     gpu="L4",
-    timeout=4 * 3600,
+    timeout=90 * 60,
+    **GPU_GUARDRAILS,
     volumes={
         "/results": results_vol,
         "/models": model_vol,
@@ -219,21 +252,31 @@ def run_sglang_probe(retry_failed: bool = False):
 
     print("\n=== Running SGLang probe ===")
     # Resume: existing vLLM results in the volume get skipped automatically
-    result = subprocess.run(
-        ["python", "-m", "specfp8.probe",
-         "--sweep", sweep_path,
-         "--results", "/results"]
-        + (["--retry-failed"] if retry_failed else []),
+    import threading
+    stop_commits = threading.Event()
+    committer = threading.Thread(
+        target=_commit_periodically, args=(stop_commits,), daemon=True
     )
-
-    results_vol.commit()
+    committer.start()
+    try:
+        result = subprocess.run(
+            ["python", "-m", "specfp8.probe",
+             "--sweep", sweep_path,
+             "--results", "/results"]
+            + (["--retry-failed"] if retry_failed else []),
+        )
+    finally:
+        stop_commits.set()
+        committer.join(timeout=5)
+        results_vol.commit()
     _print_results()
 
 
 @app.function(
     image=vllm_image,
     gpu="L4",
-    timeout=3600,
+    timeout=30 * 60,
+    **GPU_GUARDRAILS,
     volumes={"/models": model_vol},
 )
 def diagnose(mechanism: str = "ngram") -> str:
@@ -318,7 +361,125 @@ def diagnose(mechanism: str = "ngram") -> str:
     return "\n".join(out)
 
 
-@app.function(volumes={"/results": results_vol})
+@app.function(
+    image=vllm_image,
+    gpu="L4",
+    timeout=45 * 60,
+    **GPU_GUARDRAILS,
+    volumes={"/models": model_vol},
+)
+def determinism_check() -> str:
+    """T18a: locate the nondeterminism that broke Test 1's premise.
+
+    Speculative and non-speculative outputs agreed on only 34.4% of prompts
+    at temperature 0, but that number alone cannot say whether speculation
+    caused it. Repeat the *same* non-speculative config twice within one
+    boot and once across a restart:
+
+      A vs B differ            -> request-level (batching, prefix cache,
+                                  server state); nothing to do with
+                                  speculation, and Test 1 is unusable as
+                                  specified
+      A vs B same, A vs C differ -> boot-level (autotuning, compile choices);
+                                  Test 1 works only within a single server
+      both identical           -> nondeterminism is speculation-specific,
+                                  and Test 1's premise survives for
+                                  same-boot comparisons
+    """
+    import asyncio
+    import os
+
+    os.environ["SPECFP8_MODEL_CACHE"] = "/models"
+    _setup_repo()
+
+    from specfp8.cells import expand, cell_id
+    from specfp8.client import probe_run
+    from specfp8.correctness import get_all_prompts
+    from specfp8.launchers.base import find_free_port
+    from specfp8.launchers.vllm import VllmLauncher
+    from specfp8.probe import SAMPLING_PARAMS
+
+    cell = next(c for c in expand("sweeps/test_mini.yaml") if c.mechanism == "none")
+    launcher = VllmLauncher()
+    prompts = get_all_prompts()
+    cid = cell_id(cell)
+    out: list[str] = [
+        f"config: {cell.mechanism}|{cell.weight_precision}|{cell.kv_cache_dtype}",
+        f"model: {cell.model}",
+        f"sampling: {SAMPLING_PARAMS}",
+    ]
+
+    def run_pass(handle):
+        return asyncio.run(
+            probe_run(handle.base_url, cell.model, prompts,
+                      SAMPLING_PARAMS, n_warmup=3, timeout_s=180.0)
+        ).outputs
+
+    def compare(label, x, y):
+        n = min(len(x), len(y))
+        same = sum(1 for i in range(n) if x[i] == y[i])
+        out.append(f"\n### {label}: {same}/{n} identical = {same/max(n,1):.1%}")
+        for i in range(n):
+            if x[i] != y[i]:
+                p = next((k for k in range(min(len(x[i]), len(y[i])))
+                          if x[i][k] != y[i][k]), 0)
+                out.append(f"  first divergence at prompt {i}, char {p}")
+                out.append(f"    run1: {x[i][p:p+80]!r}")
+                out.append(f"    run2: {y[i][p:p+80]!r}")
+                break
+        return same / max(n, 1)
+
+    # --- boot 1: two passes against the same server ---
+    port = find_free_port()
+    handle = launcher.start(cell, cid, port, "logs")
+    try:
+        h = launcher.wait_healthy(handle, timeout_s=600)
+        if not h.ok:
+            return "\n".join(out + [f"boot 1 failed: {h.status}"])
+
+        # Prefix caching reuses KV across requests and is a prime suspect if
+        # the two same-server passes disagree.
+        with open(handle.log_path) as f:
+            for line in f:
+                if "prefix" in line.lower() and "cach" in line.lower():
+                    out.append("  log: " + line.rstrip()[:160])
+
+        a = run_pass(handle)
+        b = run_pass(handle)
+    finally:
+        launcher.stop(handle)
+
+    # --- boot 2: same config, fresh server ---
+    port = find_free_port()
+    handle2 = launcher.start(cell, cid, port, "logs")
+    try:
+        h2 = launcher.wait_healthy(handle2, timeout_s=600)
+        if not h2.ok:
+            return "\n".join(out + [f"boot 2 failed: {h2.status}"])
+        c = run_pass(handle2)
+    finally:
+        launcher.stop(handle2)
+
+    within = compare("A vs B  (same server, repeated)", a, b)
+    across = compare("A vs C  (same config, fresh server)", a, c)
+
+    out.append("\n### verdict")
+    if within < 0.99:
+        out.append("  Request-level nondeterminism: the same server returns")
+        out.append("  different text for identical input. Speculation is not")
+        out.append("  the cause, and exact-match Test 1 cannot work as specified.")
+    elif across < 0.99:
+        out.append("  Boot-level nondeterminism: deterministic within a server,")
+        out.append("  not across restarts. Test 1 is valid only when both arms")
+        out.append("  are measured against the same running server.")
+    else:
+        out.append("  Deterministic within and across boots, so the 34.4%")
+        out.append("  spec-vs-nonspec gap is speculation-specific and Test 1's")
+        out.append("  premise holds for same-boot comparisons.")
+    return "\n".join(out)
+
+
+@app.function(volumes={"/results": results_vol}, timeout=10 * 60)
 def compare_outputs() -> str:
     """Compare stored per-request outputs across cells, pairwise by index.
 
@@ -395,6 +556,7 @@ def compare_outputs() -> str:
 
 @app.function(
     volumes={"/results": results_vol},
+    timeout=10 * 60,
 )
 def check_results():
     """Check results from the Modal volume."""
@@ -461,6 +623,9 @@ def main(
     """Entry point: modal run cloud/modal_probe.py [--engine vllm|sglang|status|help] [--sweep mini|compat]"""
     if engine == "help":
         print(dump_vllm_help.remote())
+        return
+    if engine == "determinism":
+        print(determinism_check.remote())
         return
     if engine == "compare":
         print(compare_outputs.remote())
