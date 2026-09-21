@@ -548,6 +548,35 @@ def determinism_check() -> str:
     return "\n".join(out)
 
 
+@app.function(image=vllm_image, timeout=15 * 60, max_containers=1)
+def list_attention_backends() -> str:
+    """Enumerate the attention backends this vLLM accepts.
+
+    H1 is a claim about FlashInfer specifically, but every cell so far ran
+    with attn_backend=auto, so the backend that actually served is unknown
+    and FlashInfer's FP8 path may never have been exercised. Naming the
+    backends is the prerequisite for testing them, and guessing the spelling
+    would burn a GPU run on an argparse error.
+
+    Run in a subprocess rather than imported here: the enum lives in vLLM,
+    and importing it would pull engine code into the runner process.
+    """
+    import subprocess
+    import sys
+
+    script = (
+        "from vllm.v1.attention.backends.registry import AttentionBackendEnum as E\n"
+        "print('\\n'.join(sorted(m.name for m in E)))\n"
+    )
+    r = subprocess.run(
+        [sys.executable, "-c", script], capture_output=True, text=True
+    )
+    return (
+        f"### AttentionBackendEnum members\n{r.stdout}\n"
+        f"### stderr\n{r.stderr[-1500:]}"
+    )
+
+
 @app.function(
     image=vllm_image, volumes={"/results": results_vol}, timeout=15 * 60
 )
@@ -702,6 +731,9 @@ def main(
     """Entry point: modal run cloud/modal_probe.py [--engine vllm|sglang|status|help] [--sweep mini|compat]"""
     if engine == "help":
         print(dump_vllm_help.remote())
+        return
+    if engine == "backends":
+        print(list_attention_backends.remote())
         return
     if engine == "correctness":
         print(correctness_matrix.remote(model=sweep if sweep != "compat" else "Qwen/Qwen3-4B"))
