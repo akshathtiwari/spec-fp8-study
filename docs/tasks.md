@@ -223,6 +223,15 @@ Build order follows design §12. Each task is one reviewable unit.
       floors from the *measured* bf16/auto/none baseline rather than an assumed
       4B number. Until then no quality claim about FP8 is supportable.
 
+- [ ] T19c **Order sweep cells by information value, not by Cartesian expansion.**
+      `cells.expand` emits the axis product in declaration order, so in
+      `sweeps/backend.yaml` all six `none` cells run before any `dflash` cell —
+      putting the six that actually test H1 last, with the most exposure to the
+      function timeout. Resume makes this recoverable rather than fatal, but the
+      ordering is still backwards: the cells that can end a sweep early should
+      run first. Either allow a sweep to declare a priority ordering, or sort
+      so that each axis's levels are interleaved rather than blocked.
+
 - [ ] T19b **Identify the attention backend, and persist launch logs.**
       H1 predicted a FlashInfer SM90-only dispatch failure; it did not happen,
       and the paper needs to say what actually served — a different backend
