@@ -68,7 +68,10 @@ merge. Two fields guard against a stale record being mistaken for a current one:
   download directory normalised out so the hash is stable across hosts.
 - `sampling_params` — changes tau and accuracy without changing argv.
 
-**`runs.json`** groups cells into the invocations that produced them:
+**`runs.json`** groups cells into the invocations that produced them. It is
+**derived** by `analysis/build_runs.py`, not appended to — the only regenerated
+file in `results/`, because a hand-maintained manifest went stale as soon as
+another sweep landed and an audit found it covering 18 of 22 cells.
 
 ```jsonc
 {
@@ -96,6 +99,11 @@ are inferred. Future runs record this live.
 analysis/out/
 ├── README.md          which script regenerates what
 └── tables/*.md|csv    one file per analysis
+
+`provenance.md` is the table to read first: provenance fields were added
+during the study, each after finding a concrete way results could be silently
+mixed, so it records which cells carry which guarantees rather than leaving an
+absent field to be discovered.
 ```
 
 Every file carries a header naming the script, the input, and the code SHA. These

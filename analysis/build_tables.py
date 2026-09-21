@@ -220,10 +220,54 @@ def t_quality() -> None:
     write("quality.md", "\n".join(L))
 
 
+def t_provenance() -> None:
+    """Which provenance fields each cell actually carries.
+
+    Several fields were added mid-study, each after finding a concrete way
+    results could be silently mixed. Older records therefore lack them. That is
+    not a defect to hide: a reader needs to know which cells can be checked
+    against which guarantees, and a coverage table makes an absent field
+    visible instead of leaving it to be discovered.
+    """
+    cells = latest_cells()
+    runs = json.load(open(RESULTS / "runs.json"))["runs"]
+    in_run = set().union(*(set(r["cell_ids"]) for r in runs)) if runs else set()
+    fields = [
+        ("argv", "exact launch command"),
+        ("argv_fingerprint", "detects a changed launch command"),
+        ("sampling_params", "detects changed gate sampling"),
+        ("prompt_set_fingerprint", "detects a changed prompt set (added after F013)"),
+        ("quality_config_fingerprint", "detects changed quality settings; derivable when absent"),
+        ("engine_version", "version read from the server, not declared"),
+        ("quality", "powered accuracy measurement present"),
+    ]
+    L = [header("Provenance coverage", ["results/cells.jsonl", "results/runs.json"])]
+    L.append("Fields added mid-study are absent from earlier records. A cell "
+             "lacking a field cannot be checked against that guarantee, so "
+             "the gaps are listed rather than left to be discovered.\n")
+    L.append(f"| field | present | of | what it guards |")
+    L.append("|---|---|---|---|")
+    n = len(cells)
+    for key, why in fields:
+        have = sum(1 for r in cells.values() if r.get(key) is not None)
+        L.append(f"| `{key}` | {have} | {n} | {why} |")
+    n_logs = len(list((RESULTS / "logs").glob("*.log")))
+    n_req = len(list((RESULTS / "requests").glob("*.jsonl")))
+    n_q = len(list((RESULTS / "quality").glob("*.jsonl")))
+    L.append(f"\n| artifact | count | note |")
+    L.append("|---|---|---|")
+    L.append(f"| unique cells | {n} | latest record per `cell_id` |")
+    L.append(f"| per-request output files | {n_req} | every generated token, gate |")
+    L.append(f"| quality output files | {n_q} | every generated token, 256-problem set |")
+    L.append(f"| engine logs | {n_logs} | cells probed before log persistence have none |")
+    L.append(f"| cells in a run manifest | {len(in_run & set(cells))} | of {n} |")
+    write("provenance.md", "\n".join(L) + "\n")
+
+
 def main() -> None:
     print(f"Regenerating tables from {RESULTS} at code {code_sha()}")
     for fn in (t_runs, t_compat, t_backend, t_correctness, t_capacity,
-               t_quality):
+               t_quality, t_provenance):
         try:
             fn()
         except Exception as e:

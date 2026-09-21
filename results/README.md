@@ -30,12 +30,24 @@ the same configuration yields the same id on any machine and results from
 separate sessions merge. `runs.json` entries are marked `reconstructed: true`
 where boundaries were inferred from timestamps after the fact.
 
-## Regenerating the derived tables
+## Regenerating everything derived
 
 ```bash
+python analysis/build_runs.py      # -> results/runs.json
 python analysis/build_tables.py    # -> analysis/out/tables/
 python analysis/build_index.py     # -> findings/README.md
 ```
+
+`runs.json` is derived, not recorded. It is the one file in this directory
+that is regenerated rather than appended, because hand-maintained manifests
+went stale the moment another sweep landed.
+
+## Which cells can be checked against which guarantees
+
+Several provenance fields were added mid-study, each after finding a concrete
+way results could be silently mixed, so earlier records lack them.
+`analysis/out/tables/provenance.md` lists the coverage per field. Read it
+before relying on any single guarantee across the whole dataset.
 
 Both are deterministic, need no GPU, and no network.
 

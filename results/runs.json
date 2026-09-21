@@ -20,6 +20,7 @@
       "attn_backends": [
         "auto"
       ],
+      "has_quality": false,
       "status_counts": {
         "broken": 4,
         "launch_failed": 4,
@@ -31,7 +32,7 @@
         "beca2fa4ae01e5e6"
       ],
       "reconstructed": true,
-      "reconstruction_note": "Run boundaries inferred from >20min timestamp gaps; these runs predate live run manifests."
+      "reconstruction_note": "Run boundaries inferred from gaps longer than 1200s. The harness does not stamp a run id on each cell; until it does, these groupings are an inference."
     },
     {
       "run_id": "2026-09-21T04-32Z_h1",
@@ -53,6 +54,7 @@
       "attn_backends": [
         "auto"
       ],
+      "has_quality": false,
       "status_counts": {
         "broken": 8,
         "launch_failed": 7,
@@ -70,7 +72,7 @@
         "eca0867b82c947ad"
       ],
       "reconstructed": true,
-      "reconstruction_note": "Run boundaries inferred from >20min timestamp gaps; these runs predate live run manifests."
+      "reconstruction_note": "Run boundaries inferred from gaps longer than 1200s. The harness does not stamp a run id on each cell; until it does, these groupings are an inference."
     },
     {
       "run_id": "2026-09-21T07-41Z_backend",
@@ -94,6 +96,7 @@
         "TRITON_ATTN",
         "auto"
       ],
+      "has_quality": false,
       "status_counts": {
         "ok": 12
       },
@@ -113,7 +116,76 @@
         "fa7996fe5764f060"
       ],
       "reconstructed": true,
-      "reconstruction_note": "Run boundaries inferred from >20min timestamp gaps; these runs predate live run manifests."
+      "reconstruction_note": "Run boundaries inferred from gaps longer than 1200s. The harness does not stamp a run id on each cell; until it does, these groupings are an inference."
+    },
+    {
+      "run_id": "2026-09-21T11-49Z_quality",
+      "sweep": "sweeps/quality.yaml",
+      "engine": "vllm",
+      "engine_version": "0.29.0",
+      "engine_ref_declared": "vllm-0.29.0",
+      "model": "Qwen/Qwen3-4B",
+      "gpu": "NVIDIA L4",
+      "compute_cap": "8.9",
+      "vram_gb": 22.5,
+      "cuda": "13.0",
+      "torch": "2.13.0+cu130",
+      "driver": "580.95.05",
+      "started": "2026-09-21T11:49:21.859937+00:00",
+      "ended": "2026-09-21T12:45:39.085876+00:00",
+      "n_records": 8,
+      "n_unique_cells": 8,
+      "attn_backends": [
+        "FLASHINFER"
+      ],
+      "has_quality": true,
+      "status_counts": {
+        "ok": 8
+      },
+      "gpu_seconds": 3822.3,
+      "cell_ids": [
+        "551ab2aa2e3b1cc5",
+        "5824814b68901229",
+        "aaeb804d4d2a584f",
+        "b6d238cffb8de674",
+        "c6519fb025e64635",
+        "cc2e011a0a75bf57",
+        "f4d8fbdfdccc68f6",
+        "fa7996fe5764f060"
+      ],
+      "reconstructed": true,
+      "reconstruction_note": "Run boundaries inferred from gaps longer than 1200s. The harness does not stamp a run id on each cell; until it does, these groupings are an inference."
+    },
+    {
+      "run_id": "2026-09-21T13-20Z_quality",
+      "sweep": "sweeps/quality.yaml",
+      "engine": "vllm",
+      "engine_version": "0.29.0",
+      "engine_ref_declared": "vllm-0.29.0",
+      "model": "Qwen/Qwen3-4B",
+      "gpu": "NVIDIA L4",
+      "compute_cap": "8.9",
+      "vram_gb": 22.5,
+      "cuda": "13.0",
+      "torch": "2.13.0+cu130",
+      "driver": "580.95.05",
+      "started": "2026-09-21T13:20:55.491903+00:00",
+      "ended": "2026-09-21T13:20:55.491903+00:00",
+      "n_records": 1,
+      "n_unique_cells": 1,
+      "attn_backends": [
+        "FLASHINFER"
+      ],
+      "has_quality": true,
+      "status_counts": {
+        "ok": 1
+      },
+      "gpu_seconds": 666.6,
+      "cell_ids": [
+        "aaeb804d4d2a584f"
+      ],
+      "reconstructed": true,
+      "reconstruction_note": "Run boundaries inferred from gaps longer than 1200s. The harness does not stamp a run id on each cell; until it does, these groupings are an inference."
     }
   ]
 }
