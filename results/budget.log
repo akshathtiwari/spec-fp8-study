@@ -7,3 +7,4 @@
 {"ts":"2026-09-21T05:36:53.985500+00:00","phase":"probe","session_gpu_s":3190.0,"cumulative_gpu_s":3190.0}
 {"ts":"2026-09-21T08:55:20.919241+00:00","phase":"probe","session_gpu_s":4973.4,"cumulative_gpu_s":4973.4}
 {"ts":"2026-09-21T12:45:42.867475+00:00","phase":"probe","session_gpu_s":3108.1,"cumulative_gpu_s":3108.1}
+{"ts":"2026-09-21T13:20:56.428682+00:00","phase":"probe","session_gpu_s":666.6,"cumulative_gpu_s":666.6}

@@ -18,6 +18,7 @@ wrong turns and what caught them — is part of the evidence.
 | [`F004`](F004-fp8-kv-doubles-capacity.md) | FP8 KV cache doubles measured KV capacity when backend is held fixed | established | high |
 | [`F006`](F006-tau-invariant-to-precision.md) | tau is invariant to FP8 precision; backend choice perturbs it more | established | medium |
 | [`F009`](F009-determinism-is-server-state-dependent.md) | Generation is exactly reproducible across boots but drifts within a server | established | high |
+| [`F016`](F016-fp8-no-measurable-quality-cost.md) | FP8 weights and FP8 KV cost no measurable task accuracy, within +/-4.7 points | established | medium |
 
 ## Method
 
@@ -46,4 +47,4 @@ wrong turns and what caught them — is part of the evidence.
 
 ---
 
-15 findings: 5 result, 4 method, 1 gap, 5 retraction.
+16 findings: 6 result, 4 method, 1 gap, 5 retraction.
