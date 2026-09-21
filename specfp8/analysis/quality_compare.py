@@ -106,6 +106,20 @@ def mcnemar(a: list[bool | None], b: list[bool | None]) -> dict:
     discordant = only_a + only_b
     p = binom_two_sided(min(only_a, only_b), discordant) if discordant else 1.0
     scored = both_right + both_wrong + discordant
+
+    # A p-value alone is a poor summary here. With ~20 discordant pairs,
+    # reaching p<0.05 needs a nearly one-sided split, so "not significant"
+    # would be true of a substantial effect as well as of no effect. The
+    # interval says what the data actually rules out: bound the share of
+    # discordant pairs favouring the candidate, then rescale to accuracy
+    # points over all compared problems.
+    if discordant and scored:
+        from specfp8.quality import wilson_ci
+        lo_p, hi_p = wilson_ci(only_b, discordant)
+        lo = (2 * lo_p - 1) * discordant / scored
+        hi = (2 * hi_p - 1) * discordant / scored
+    else:
+        lo = hi = 0.0
     return {
         "n_compared": scored,
         "dropped_unparseable": dropped,
@@ -119,6 +133,8 @@ def mcnemar(a: list[bool | None], b: list[bool | None]) -> dict:
         "delta": (only_b - only_a) / scored if scored else 0.0,
         "p_value": p,
         "significant_at_05": p < 0.05,
+        "delta_ci95": [round(lo, 4), round(hi, 4)],
+        "delta_bound_pts": round(max(abs(lo), abs(hi)) * 100, 2),
     }
 
 
@@ -167,17 +183,22 @@ def format_report(rows: list[dict]) -> str:
     if not rows:
         return ("No quality measurements found. Run the probe with --quality "
                 "to populate results/quality/.")
-    L = [f"{'baseline':34}{'candidate':34}{'base':>6}{'cand':>6}"
-         f"{'disc':>6}{'p':>8}  verdict", "-" * 104]
+    L = [f"{'baseline':32}{'candidate':32}{'base':>5}{'cand':>5}"
+         f"{'disc':>5}{'p':>7}{'95% CI on delta':>20}  verdict", "-" * 122]
     for r in rows:
         verdict = ("DIFFERS" if r["significant_at_05"]
-                   else "no detected difference")
-        L.append(f"{r['baseline']:34}{r['candidate']:34}"
-                 f"{r['acc_baseline']:>6}{r['acc_candidate']:>6}"
-                 f"{r['discordant']:>6}{r['p_value']:>8.3f}  {verdict}")
-    L.append("\n`base`/`cand` are counts correct out of `n_compared`. "
-             "`disc` is the number of problems the two disagree on — only "
-             "those carry information.")
-    L.append("A non-significant result is not evidence of equivalence; with "
-             "few discordant pairs the test simply lacks power to say.")
+                   else f"within +/-{r['delta_bound_pts']:.1f} pts")
+        lo, hi = r["delta_ci95"]
+        L.append(f"{r['baseline']:32}{r['candidate']:32}"
+                 f"{r['acc_baseline']:>5}{r['acc_candidate']:>5}"
+                 f"{r['discordant']:>5}{r['p_value']:>7.3f}"
+                 f"{f'{lo*100:+.1f}..{hi*100:+.1f} pts':>20}  {verdict}")
+    L.append("\n`base`/`cand` are counts correct out of `n_compared`. `disc` "
+             "counts problems the two disagree on — only those inform the "
+             "test.")
+    L.append("The interval, not the p-value, is the result. With ~20 "
+             "discordant pairs a p<0.05 verdict would need a nearly "
+             "one-sided split, so 'not significant' alone would be equally "
+             "true of a real effect; the interval states what is actually "
+             "excluded.")
     return "\n".join(L)
