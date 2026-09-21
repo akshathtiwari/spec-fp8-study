@@ -265,7 +265,13 @@ Build order follows design §12. Each task is one reviewable unit.
          open, so whatever fixed this is something else and needs identifying
          before filing (R16).
 
-- [ ] T19d **Two backends in the SM89 candidate set are still untested.**
+- [x] T19d **DONE — see findings/F017.** FP8 KV runs on exactly two of the
+      four SM89 backends. FLASH_ATTN and FLEX_ATTENTION reject it at config
+      time; FlashAttention's reason is explicit: 'FP8 KV cache requires FA3
+      on SM90 or FA4 on SM100'. That is why `auto` switches backend under
+      FP8 KV (F003) — not preference, necessity.
+
+- [x] T19d-orig **Two backends in the SM89 candidate set are still untested.**
       The engine lists `['FLASH_ATTN', 'FLASHINFER', 'TRITON_ATTN',
       'FLEX_ATTENTION']`. FLASH_ATTN is the BF16 default but `auto` switches
       away from it the moment FP8 KV is requested, so **FLASH_ATTN x fp8_e4m3

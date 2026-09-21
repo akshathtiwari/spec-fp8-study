@@ -186,6 +186,46 @@
       ],
       "reconstructed": true,
       "reconstruction_note": "Run boundaries inferred from gaps longer than 1200s. The harness does not stamp a run id on each cell; until it does, these groupings are an inference."
+    },
+    {
+      "run_id": "2026-09-21T14-59Z_backend",
+      "sweep": "sweeps/backend.yaml",
+      "engine": "vllm",
+      "engine_version": "0.29.0",
+      "engine_ref_declared": "vllm-0.29.0",
+      "model": "Qwen/Qwen3-4B",
+      "gpu": "NVIDIA L4",
+      "compute_cap": "8.9",
+      "vram_gb": 22.5,
+      "cuda": "13.0",
+      "torch": "2.13.0+cu130",
+      "driver": "580.95.05",
+      "started": "2026-09-21T14:59:13.821637+00:00",
+      "ended": "2026-09-21T15:22:55.174802+00:00",
+      "n_records": 8,
+      "n_unique_cells": 8,
+      "attn_backends": [
+        "FLASH_ATTN",
+        "FLEX_ATTENTION"
+      ],
+      "has_quality": false,
+      "status_counts": {
+        "launch_failed": 4,
+        "ok": 4
+      },
+      "gpu_seconds": 1959.5,
+      "cell_ids": [
+        "0bd0a768f4c9a6b0",
+        "107bb97558bd5e38",
+        "3a17dcbf717cd3ff",
+        "8f05c9ecb750e8b9",
+        "a59ad61dc4b05582",
+        "ceccdc504b18f582",
+        "eadb515e70dbda80",
+        "f9538f9a060ec30d"
+      ],
+      "reconstructed": true,
+      "reconstruction_note": "Run boundaries inferred from gaps longer than 1200s. The harness does not stamp a run id on each cell; until it does, these groupings are an inference."
     }
   ]
 }
