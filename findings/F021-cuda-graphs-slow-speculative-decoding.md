@@ -1,12 +1,13 @@
 ---
 id: F021
-title: Speculative throughput is bimodal, and enforce_eager reliably selects the fast mode
+title: Speculative throughput is bimodal; enforce_eager selects the fast mode at every concurrency and removes the boot variance
 kind: result
-status: provisional
-confidence: medium
+status: established
+confidence: high
 date: 2026-09-22
 evidence:
-  runs: [2026-09-22T10-0xZ_boot_variance, 2026-09-22T09-07Z_boot_stability]
+  runs: [2026-09-22T12-1xZ_boot_variance_conc, 2026-09-22T10-0xZ_boot_variance,
+         2026-09-22T09-07Z_boot_stability]
   analysis: []
   code_sha: 624ffdb
 supersedes: []
@@ -60,31 +61,77 @@ tau is unchanged across all arms (4.08-4.14), so this is purely the cost of
 producing accepted tokens, not how many are accepted — the same separation
 F020 established.
 
+## The effect holds under load, and eager is the *stable* arm
+
+The concurrency check (2 boots x 2 arms x c in {1, 16, 64}, one container,
+identical prompts, same cell):
+
+| conc | default | boot spread | eager | boot spread | eager/default |
+|---|---|---|---|---|---|
+| 1 | 31.1 | 1.02x | 74.2 | 1.18x | **2.38x** |
+| 16 | 464.3 | **1.64x** | 776.7 | 1.07x | **1.67x** |
+| 64 | 1203.8 | 1.18x | 1648.2 | 1.04x | **1.37x** |
+
+The ratio never inverts. It *compresses* with load — 2.38x to 1.37x —
+consistent with CUDA graphs recovering some of their value at larger batch
+sizes, but they do not catch up within the range measured.
+
+The second column matters more than the first. The **default** arm varies
+**1.64x between two boots of an identical configuration** at c=16; the eager
+arm varies 1.07x. So the bimodality of F020 is a property of the CUDA-graph
+path, not of the GPU, the container, or the prompts. Turning graphs off does
+not merely make speculative decoding faster — it makes it *measurable*.
+
+tau is flat at 4.06-4.21 across all twelve measurements, so nothing here
+touches acceptance.
+
 ## What this does NOT establish
 
-- **Why a default boot picks one mode over the other.** All three default
-  boots here landed slow; earlier boots of the same configuration landed
-  fast. The selector is unidentified, and this is the open question.
-- **That the effect survives under load.** CUDA graphs matter most at larger
-  batch sizes, so the advantage could invert at concurrency 16 or 64. Tested
-  only at concurrency 1, which is precisely the regime this study argues is
-  misleading.
-- **That it generalises** beyond dflash / FLASHINFER / SM89 / vLLM 0.29.0.
-
-Status is `provisional` until the concurrency check is done.
+- **Why a default boot picks one mode over the other.** The selector is
+  still unidentified, and remains the open question. What is now clear is
+  that the selection is made once per boot and then holds.
+- **That the effect generalises** beyond dflash / FLASHINFER / SM89 /
+  vLLM 0.29.0.
+- **That pinning eager for the grid is fair.** `--enforce-eager` is
+  engine-wide. Its effect was measured only on speculative cells, where the
+  spec-decode fallback exists; on the non-speculative baseline CUDA graphs
+  have no fallback to trip over and are expected to help. Applying eager to
+  both arms of a comparison whose baseline it penalises would manufacture
+  part of the speculative speedup. Measured separately at `mechanism=none`
+  before the grid is re-run — see the Consequence section.
 
 ## Consequence
 
-If `enforce_eager` remains stable and fast under load, the speculative half
-of the Phase 2 grid can be re-measured with it pinned at **one boot per
-cell** — cheaper than the original sweep, and measuring a configuration that
-is stable by construction rather than averaging over a bimodal one.
+The advantage holds at every concurrency, so the speculative half of the
+Phase 2 grid can be re-measured with eager pinned at **one boot per cell** —
+cheaper than the original sweep, and measuring a configuration that is
+stable by construction rather than averaging over a bimodal one.
 
-If it inverts under load, the grid needs boot-level repeats after all
-(F020's Option A), and this becomes a low-concurrency-only result.
+This also retires a defect in `sweeps/perf.yaml` that nothing had caught.
+Its `repeat: [0, 1, 2]` runs three times *within one boot* (sweep.py boots
+once and runs many), so the repeats vary prompts but never vary the boot —
+they never sampled the dominant variance source at all. Under the default
+arm those three numbers would have looked tight while sitting somewhere
+inside a 1.64x boot-level spread. Under eager the boot term collapses to
+1.04-1.07x and within-boot repeats become the right granularity again.
+
+One thing is still open before the pin is applied: whether eager costs the
+**non-speculative** baseline anything. That is the fairness question above,
+and it decides the grid design:
+
+- **Eager neutral or better at `mechanism=none`** — pin it for all cells.
+  One controlled execution path, one boot per cell.
+- **Eager worse at `mechanism=none`** — pinning it for both arms would
+  inflate the speculative speedup. The grid then reports each arm at its
+  own best setting, and says so explicitly, rather than holding a knob
+  fixed at a value that is only right for one side.
 
 ## How to reproduce
 
 ```bash
-modal run cloud/modal_probe.py --engine bootvar --repeats 3
+modal run cloud/modal_probe.py --engine bootvar --repeats 2
+```
+
+```bash
+modal run cloud/modal_probe.py --engine bootvar --sweep none --repeats 2
 ```

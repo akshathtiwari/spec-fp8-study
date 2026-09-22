@@ -110,3 +110,15 @@ prior art in requirements section 9, is the norm.
 ```bash
 modal run cloud/modal_probe.py --engine sweep --sweep boot_stability --repeats 3
 ```
+
+## Follow-up
+
+F021 resolves the mechanism: the variance is **bimodal, not continuous**, and
+the mode is selected by the CUDA-graph path. `--enforce-eager` removes it —
+boot spread falls from 1.64x to 1.04-1.07x while throughput rises 1.37-2.38x.
+The hypothesis offered below (that graph *capture* varies per boot) is wrong;
+each arm is individually stable, so whatever picks the mode is fixed at boot
+and then holds.
+
+The headline claim of this finding stands unchanged, and is what made F021
+findable: acceptance is invariant to something that moves throughput 2x.
