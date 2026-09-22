@@ -167,17 +167,29 @@ selects the fast mode reliably.
 
 **It holds under load, and eager is also the stable arm.**
 
-| concurrency | default | boot spread | eager | boot spread | eager/default |
-|---|---|---|---|---|---|
-| 1 | 31.1 | 1.02× | 74.2 | 1.18× | **2.38×** |
-| 16 | 464.3 | **1.64×** | 776.7 | 1.07× | **1.67×** |
-| 64 | 1203.8 | 1.18× | 1648.2 | 1.04× | **1.37×** |
+| concurrency | default | boot spread | eager | boot spread |
+|---|---|---|---|---|
+| 1 | 31.1 | 1.02× | 74.2 | 1.18× |
+| 16 | 464.3 | **1.64×** | 776.7 | 1.07× |
+| 64 | 1203.8 | 1.18× | 1648.2 | 1.04× |
 
-The advantage compresses with load but never inverts. The spread columns
-carry the more important result: two boots of an identical configuration
-differ by 1.64× at concurrency 16 under defaults, and by 1.07× with graphs
-off. Turning CUDA graphs off does not merely make speculative decoding
-faster here — it makes it *measurable*.
+**We deliberately report no speedup ratio from this table**, and the reason
+is the finding itself. Measuring both arms of this configuration inside a
+single run, with the default boot landing in the *fast* mode, gives
+**1.13× / 1.06× / 1.05×**. Against a slow-mode boot the same eager numbers
+give 2.19×. The ratio is a statement about which mode the comparison arm
+drew, not about the flag.
+
+What the table establishes is the spread: two boots of an identical
+configuration differ by 1.64× at concurrency 16 under defaults, and by
+1.07× with graphs off. Turning CUDA graphs off does not reliably make
+speculative decoding *faster* — it makes it *measurable*, and whatever
+throughput it gains is the slow-mode boots thereby avoided.
+
+Our first draft of this section led with 2.38×, obtained by comparing
+against an arm we assumed representative, which was one draw from the
+bimodal distribution this same section describes. We flag it because it is
+the paper's own thesis applied to the paper.
 
 **Independent corroboration with a built-in control.** Our earlier
 performance grid, collected before this hypothesis existed, contains the

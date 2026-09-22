@@ -147,6 +147,33 @@ What caught instance 14 was the label fix from instance 13 — the first run
 after it printed `graphs=off` next to a cell whose numbers had already been
 interpreted as graphs-on. The fix for one instance surfaced the next.
 
+### The fifteenth, in this study's own headline
+
+F021 reported that `--enforce-eager` makes speculative decoding
+2.38x / 1.67x / 1.37x faster at c = 1 / 16 / 64. The perf_v2 grid measured
+both arms of that configuration inside a single run and got
+**1.13x / 1.06x / 1.05x**.
+
+| # | Compared | Assumed fixed | Actually varied | Cost if unreported |
+|---|---|---|---|---|
+| 15 | eager vs default throughput | that the default arm was representative | the default arm is bimodal — this finding's own claim | the paper's section 4 headline overstated by ~2x |
+
+The comparison arm was one draw from a distribution F021 itself
+characterises. Both default boots in the concurrency test happened to land
+slow; tonight's landed fast. Nothing was measured incorrectly — the ratio
+simply is not a constant, and reporting it as one embeds a coin flip in a
+headline.
+
+This is the most uncomfortable instance and the most instructive. The error
+is not in a throwaway script or a stale table: it is in the study's
+strongest finding, in the number the paper leads with, committed by someone
+who had spent the day cataloguing exactly this mistake and had written the
+bimodality down himself three sections earlier.
+
+Knowing the pattern does not confer immunity from it. Every defence that
+worked today was mechanical — an append-only record, a cross-session guard,
+a checker that fails the build. None of them was vigilance.
+
 ## Reasoning
 
 The pattern is not carelessness about *measurement*. Each individual number
