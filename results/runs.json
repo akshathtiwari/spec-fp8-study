@@ -226,6 +226,75 @@
       ],
       "reconstructed": true,
       "reconstruction_note": "Run boundaries inferred from gaps longer than 1200s. The harness does not stamp a run id on each cell; until it does, these groupings are an inference."
+    },
+    {
+      "run_id": "2026-09-21T17-08Z_backend",
+      "sweep": "sweeps/backend.yaml",
+      "engine": "vllm",
+      "engine_version": "0.29.0",
+      "engine_ref_declared": "vllm-0.29.0",
+      "model": "Qwen/Qwen3-4B",
+      "gpu": "NVIDIA L4",
+      "compute_cap": "8.9",
+      "vram_gb": 22.5,
+      "cuda": "13.0",
+      "torch": "2.13.0+cu130",
+      "driver": "580.95.05",
+      "started": "2026-09-21T17:08:27.758096+00:00",
+      "ended": "2026-09-21T17:58:00.269056+00:00",
+      "n_records": 12,
+      "n_unique_cells": 4,
+      "attn_backends": [
+        "FLASHINFER",
+        "TRITON_ATTN"
+      ],
+      "has_quality": false,
+      "status_counts": {
+        "ok": 10,
+        "oom": 2
+      },
+      "gpu_seconds": 3574.7,
+      "cell_ids": [
+        "02f47ab1d7e7f6b9",
+        "154965a1bfbfe3af",
+        "5824814b68901229",
+        "c6519fb025e64635"
+      ],
+      "reconstructed": true,
+      "reconstruction_note": "Run boundaries inferred from gaps longer than 1200s. The harness does not stamp a run id on each cell; until it does, these groupings are an inference."
+    },
+    {
+      "run_id": "2026-09-22T02-37Z_backend",
+      "sweep": "sweeps/backend.yaml",
+      "engine": "vllm",
+      "engine_version": "0.29.0",
+      "engine_ref_declared": "vllm-0.29.0",
+      "model": "Qwen/Qwen3-4B",
+      "gpu": "NVIDIA L4",
+      "compute_cap": "8.9",
+      "vram_gb": 22.5,
+      "cuda": "13.0",
+      "torch": "2.13.0+cu130",
+      "driver": "580.95.05",
+      "started": "2026-09-22T02:37:56.023867+00:00",
+      "ended": "2026-09-22T02:48:50.473276+00:00",
+      "n_records": 2,
+      "n_unique_cells": 2,
+      "attn_backends": [
+        "FLASHINFER",
+        "auto"
+      ],
+      "has_quality": false,
+      "status_counts": {
+        "ok": 2
+      },
+      "gpu_seconds": 1376.3,
+      "cell_ids": [
+        "20224e954c5db2f6",
+        "aaeb804d4d2a584f"
+      ],
+      "reconstructed": true,
+      "reconstruction_note": "Run boundaries inferred from gaps longer than 1200s. The harness does not stamp a run id on each cell; until it does, these groupings are an inference."
     }
   ]
 }
