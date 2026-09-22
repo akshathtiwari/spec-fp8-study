@@ -546,7 +546,7 @@ def run_probe(
         print(f"  Cell time: {cell_time:.1f}s | Session total: {cumulative_gpu_s:.0f}s ({cumulative_gpu_s/3600:.1f}h)")
 
     # Budget log
-    append_budget_log("probe", cumulative_gpu_s, cumulative_gpu_s, results_path)
+    append_budget_log("probe", cumulative_gpu_s, results_path)
 
     print(f"\n{'='*60}")
     print(f"Probe complete.")

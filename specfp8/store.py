@@ -289,10 +289,22 @@ def persist_log(
 def append_budget_log(
     phase: str,
     session_gpu_s: float,
-    cumulative_gpu_s: float,
     results_dir: str | Path,
+    detail: str = "",
 ) -> None:
-    """Append one line to budget.log with timing info."""
+    """Append one line to budget.log, carrying the running total forward.
+
+    `cumulative_gpu_s` is derived here from the last entry on file rather
+    than supplied by the caller. Both callers used to pass the session
+    figure for both fields, so the "cumulative" column restarted on every
+    invocation and the log could not answer what the study had cost --
+    reading the last line gave 2,265s when the real logged total was
+    33,097s, an order of magnitude apart in the direction that matters.
+
+    A total that a caller has to compute correctly is a total that will
+    eventually be wrong. Deriving it from the file makes the log
+    self-consistent no matter who appends to it.
+    """
     results_dir = Path(results_dir)
     results_dir.mkdir(parents=True, exist_ok=True)
     log_path = results_dir / "budget.log"
@@ -301,8 +313,35 @@ def append_budget_log(
         "ts": datetime.now(timezone.utc).isoformat(),
         "phase": phase,
         "session_gpu_s": round(session_gpu_s, 1),
-        "cumulative_gpu_s": round(cumulative_gpu_s, 1),
+        "cumulative_gpu_s": round(
+            _logged_total(log_path) + session_gpu_s, 1),
     }
+    if detail:
+        entry["detail"] = detail
 
     with open(log_path, "a") as f:
         f.write(json.dumps(entry, separators=(",", ":")) + "\n")
+
+
+def _logged_total(log_path: Path) -> float:
+    """Total GPU seconds on file, summed from the per-entry session figures.
+
+    Summed rather than read off the last entry's `cumulative_gpu_s`. Entries
+    written before this was fixed carry a cumulative value that restarted
+    each invocation, and `results/` is append-only (docs/data-model.md), so
+    those lines cannot be corrected in place. `session_gpu_s` was always
+    right, so deriving the total from it repairs the history instead of
+    inheriting it.
+    """
+    if not log_path.exists():
+        return 0.0
+    total = 0.0
+    for line in log_path.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            total += float(json.loads(line).get("session_gpu_s", 0.0))
+        except (json.JSONDecodeError, TypeError, ValueError):
+            continue
+    return total

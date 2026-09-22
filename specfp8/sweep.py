@@ -244,7 +244,7 @@ def run_sweep(sweep_path: str, results_dir: str, force: bool = False) -> None:
             persist_log(sid, handle.log_path, results_path)
             session_gpu_s += time.monotonic() - group_start
 
-    append_budget_log("sweep", session_gpu_s, session_gpu_s, results_path)
+    append_budget_log("sweep", session_gpu_s, results_path, detail=sweep_path)
     print(f"\n{'=' * 64}\nSweep complete. GPU time this session: "
           f"{session_gpu_s:.0f}s ({session_gpu_s / 3600:.2f}h)\n{'=' * 64}")
 

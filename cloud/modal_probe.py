@@ -63,6 +63,55 @@ GPU_GUARDRAILS = dict(
 )
 
 
+def billed(phase: str):
+    """Record a GPU function's wall-clock time in results/budget.log.
+
+    Cost discipline is a standing constraint on this study, and a
+    reproducibility claim includes the price, so the repo has to be able to
+    answer what it cost. It could not: budget.log was written from inside
+    `specfp8.probe` and `specfp8.sweep` only, which covers three of the seven
+    GPU entrypoints here. The other four -- every bespoke probe, including
+    the boot-variance and concurrency runs that produced F020 and F021 --
+    consumed GPU time that no artifact recorded.
+
+    A decorator rather than a call at the end of each body: the failure mode
+    was someone adding a GPU function and not remembering the call, and a
+    decorator applied at the definition makes billing the default. It also
+    records on the failure path, because a crashed run bills for exactly the
+    same seconds as a successful one.
+
+    Wall-clock inside the container is a slight underestimate of what Modal
+    bills (container start and image pull sit outside it); it is a floor,
+    and the log says so rather than implying precision it does not have.
+    """
+    import functools
+
+    def decorate(fn):
+        @functools.wraps(fn)
+        def wrapper(*args, **kwargs):
+            import time as _time
+            start = _time.monotonic()
+            try:
+                return fn(*args, **kwargs)
+            finally:
+                elapsed = _time.monotonic() - start
+                try:
+                    import sys
+                    if "/root/spec-fp8-study" not in sys.path:
+                        sys.path.insert(0, "/root/spec-fp8-study")
+                    from specfp8.store import append_budget_log
+                    append_budget_log(phase, elapsed, "/results",
+                                      detail=f"{fn.__name__} (container wall)")
+                    results_vol.commit()
+                except Exception as e:
+                    # Never let accounting take down a run that produced data.
+                    print(f"  (budget log failed: {e}; "
+                          f"{elapsed:.0f} GPU s unrecorded)")
+        return wrapper
+
+    return decorate
+
+
 def _commit_periodically(stop_event, every_s: int = 60):
     """Commit the results volume while a long run is in progress.
 
@@ -364,6 +413,7 @@ def run_sglang_probe(retry_failed: bool = False):
     **GPU_GUARDRAILS,
     volumes={"/models": model_vol},
 )
+@billed('diagnose')
 def diagnose(mechanism: str = "ngram") -> str:
     """Boot one cell and dump the raw signals the probe depends on.
 
@@ -500,6 +550,7 @@ def prefetch_models(sweep_file: str = "h1") -> str:
     **GPU_GUARDRAILS,
     volumes={"/models": model_vol},
 )
+@billed('determinism')
 def determinism_check() -> str:
     """T18a: locate the nondeterminism that broke Test 1's premise.
 
@@ -625,6 +676,7 @@ def backend_report() -> str:
     image=vllm_image, gpu="L4", timeout=90 * 60, **GPU_GUARDRAILS,
     volumes={"/models": model_vol},
 )
+@billed('boot_variance')
 def boot_variance(boots: int = 2, mechanism: str = "dflash") -> str:
     """Does --enforce-eager still win under load, or does it invert?
 
@@ -879,6 +931,7 @@ def check_results():
 
 
 @app.function(image=vllm_image, gpu="L4", timeout=900)
+@billed('vllm_help')
 def dump_vllm_help() -> str:
     """Introspect vLLM's CLI surface so launcher flags can be verified
     against the exact installed version. Needs a GPU: vLLM infers the
