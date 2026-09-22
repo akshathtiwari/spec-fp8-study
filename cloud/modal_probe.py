@@ -205,7 +205,11 @@ def _print_results(results_path="/results/cells.jsonl"):
 @app.function(
     image=vllm_image,
     gpu="L4",
-    timeout=150 * 60,
+    # perf_v2 is 16 boots x 6 measurements, roughly 4 hours. 150 minutes
+    # would kill it mid-grid. Resume plus per-60s volume commits cap the
+    # cost of hitting this at the in-flight cell, so a re-invocation
+    # continues rather than restarts.
+    timeout=240 * 60,
     **GPU_GUARDRAILS,
     volumes={"/results": results_vol, "/models": model_vol},
 )
