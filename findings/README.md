@@ -21,6 +21,7 @@ wrong turns and what caught them — is part of the evidence.
 | [`F016`](F016-fp8-no-measurable-quality-cost.md) | FP8 weights and FP8 KV cost no measurable task accuracy, within +/-4.7 points | established | medium |
 | [`F017`](F017-fp8-kv-is-backend-gated.md) | FP8 KV works on exactly two of four SM89 backends, and vLLM's auto-switch is why | established | high |
 | [`F019`](F019-target-and-draft-select-backends-independently.md) | Target and draft select attention backends independently; F018 was wrong | established | high |
+| [`F020`](F020-speculative-throughput-is-boot-dependent.md) | Speculative throughput varies 2.16x across boots while acceptance does not | established | high |
 
 ## Method
 
@@ -50,4 +51,4 @@ wrong turns and what caught them — is part of the evidence.
 
 ---
 
-19 findings: 8 result, 4 method, 1 gap, 6 retraction.
+20 findings: 9 result, 4 method, 1 gap, 6 retraction.

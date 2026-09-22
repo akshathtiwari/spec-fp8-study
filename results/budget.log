@@ -16,3 +16,6 @@
 {"ts":"2026-09-22T03:48:00.428451+00:00","phase":"sweep","session_gpu_s":1181.2,"cumulative_gpu_s":1181.2}
 {"ts":"2026-09-22T06:21:11.683460+00:00","phase":"sweep","session_gpu_s":8264.8,"cumulative_gpu_s":8264.8}
 {"ts":"2026-09-22T07:38:47.120722+00:00","phase":"sweep","session_gpu_s":900.3,"cumulative_gpu_s":900.3}
+{"ts":"2026-09-22T09:11:30.400524+00:00","phase":"sweep","session_gpu_s":797.0,"cumulative_gpu_s":797.0}
+{"ts":"2026-09-22T09:18:47.760280+00:00","phase":"sweep","session_gpu_s":432.0,"cumulative_gpu_s":432.0}
+{"ts":"2026-09-22T09:26:22.892591+00:00","phase":"sweep","session_gpu_s":448.8,"cumulative_gpu_s":448.8}

@@ -1,0 +1,112 @@
+---
+id: F020
+title: Speculative throughput varies 2.16x across boots while acceptance does not
+kind: result
+status: established
+confidence: high
+date: 2026-09-22
+evidence:
+  runs: [2026-09-22T09-07Z_boot_stability, 2026-09-22T04-14Z_perf]
+  analysis: [analysis/out/tables/throughput.md]
+  code_sha: 1461e3a
+supersedes: []
+---
+
+## Claim
+
+On vLLM 0.29.0 / L4 (SM89), token throughput for a **speculative**
+configuration varies by **2.16x** across boots of an identical configuration
+with identical prompts, while the non-speculative control varies by **1.02x**
+and acceptance (tau) varies by **1.08x**. The speculative path produces the
+same accepted tokens per step every time and converts them to wall-clock
+throughput at rates differing by more than a factor of two.
+
+## Evidence
+
+Six boots of each cell, `bf16` weights, `auto` KV, FLASHINFER, gsm8k, c=1,
+n=16, seed 1234 — so prompts are identical throughout. Boots span three
+containers, including three consecutive boots inside one container.
+
+| | mean tok/s | s.d. | range | ratio |
+|---|---|---|---|---|
+| none (control) | 26.40 | 0.6% | 26.3 – 26.7 | **1.02x** |
+| dflash | 46.94 | 29.3% | 28.4 – 61.2 | **2.16x** |
+
+tau across the same six dflash boots: mean 4.183, range 4.091 – 4.411
+(**1.08x**).
+
+Per-request data confirms it is decode speed, not output length: for the same
+cell, mean end-to-end latency was 3,505 ms in a fast boot against
+7,316–7,923 ms in slow boots, with mean output lengths of 242 vs 250–265
+tokens.
+
+## Reasoning
+
+The control is what makes this diagnostic. A 0.6% spread on the
+non-speculative cell — across the same containers, the same GPU allocations
+and the same prompts — excludes hardware, thermal state, container position
+and prompt sampling as explanations. Whatever varies is specific to the
+speculative path.
+
+tau being stable while throughput is not also separates the two candidate
+mechanisms: the drafter is accepting the same number of tokens per step, so
+the variance is in the cost of producing them, not in how many are produced.
+
+The engine warns at every speculative boot:
+
+```
+CUDAGraphMode.FULL_AND_PIECEWISE is not supported with spec-decode for
+attention backend FlashInfer
+```
+
+and falls back to PIECEWISE capture. A CUDA-graph capture that differs between
+boots is a plausible cause of a 2x decode-speed difference, but this finding
+demonstrates the **effect**, not the cause. The cause is untested.
+
+## What this invalidates
+
+**The speculation x precision interaction reported from the Phase 2 grid is
+withdrawn.** Speedups of 1.16x (bf16 weights) versus 2.71x (fp8 weights) were
+each measured from a **single boot** per configuration, and a 2.16x boot-level
+swing swamps that difference entirely.
+
+More broadly, every DFlash throughput figure in `throughput.md` carries this
+error term. Those cells have three repeats, but all three come from one boot,
+so the +/-2-8% intervals shown measure prompt variance *within* a boot and are
+silent about the dominant source of error.
+
+## What this does NOT affect
+
+- **F004 (KV capacity)** — capacity is read from the engine's startup log and
+  reproduces exactly for a given compile-cache state.
+- **F006 (tau invariance)** — tau reproduces to 1.08x across boots here and to
+  <=0.002 within a boot.
+- **F016 (accuracy)** — accuracy is stable across all six boots (93.8%).
+- **F017 / F019 (compatibility, backend selection)** — unrelated to timing.
+
+The non-speculative half of the Phase 2 grid is sound at 0.6% reproducibility.
+
+## Consequence for measurement design
+
+Speculative throughput needs **boot-level repeats**, not prompt-level. Three
+boots x three prompt draws per cell multiplies the dominant cost — boots — by
+three: roughly 9 GPU-hours for the full grid.
+
+Before paying that it is worth testing whether the variance is *controllable*
+(for example by pinning `enforce_eager`, or by using a backend whose
+speculative path does not fall back). A configuration that measures stably is
+worth more than an average over an unstable one, and if the variance can be
+removed the grid becomes cheaper rather than more expensive.
+
+## Independent value
+
+"Speculative decoding throughput on vLLM 0.29 / SM89 varies 2x across boots
+while acceptance does not" is a reportable result on its own, and a warning to
+anyone benchmarking speculative decoding from single runs — which, from the
+prior art in requirements section 9, is the norm.
+
+## How to reproduce
+
+```bash
+modal run cloud/modal_probe.py --engine sweep --sweep boot_stability --repeats 3
+```

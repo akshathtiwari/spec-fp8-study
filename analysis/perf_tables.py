@@ -81,7 +81,14 @@ def main() -> None:
             L.append(f"> - concurrency {c}: n in {counts}")
         L.append("")
 
-    L += ["Mean of 3 repeats, +/- sample standard deviation. Repeats draw "
+    L += ["> **Speculative rows carry an error term this table does not show.** "
+          "Throughput for a speculative configuration varies 2.16x across "
+          "boots while acceptance does not (findings/F020). Every cell below "
+          "has three repeats from a SINGLE boot, so the spread shown is "
+          "prompt variance within one boot and is silent about the dominant "
+          "source of error. Non-speculative rows are unaffected (0.6% "
+          "across-boot reproducibility).", "",
+          "Mean of 3 repeats, +/- sample standard deviation. Repeats draw "
           "**different** prompts (seed offset by repeat), so the spread "
           "includes prompt-sampling variance, not just measurement noise -- "
           "it answers \"what would a different draw from GSM8K give?\" rather "
