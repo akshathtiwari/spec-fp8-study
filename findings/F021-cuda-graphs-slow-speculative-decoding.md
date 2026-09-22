@@ -139,6 +139,35 @@ across all eight cells and runs through `specfp8.sweep`, which records
 normally. That is stronger than re-running the probe, since it tests the
 claim on eight configurations rather than the one this finding used.
 
+## The cleanest instance: one cell, both modes, same argv
+
+The perf_v2 grid caught cell `5824814b68901229`
+(`dflash | bf16 | fp8_e4m3 | FLASHINFER`, **graphs on**) in the other mode.
+Same `cell_id`, therefore same configuration by construction, and the
+`argv_fingerprint` matches:
+
+| session | c=1 tok/s | mean | tau |
+|---|---|---|---|
+| 2026-09-22 (perf) | 28.59, 29.39, 33.81 | **30.60** | 4.183 |
+| 2026-09-22 (perf_v2) | 64.89, 71.77 | **68.33** | 4.211 |
+
+**2.23x throughput. tau differs by 0.68%, below the 1.32% floor (F006).**
+
+Every earlier demonstration of the bimodality compared *something* —
+different arms, different cells, or boots inside a deliberately constructed
+test. This is a single content-addressed configuration, measured in two
+ordinary grid runs weeks apart in intent and hours apart in fact, landing in
+both modes with acceptance unmoved. Nothing was varied, because there was
+nothing left to vary: the `cell_id` is the configuration.
+
+It also falsifies a premise of the pre-registered prediction in
+`docs/paper-outline.md`, which assumed bf16 speculative cells sit near 30
+tok/s with graphs on and would rise to 70-80 only with graphs off. Tonight
+that cell is at 68.33 **with graphs on**. The premise was not wrong so much
+as *not a property of the configuration*: which mode a graphs-on boot lands
+in is exactly what is unpredictable, so any prediction conditioned on it is
+conditioned on a coin flip. That is the finding, restated as a cost.
+
 ## Qualified by F023: eager is not free
 
 `--enforce-eager` increases KV allocation rather than reducing it. vLLM's

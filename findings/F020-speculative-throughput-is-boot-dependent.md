@@ -127,6 +127,13 @@ modal run cloud/modal_probe.py --engine sweep --sweep boot_stability --repeats 3
 
 ## Follow-up
 
+The sharpest confirmation arrived later: cell `5824814b68901229` was
+measured at **30.60 tok/s** in this grid and **68.33 tok/s** in perf_v2,
+same cell_id, same argv, same arm, with tau moving 0.68% — below its own
+noise floor. 2.23x on a configuration that is identical by construction.
+See F021.
+
+
 F021 resolves the mechanism: the variance is **bimodal, not continuous**, and
 the mode is selected by the CUDA-graph path. `--enforce-eager` removes it —
 boot spread falls from 1.64x to 1.04-1.07x while throughput rises 1.37-2.38x.
