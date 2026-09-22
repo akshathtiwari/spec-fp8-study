@@ -1,6 +1,6 @@
 ---
 id: F021
-title: Speculative throughput is bimodal; enforce_eager selects the fast mode at every concurrency and removes the boot variance
+title: Speculative throughput is bimodal; enforce_eager reliably selects the fast mode and removes the boot variance, but its throughput advantage depends entirely on which mode the comparison arm drew
 kind: result
 status: established
 confidence: high
@@ -167,6 +167,42 @@ that cell is at 68.33 **with graphs on**. The premise was not wrong so much
 as *not a property of the configuration*: which mode a graphs-on boot lands
 in is exactly what is unpredictable, so any prediction conditioned on it is
 conditioned on a coin flip. That is the finding, restated as a cost.
+
+## Major correction: the speedup is not a property of eager
+
+`perf_v2` measured both arms of `dflash | bf16 | auto` **within one run**,
+and the graphs-on boot landed in the **fast** mode:
+
+| conc | graphs on | graphs off | off/on |
+|---|---|---|---|
+| 1 | 70.0 | 79.5 | **1.13x** |
+| 16 | 739.4 | 781.9 | **1.06x** |
+| 64 | 1534.9 | 1605.2 | **1.05x** |
+
+This finding reports **2.38x / 1.67x / 1.37x** for the same configuration.
+The difference is not measurement error. It is which mode the *comparison
+arm* drew: both default boots in the concurrency test landed slow, and
+tonight's landed fast. Against the prior session's slow-mode boot the same
+eager numbers give 2.19x at c=1.
+
+**So the ratio is not a constant and should never have been reported as
+one.** The defensible statement is:
+
+- **graphs off** is stable at ~79.5 tok/s at c=1 (boot spread 1.04-1.07x).
+- **graphs on** is bimodal: ~30 tok/s or ~70 tok/s.
+- Eager's advantage is therefore **~1.05-1.13x against a fast-mode boot**
+  and **~2.2x against a slow-mode one**. A single number for it is a
+  statement about a coin flip, not about the flag.
+
+The throughput headline of this finding is withdrawn and replaced by the
+above. What survives — and is strengthened — is the **stability** claim:
+eager removes a 1.64x boot-to-boot spread and replaces it with 1.04-1.07x.
+That was always the more useful half, and it is now the whole of it.
+
+This is the study's own thesis turned on itself. The 2.38x was produced by
+comparing against an arm assumed representative, which was in fact one draw
+from a bimodal distribution this very finding describes. Recorded as F022
+instance 15.
 
 ## Qualified by F023: eager is not free
 

@@ -81,6 +81,34 @@ def session_of(recs: list[dict]) -> str:
     return "grid" if max(r["ts"] for r in recs) >= GRID_CUTOFF else "prior"
 
 
+def restrict_to_same_session(on: list[dict], off: list[dict]):
+    """Trim both arms to one shared session, or report that there is none.
+
+    Labelling an arm by `max(ts)` is not enough: an arm can hold records
+    from BOTH sessions, because a cell re-measured tonight still has its
+    pre-existing records on file and this script keeps the latest per
+    run_id, not the latest per cell. Averaging such an arm silently mixes a
+    slow-mode boot from yesterday with a fast-mode boot from tonight.
+
+    That is exactly what happened: `dflash|bf16|auto` graphs-on averaged to
+    49.8 tok/s at c=1, a value no boot ever produced, sitting between the
+    prior session's ~30 and tonight's ~70. The pair was then labelled "same
+    run" because each arm's newest record was from tonight.
+
+    Preferring the grid session when both arms have records there gives a
+    genuine within-run comparison; otherwise the pair is cross-session.
+    """
+    on_g = [r for r in on if r["ts"] >= GRID_CUTOFF]
+    off_g = [r for r in off if r["ts"] >= GRID_CUTOFF]
+    if on_g and off_g:
+        return on_g, off_g, True
+    on_p = [r for r in on if r["ts"] < GRID_CUTOFF]
+    off_p = [r for r in off if r["ts"] < GRID_CUTOFF]
+    if on_p and off_p:
+        return on_p, off_p, True
+    return on, off, False
+
+
 def mean(vals) -> float | None:
     vals = [v for v in vals if v is not None]
     return statistics.mean(vals) if vals else None
@@ -129,10 +157,12 @@ def main() -> int:
     for (pk, conc), arms in sorted(
             paired.items(), key=lambda kv: (label(kv[1][False] or kv[1][True]),
                                             kv[0][1])):
-        on = mean([r["throughput"]["output_tokens_per_s"] for r in arms[False]])
-        off = mean([r["throughput"]["output_tokens_per_s"] for r in arms[True]])
-        tau_on = mean([(r.get("spec") or {}).get("tau") for r in arms[False]])
-        tau_off = mean([(r.get("spec") or {}).get("tau") for r in arms[True]])
+        on_recs, off_recs, same_session = restrict_to_same_session(
+            arms[False], arms[True])
+        on = mean([r["throughput"]["output_tokens_per_s"] for r in on_recs])
+        off = mean([r["throughput"]["output_tokens_per_s"] for r in off_recs])
+        tau_on = mean([(r.get("spec") or {}).get("tau") for r in on_recs])
+        tau_off = mean([(r.get("spec") or {}).get("tau") for r in off_recs])
         mech, wp, kv = label(arms[False] or arms[True])
         ratio = off / on if (on and off) else None
         # A pair whose arms come from different sessions is not a
@@ -141,7 +171,6 @@ def main() -> int:
         # speculative cells by a 2.2x bimodal mode flip (F021). Such a row
         # is reported but never counted, because reading a ratio off it is
         # the exact error this study keeps making.
-        same_session = session_of(arms[False]) == session_of(arms[True])
         rows.append({"mech": mech, "weights": wp, "kv": kv, "conc": conc,
                      "on": on, "off": off, "ratio": ratio,
                      "tau_on": tau_on, "tau_off": tau_off,

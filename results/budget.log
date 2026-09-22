@@ -19,3 +19,4 @@
 {"ts":"2026-09-22T09:11:30.400524+00:00","phase":"sweep","session_gpu_s":797.0,"cumulative_gpu_s":797.0}
 {"ts":"2026-09-22T09:18:47.760280+00:00","phase":"sweep","session_gpu_s":432.0,"cumulative_gpu_s":432.0}
 {"ts":"2026-09-22T09:26:22.892591+00:00","phase":"sweep","session_gpu_s":448.8,"cumulative_gpu_s":448.8}
+{"ts":"2026-09-22T22:06:05.956823+00:00","phase":"sweep","session_gpu_s":6857.5,"cumulative_gpu_s":39954.5,"detail":"sweeps/perf_v2.yaml"}
