@@ -85,6 +85,38 @@ not merely make speculative decoding faster — it makes it *measurable*.
 tau is flat at 4.06-4.21 across all twelve measurements, so nothing here
 touches acceptance.
 
+## Independent corroboration from pre-hypothesis data
+
+Re-reading the Phase 2 grid — collected on 2026-09-22 **before** the
+bimodality hypothesis existed — turns up the same effect with a control
+attached. Four configurations were each measured three times with the
+repeats spread across two boots hours apart:
+
+| cell | conc | spread across boots | gap | values (tok/s) |
+|---|---|---|---|---|
+| none | 1 | **1.016x** | 4.6h | 26.3, 26.7, 26.3 |
+| none | 16 | **1.105x** | 2.7h | 244.2, 253.2, 269.9 |
+| dflash | 1 | **1.663x** | 4.2h | 28.4, 33.2, 47.3 |
+| dflash | 16 | **1.624x** | 2.3h | 436.0, 356.5, 578.9 |
+
+The non-speculative rows are the control, and they are a good one: same
+container lifecycle, same host, same time gaps, same prompts, differing only
+in whether speculation is on. They move 1.02-1.11x. The speculative rows
+move 1.62-1.66x. Whatever varies is specific to the speculative path rather
+than a property of the machine or the day.
+
+The c=16 figure is the sharpest part. This data gives **1.624x**; the
+controlled concurrency test above, run separately and deliberately, gives
+**1.64x** for the same cell. Two independent measurements agreeing to within
+1%, one of them recorded before anyone was looking for the effect, so it
+cannot be an artifact of how the test was designed.
+
+This also means the effect was present and visible in the grid the whole
+time. It went unnoticed because `analysis/perf_tables.py` averaged those
+three measurements into one mean and described the result as prompt
+variance within a single boot -- a provenance claim the table asserted and
+never checked. It now checks it.
+
 ## What this does NOT establish
 
 - **Why a default boot picks one mode over the other.** The selector is
