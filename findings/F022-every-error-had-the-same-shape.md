@@ -43,8 +43,8 @@ Every correction in `findings/`, classified by what was assumed constant:
 | budget.log | cumulative spend | that "cumulative" accumulated | it restarted per session | spend understated ~4.5x |
 | cell_id | configurations | that the schema could grow | any new field rehashed all 30 | every stored result orphaned |
 
-Eleven instances, one shape. Two more arrived the day this was written;
-both are below.
+Eleven instances, one shape. Three more arrived the day this was written;
+all are below.
 
 ### The twelfth, found the same day this was written
 
@@ -109,6 +109,43 @@ earlier, recording `gpu_free_mib_before_boot` alongside the verbatim error.
 A clean card in the record contradicted the residual-memory story outright.
 The lesson is the recurring one: the defence that works is a record that
 can contradict you, not an intention to be careful.
+
+### The fourteenth, and the pattern within the pattern
+
+Two hours after instance 13, the same axis again. An early cross-session
+"consistency check" read tonight's first cell against the prior grid's
+`none|bf16|fp8_e4m3` rows and flagged a 1.15x gap at c=64 as a possible
+instability in F020's control. The cell was `28971d07`,
+`enforce_eager=True`; the prior rows were `enforce_eager=False`.
+
+| # | Compared | Assumed fixed | Actually varied | Cost if unreported |
+|---|---|---|---|---|
+| 14 | tonight's cell 1 vs prior grid | that both were the same arm | `enforce_eager` (again) | a false doubt cast on the control that isolates F021 |
+
+The interesting part is not the error, it is its **distribution**. Instances
+13 and 14, plus the `perf_tables` grouping bug fixed the same morning, are
+all the same axis: `enforce_eager`. Three in one day, on the one field added
+that day.
+
+That is not coincidence and it is not carelessness in the usual sense. A
+newly added axis is exactly the variable that every habit, script and
+mental shortcut still treats as constant, because all of them were formed
+when it was. The risk window for a new dimension is not when it is being
+designed — it is the hours afterwards, when everything around it is still
+written for a world with one fewer dimension.
+
+Two practical consequences, both now implemented:
+
+- The sweep's progress label printed both arms identically, so the screen
+  could not distinguish them. It now carries `graphs=on|off` and the
+  `cell_id` prefix.
+- `perf_tables.py` keys on `cell_id` rather than a hand-listed tuple. The
+  lapses in 13 and 14 were both in *throwaway* analysis, not committed
+  code, which is where the discipline actually fails.
+
+What caught instance 14 was the label fix from instance 13 — the first run
+after it printed `graphs=off` next to a cell whose numbers had already been
+interpreted as graphs-on. The fix for one instance surfaced the next.
 
 ## Reasoning
 
