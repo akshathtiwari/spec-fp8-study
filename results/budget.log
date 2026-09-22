@@ -9,3 +9,6 @@
 {"ts":"2026-09-21T12:45:42.867475+00:00","phase":"probe","session_gpu_s":3108.1,"cumulative_gpu_s":3108.1}
 {"ts":"2026-09-21T13:20:56.428682+00:00","phase":"probe","session_gpu_s":666.6,"cumulative_gpu_s":666.6}
 {"ts":"2026-09-21T15:22:55.183921+00:00","phase":"probe","session_gpu_s":1959.5,"cumulative_gpu_s":1959.5}
+{"ts":"2026-09-21T17:26:56.151085+00:00","phase":"probe","session_gpu_s":1722.9,"cumulative_gpu_s":1722.9}
+{"ts":"2026-09-21T17:43:41.818132+00:00","phase":"probe","session_gpu_s":999.2,"cumulative_gpu_s":999.2}
+{"ts":"2026-09-21T17:58:01.816784+00:00","phase":"probe","session_gpu_s":852.6,"cumulative_gpu_s":852.6}

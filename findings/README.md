@@ -19,7 +19,7 @@ wrong turns and what caught them — is part of the evidence.
 | [`F006`](F006-tau-invariant-to-precision.md) | tau is invariant to FP8 precision; backend choice perturbs it more | established | medium |
 | [`F009`](F009-determinism-is-server-state-dependent.md) | Generation is exactly reproducible across boots but drifts within a server | established | high |
 | [`F016`](F016-fp8-no-measurable-quality-cost.md) | FP8 weights and FP8 KV cost no measurable task accuracy, within +/-4.7 points | established | medium |
-| [`F017`](F017-fp8-kv-is-backend-gated.md) | FP8 KV works on exactly two of four SM89 backends, and vLLM's auto-switch is why | established | high |
+| [`F017`](F017-fp8-kv-is-backend-gated.md) | FP8 KV works on exactly two of four SM89 backends, and vLLM's auto-switch is why | superseded | high |
 
 ## Method
 
@@ -45,7 +45,8 @@ wrong turns and what caught them — is part of the evidence.
 | [`F011`](F011-retraction-ag-rs-backend.md) | RETRACTED — backend attribution reported AG_RS, a regex artifact | retracted | high |
 | [`F013`](F013-gate-prompts-were-corrupted.md) | The correctness gate's GSM8K reference answers were partly wrong | retracted | high |
 | [`F015`](F015-extractor-discarded-correct-answers.md) | The answer extractor silently discarded 58.6% of correct answers | retracted | high |
+| [`F018`](F018-attention-backend-flag-not-honoured.md) | RETRACTED — the backend axis was never real; --attention-backend does not select | retracted | high |
 
 ---
 
-17 findings: 7 result, 4 method, 1 gap, 5 retraction.
+18 findings: 7 result, 4 method, 1 gap, 6 retraction.
