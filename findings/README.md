@@ -22,6 +22,7 @@ wrong turns and what caught them — is part of the evidence.
 | [`F017`](F017-fp8-kv-is-backend-gated.md) | FP8 KV works on exactly two of four SM89 backends, and vLLM's auto-switch is why | established | high |
 | [`F019`](F019-target-and-draft-select-backends-independently.md) | Target and draft select attention backends independently; F018 was wrong | established | high |
 | [`F020`](F020-speculative-throughput-is-boot-dependent.md) | Speculative throughput varies 2.16x across boots while acceptance does not | established | high |
+| [`F021`](F021-cuda-graphs-slow-speculative-decoding.md) | Speculative throughput is bimodal, and enforce_eager reliably selects the fast mode | provisional | medium |
 
 ## Method
 
@@ -51,4 +52,4 @@ wrong turns and what caught them — is part of the evidence.
 
 ---
 
-20 findings: 9 result, 4 method, 1 gap, 6 retraction.
+21 findings: 10 result, 4 method, 1 gap, 6 retraction.
