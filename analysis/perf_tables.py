@@ -71,8 +71,18 @@ def key(rec: dict) -> tuple:
 
 
 def label(cfg: dict) -> tuple:
-    """The config values shown in the table for a cell."""
-    return tuple(cfg.get(f) for f in DISPLAY_FIELDS)
+    """The config values shown in the table for a cell.
+
+    `enforce_eager` is normalised to a bool because records written before
+    the field existed have no value for it, and sorting a mix of None and
+    False raises. Absent means the engine default, which is graphs on, so
+    False is the correct reading rather than a convenience.
+    """
+    out = []
+    for f in DISPLAY_FIELDS:
+        v = cfg.get(f)
+        out.append(bool(v) if f == "enforce_eager" else v)
+    return tuple(out)
 
 
 #: Repeats of one cell run back-to-back against an already-booted server,

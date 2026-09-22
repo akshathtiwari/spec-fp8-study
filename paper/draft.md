@@ -266,24 +266,67 @@ because the floor feels like overhead rather than like a result.
 
 ## 6. Results with all three controlled
 
-*Blocked on `sweeps/perf_v2.yaml` (16 boots, 96 measurements, in flight).*
-
 The grid carries `enforce_eager` as an **axis** rather than a pinned
-setting. Pinning it would have been our fourth instance of the same error:
-the flag is engine-wide, and on the non-speculative baseline CUDA graphs
-have no spec-decode fallback to trip over and are expected to help, so
-pinning it for both arms of a comparison whose baseline it penalises would
-manufacture part of the reported speedup.
+setting: 16 boots, both arms of every configuration measured in one run.
+Pinning it would have been our fourth instance of the same error, and the
+measurement shows the error would have been large.
 
-We pre-registered a prediction before running it (`docs/paper-outline.md`):
-that the apparent ~3× FP8-weight advantage at concurrency 1 in our earlier
-grid is mostly mode assignment, that it survives but shrinks to roughly
-1.2–1.4× with graphs off, and that the FP8 rows move least because they are
-already in the fast mode. The outcome is reported as measured either way.
+### The execution-path flag is not a free control
 
-To be reported: goodput under a declared SLO across the concurrency sweep;
-KV capacity under FP8 (F004); task accuracy under FP8 weights and FP8 KV,
-powered at n=256 with McNemar exact tests (F016).
+| config | conc | graphs on | graphs off | off/on |
+|---|---|---|---|---|
+| none \| bf16 \| auto | 1 | 26.9 | 25.6 | 0.95× |
+| none \| bf16 \| auto | 64 | 835.0 | 797.5 | 0.96× |
+| none \| **fp8** \| auto | 1 | 41.3 | 20.3 | **0.49×** |
+| none \| **fp8** \| auto | 64 | 1252.2 | 825.4 | **0.66×** |
+| none \| **fp8** \| fp8_e4m3 | 1 | 42.3 | 21.2 | **0.50×** |
+| dflash \| bf16 \| auto | 1 | 70.0 | 79.5 | 1.13× |
+| dflash \| **fp8** \| auto | 1 | 118.1 | 72.0 | **0.61×** |
+
+`--enforce-eager` costs roughly **half the throughput** of any FP8-weight
+configuration and costs BF16 essentially nothing (F024). Individual boots
+do not overlap on any FP8 row and overlap on every BF16 row. τ is unmoved
+throughout, so this is the cost of producing tokens, not acceptance.
+
+Two further constraints on the same flag: it cannot boot speculative cells
+with FP8 KV at all on this card, failing on a 892 MiB float32 logits buffer
+that is fixed by scheduler and speculative width (F023); and its apparent
+throughput benefit on the cells where it *does* help is a statement about
+the comparison arm's mode rather than about the flag (§4).
+
+Had we pinned it — the obvious response to §4 — every FP8-weight baseline
+would have been halved, every speculative FP8-KV cell would have failed to
+boot, and the speculation-vs-baseline speedups would have been inflated by
+roughly 2× on exactly the cells this paper is about, with nothing in the
+output to indicate it.
+
+### The pre-registered prediction, and how it did
+
+We recorded a prediction before the grid ran: that the apparent ~3×
+FP8-weight speculative advantage was mostly mode assignment, that it would
+survive but shrink to roughly 1.2–1.4×, and that FP8 rows would move least
+between arms.
+
+- **(1) holds.** BF16 speculative reaches 79.5 tok/s with graphs off, in the
+  predicted 70–80 band.
+- **(3) holds**, but for the wrong reason: FP8 rows move *most* in absolute
+  terms, downward, because eager penalises them (F024).
+- **(2) fails.** With graphs on the FP8-weight speculative advantage is
+  **1.69×**, not the ~3× the single-boot data suggested and not the
+  1.2–1.4× predicted; with graphs off it **inverts to 0.91×**. The mode
+  story explains part of the original 3× and F024 explains the inversion.
+
+We report this as measured. The prediction was written down so it could
+fail in public, and one of three did.
+
+### Remaining results
+
+Compatibility matrix (F002, F017), KV capacity under FP8 (F004), and task
+accuracy at n=256 with McNemar exact tests (F016) are unchanged by the
+re-measurement and are carried from the earlier phases. Goodput under a
+declared SLO across the concurrency sweep is computed offline from the
+stored per-request rows (`analysis/goodput.py`), so the SLO threshold can
+be swept without further GPU time.
 
 ---
 

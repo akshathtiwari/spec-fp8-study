@@ -22,7 +22,9 @@ wrong turns and what caught them — is part of the evidence.
 | [`F017`](F017-fp8-kv-is-backend-gated.md) | FP8 KV works on exactly two of four SM89 backends, and vLLM's auto-switch is why | established | high |
 | [`F019`](F019-target-and-draft-select-backends-independently.md) | Target and draft select attention backends independently; F018 was wrong | established | high |
 | [`F020`](F020-speculative-throughput-is-boot-dependent.md) | Speculative throughput varies 2.16x across boots while acceptance does not | established | high |
-| [`F021`](F021-cuda-graphs-slow-speculative-decoding.md) | Speculative throughput is bimodal; enforce_eager selects the fast mode at every concurrency and removes the boot variance | established | high |
+| [`F021`](F021-cuda-graphs-slow-speculative-decoding.md) | Speculative throughput is bimodal; enforce_eager reliably selects the fast mode and removes the boot variance, but its throughput advantage depends entirely on which mode the comparison arm drew | established | high |
+| [`F023`](F023-enforce-eager-increases-memory-pressure.md) | enforce_eager increases KV allocation and can make a speculative cell unbootable, so it is not a free fix for the bimodality | established | high |
+| [`F024`](F024-enforce-eager-halves-fp8-weight-throughput.md) | enforce_eager halves FP8-weight throughput and leaves BF16 untouched, so pinning it would have manufactured the speculative speedup on every FP8 cell | established | high |
 
 ## Method
 
@@ -53,4 +55,4 @@ wrong turns and what caught them — is part of the evidence.
 
 ---
 
-22 findings: 10 result, 5 method, 1 gap, 6 retraction.
+24 findings: 12 result, 5 method, 1 gap, 6 retraction.

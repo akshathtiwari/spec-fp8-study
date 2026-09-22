@@ -8,7 +8,8 @@ date: 2026-09-22
 evidence:
   runs: [2026-09-22T12-1xZ_boot_variance_conc, 2026-09-22T10-0xZ_boot_variance,
          2026-09-22T09-07Z_boot_stability]
-  analysis: []
+  cells: [a15aaeb7ae8ece66, c6519fb025e64635]
+  analysis: [analysis/out/tables/cudagraph_arms.md]
   code_sha: 624ffdb
 supersedes: []
 ---
@@ -129,9 +130,21 @@ This is not a claim that the numbers are wrong; it is a claim that they are
 presently **unverifiable by a third party**, which for this study's purposes
 is close to the same thing.
 
-The probe now writes one record per measurement to `results/probes.jsonl`
-and persists each boot's engine log, so a re-run produces citable evidence.
-`analysis/check_provenance.py` fails on this finding until it does.
+**Resolved 2026-09-23.** `perf_v2` re-measured both arms of
+`dflash | bf16 | auto` through `specfp8.sweep`, which records normally, so
+this finding now cites cells `a15aaeb7ae8ece66` and `c6519fb025e64635`
+with persisted engine logs and a derived table. `check_provenance.py`
+passes on it.
+
+That re-measurement is also what produced the correction above: the
+within-run pairing the records made possible is what showed the 2.38x to
+be a property of the comparison arm's mode. The provenance gap and the
+wrong headline were the same problem — a claim with no records behind it
+had never been checked against a controlled pairing.
+
+The probe itself now writes one record per measurement to
+`results/probes.jsonl` and persists each boot's engine log, so the class of
+gap is closed for future bespoke runs.
 
 For this finding specifically, `sweeps/perf_v2.yaml` supplies the evidence as
 a side effect of its main purpose: it carries `enforce_eager` as an axis
