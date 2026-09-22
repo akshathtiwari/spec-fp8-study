@@ -23,7 +23,10 @@ class Gsm8kWorkload:
     name = "gsm8k"
 
     def __init__(self) -> None:
-        self._prompts, self._answers = load_quality_prompts()
+        # limit=None: Phase 2 draws from the full pool so repeats can take
+        # disjoint prompt sets. The quality measurement stays pinned to the
+        # first 256 (see specfp8.quality.QUALITY_N).
+        self._prompts, self._answers = load_quality_prompts(limit=None)
         self._order: list[int] = []
 
     @property

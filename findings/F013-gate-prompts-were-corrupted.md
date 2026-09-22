@@ -37,8 +37,14 @@ Only 10 of 16 appeared verbatim. Of the 6 that did not:
 | 5, 8 | paraphrased, but answer updated consistently | 9, 120 | self-consistent |
 | 7 | original contains a typo ("how load"); gate fixed it | 160 | unchanged |
 
-A negative reference answer (-4600) is on its own a strong signal, since GSM8K
-answers are essentially always positive quantities.
+**Correction to this finding's own reasoning (2026-09-22):** it originally
+argued that a negative reference (-4600) was itself a red flag "since GSM8K
+answers are essentially always positive". Fetching the full 1319-problem test
+split shows GSM8K *does* contain negative answers, so that inference was
+overconfident and is withdrawn. The finding does not depend on it: items #0
+and #13 are wrong by arithmetic against their own prompt text, which is
+verified independently, and #14 remains unverifiable because the problem does
+not appear in GSM8K at all.
 
 ## Consequence
 

@@ -47,7 +47,11 @@ run_axes:
   # point on the curve (R6), never as the headline.
   concurrency: [1, 4, 16, 64]
   seed: [1234]
-  repeat: [0]
+  # Three repeats per R10. Throughput reproduced to only ~3.7% across runs
+  # where tau reproduced to <=0.002, so the throughput axis genuinely needs
+  # them. sweep.py offsets the seed by repeat index, so each repeat draws
+  # different prompts and cannot inherit a prefix cache from the last one.
+  repeat: [0, 1, 2]
 
 correctness:
   floor_correct: 0.10

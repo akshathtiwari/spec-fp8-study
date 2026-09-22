@@ -55,8 +55,15 @@ def _run_one_measurement(
 ) -> dict:
     """One workload x concurrency x repeat against an already-booted server."""
     workload = get_workload(run.workload)
-    n_requests = min(run.concurrency * 8, workload.size)
-    prompts = workload.prompts(n_requests, seed=run.seed)
+    # Request count: enough for steady state without letting concurrency 1
+    # dominate wall-clock (each c=1 request is seconds long), and capped so a
+    # single measurement cannot exhaust the prompt pool.
+    n_requests = min(max(16, run.concurrency * 4), 256, workload.size)
+    # Seed varies with repeat so each repeat draws DIFFERENT prompts. Reusing
+    # one seed would hand repeats 2 and 3 a prefix cache warmed by repeat 1,
+    # and they would measure cache warmth rather than run-to-run variance --
+    # which is the only reason repeats exist (R10).
+    prompts = workload.prompts(n_requests, seed=run.seed + 10_000 * run.repeat)
     sampling = workload.sampling()
 
     stats_before = scrape_spec_stats(handle.base_url, scraper)

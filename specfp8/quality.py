@@ -32,6 +32,15 @@ from specfp8.correctness import extract_gsm8k_answer
 
 PROMPTS = Path(__file__).parent / "workloads" / "quality_prompts.json"
 
+#: The quality measurement is pinned to the FIRST 256 problems, even though
+#: the file now holds the full 1319-problem test split. Phase 2 needed a
+#: bigger pool so its repeats could draw disjoint prompt sets, and growing the
+#: file would otherwise have silently changed what findings/F016 measured --
+#: the same class of drift the prompt-set fingerprint exists to catch. The
+#: file is in dataset order from offset 0, so the first 256 are byte-identical
+#: to the set F016 used.
+QUALITY_N = 256
+
 #: The quality stage overrides the gate's token budget rather than inheriting
 #: it. Measured on Qwen3-4B with thinking disabled, 27% of the gate's GSM8K
 #: generations hit a 256-token cap mid-reasoning, and the rate is higher on the
@@ -45,10 +54,18 @@ PROMPTS = Path(__file__).parent / "workloads" / "quality_prompts.json"
 QUALITY_MAX_TOKENS = 768
 
 
-def load_quality_prompts() -> tuple[list[str], list[float]]:
-    """Return (prompts, reference answers) in pinned order."""
+def load_quality_prompts(limit: int | None = QUALITY_N
+                         ) -> tuple[list[str], list[float]]:
+    """Return (prompts, reference answers) in pinned order.
+
+    Defaults to the first `QUALITY_N`, which is what the quality measurement
+    scores. Pass `limit=None` for the whole pool, which is what Phase 2
+    workloads draw from.
+    """
     data = json.load(open(PROMPTS))
     rows = data["gsm8k"]
+    if limit is not None:
+        rows = rows[:limit]
     return [r["prompt"] for r in rows], [r["answer"] for r in rows]
 
 
