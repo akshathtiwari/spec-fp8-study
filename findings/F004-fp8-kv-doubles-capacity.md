@@ -18,12 +18,12 @@ Holding model, mechanism, weights and **attention backend** fixed, switching the
 KV cache from BF16 to `fp8_e4m3` multiplies measured KV token capacity by
 **1.994x – 2.000x** (n=4), against a theoretical 2.000x for 16-bit to 8-bit.
 
-## Note on the backend column — see F018
+## Note on the backend column — see F019
 
-`--attention-backend` was not honoured, so the backend labels below do not
-identify different backends. The **ratio** is computed within one configuration
-and is unaffected, which is the finding; the rows simply must not be read as a
-backend comparison. Absolute capacities also shift ~12% with torch.compile
+The backend labels below are **target** backends and are valid; an earlier
+notice here doubted them on the basis of F018, which was wrong. In a
+speculative cell the draft selects its own backend independently (F019).
+Absolute capacities also shift ~12% with torch.compile
 cache state (cold 57,952 vs warm 64,784 for one cell), while the ratio holds at
 1.994-2.000x in both states.
 

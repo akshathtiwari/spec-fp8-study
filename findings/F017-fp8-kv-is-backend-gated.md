@@ -2,9 +2,9 @@
 id: F017
 title: FP8 KV works on exactly two of four SM89 backends, and vLLM's auto-switch is why
 kind: result
-status: superseded
+status: established
 confidence: high
-superseded_by: [F018]
+superseded_by: []
 date: 2026-09-21
 evidence:
   runs: [2026-09-21T14-5xZ_backend_gaps, 2026-09-21T07-41Z_backend]
@@ -13,15 +13,13 @@ evidence:
   code_sha: 017d655
 ---
 
-## PARTIALLY WITHDRAWN — see F018
+## Withdrawal rescinded — see F019
 
-`--attention-backend` does not select a backend in vLLM 0.29.0; it is validated
-but ignored. So the "ok" column below is not four backends, it is whichever
-backend `auto` chose for that KV dtype.
-
-**Still valid:** FLASH_ATTN and FLEX_ATTENTION genuinely *reject* fp8_e4m3, by
-name, with the FA3/SM90 reason. The flag is honoured during validation.
-**Withdrawn:** that TRITON_ATTN supports FP8 KV. That cell ran FlashInfer.
+An earlier notice here withdrew part of this finding on the basis of F018,
+which claimed `--attention-backend` was ignored. F018 was wrong: the flag
+controls the target model, and F018's parser had read the draft's independent
+selection. This finding stands as written. A speculative cell does involve two
+backends, so read it alongside F019.
 
 ## Claim
 

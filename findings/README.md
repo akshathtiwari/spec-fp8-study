@@ -19,7 +19,8 @@ wrong turns and what caught them — is part of the evidence.
 | [`F006`](F006-tau-invariant-to-precision.md) | tau is invariant to FP8 precision; backend choice perturbs it more | established | medium |
 | [`F009`](F009-determinism-is-server-state-dependent.md) | Generation is exactly reproducible across boots but drifts within a server | established | high |
 | [`F016`](F016-fp8-no-measurable-quality-cost.md) | FP8 weights and FP8 KV cost no measurable task accuracy, within +/-4.7 points | established | medium |
-| [`F017`](F017-fp8-kv-is-backend-gated.md) | FP8 KV works on exactly two of four SM89 backends, and vLLM's auto-switch is why | superseded | high |
+| [`F017`](F017-fp8-kv-is-backend-gated.md) | FP8 KV works on exactly two of four SM89 backends, and vLLM's auto-switch is why | established | high |
+| [`F019`](F019-target-and-draft-select-backends-independently.md) | Target and draft select attention backends independently; F018 was wrong | established | high |
 
 ## Method
 
@@ -49,4 +50,4 @@ wrong turns and what caught them — is part of the evidence.
 
 ---
 
-18 findings: 7 result, 4 method, 1 gap, 6 retraction.
+19 findings: 8 result, 4 method, 1 gap, 6 retraction.

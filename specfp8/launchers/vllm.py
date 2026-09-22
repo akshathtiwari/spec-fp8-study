@@ -183,10 +183,22 @@ class VllmLauncher:
                 content = f.read()
         except FileNotFoundError:
             return None
-        match = re.search(
-            r"Using\s+([A-Za-z0-9_]+)\s+attention\s+backend", content
-        )
-        return match.group(1).upper() if match else None
+        # Two different lines, because the engine takes two different code
+        # paths and words them differently:
+        #   forced  (cuda.py:432): "Using AttentionBackendEnum.FLASHINFER backend."
+        #   auto    (cuda.py:492): "Using FLASH_ATTN attention backend out of
+        #                           potential backends: [...]"
+        # Matching only the second is why a forced backend read as unverified.
+        # Last match wins: the engine can log a provisional choice before the
+        # final one.
+        for pattern in (
+            r"Using\s+AttentionBackendEnum\.([A-Za-z0-9_]+)\s+backend",
+            r"Using\s+([A-Za-z0-9_]+)\s+attention\s+backend",
+        ):
+            found = re.findall(pattern, content)
+            if found:
+                return found[-1].upper()
+        return None
 
     def kv_capacity(self, handle: ServerHandle) -> int | None:
         """Parse KV cache capacity, in tokens, from the vLLM startup log."""

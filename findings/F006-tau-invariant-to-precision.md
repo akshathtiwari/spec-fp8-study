@@ -4,7 +4,7 @@ title: tau is invariant to FP8 precision; backend choice perturbs it more
 kind: result
 status: established
 confidence: medium
-superseded_by: [F018]
+superseded_by: []
 date: 2026-09-21
 evidence:
   runs: [2026-09-21T04-32Z_h1, 2026-09-21T07-41Z_backend]
@@ -12,17 +12,13 @@ evidence:
   code_sha: b294050
 ---
 
-## PARTIAL WITHDRAWAL — see F018
+## Withdrawal rescinded — see F019
 
-The claim that "backend choice perturbs tau more than precision" is **withdrawn**.
-`--attention-backend` never selected a backend, so those cells all ran the same
-one and the 2.651-2.769 spread is not a backend effect. It came from the
-prompt-set change (F013). Within a fixed prompt set the same cell repeats at
-2.710/2.710/2.708, spread <= 0.002, so tau is reproducible and needs no error
-bars.
-
-**The precision result below is unaffected** — those cells share a prompt set
-and a backend, which is exactly the comparison it makes.
+An earlier notice here withdrew part of this finding on the basis of F018,
+which claimed `--attention-backend` was ignored. F018 was wrong: the flag
+controls the target model, and F018's parser had read the draft's independent
+selection. This finding stands as written. A speculative cell does involve two
+backends, so read it alongside F019.
 
 ## Claim
 

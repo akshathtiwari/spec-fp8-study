@@ -9,10 +9,21 @@ evidence:
   runs: [2026-09-21T17-08Z_repeat, 2026-09-21T07-41Z_backend, 2026-09-21T14-5xZ_backend_gaps]
   analysis: [analysis/out/tables/backend_attribution.md]
   code_sha: 95ac8e1
-supersedes: [F017, F006]
+supersedes: []
+superseded_by: [F019]
 ---
 
-## Claim (withdrawn)
+## THIS FINDING WAS ITSELF WRONG — see F019
+
+`--attention-backend` **is** honoured; it controls the target model. In a
+speculative cell the draft selects its own backend independently, and this
+finding's parser read only the draft's line. An honoured request therefore
+looked discarded. F017, F006 and F004 are restored.
+
+Kept because the reasoning below shows how a partial parser produced a
+confident, wrong retraction of correct results.
+
+## Claim (withdrawn, and the withdrawal was mistaken)
 
 `sweeps/backend.yaml` and `sweeps/backend_gaps.yaml` were built on the
 assumption that `--attention-backend X` makes the engine run backend X. It does
