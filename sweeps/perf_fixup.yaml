@@ -1,0 +1,47 @@
+# Re-measure the four RunCells that smoke test v2 recorded under the old
+# request-count formula (n = 8*concurrency) before the pre-flight fix changed
+# it to min(max(16, 4*concurrency), 256).
+#
+# Those four are valid measurements but were taken with a different number of
+# requests from the other 92, so they are not comparable within the grid.
+# Request count is derived in code and is not part of the RunCell identity,
+# so the staleness check could not see the change -- the same class of gap as
+# sampling_params and the quality config before it. Adding it to cell_id
+# would rewrite every run_id and invalidate the whole sweep, so instead the
+# count is recorded per measurement and the analysis flags inconsistency.
+#
+# 4 RunCells over 2 ServerCells. Run with --force.
+
+model: Qwen/Qwen3-4B
+model_revision: main
+spec_tokens: 5
+
+axes:
+  engine: [vllm]
+  engine_ref: [vllm-0.29.0]
+  mechanism: [none, dflash]
+  weight_precision: [bf16]
+  kv_cache_dtype: [auto]
+  attn_backend: [FLASHINFER]
+
+defaults:
+  draft_model: null
+  draft_revision: null
+  block_size: null
+  guided_decoding: false
+
+per_mechanism:
+  dflash:
+    draft_model: z-lab/Qwen3-4B-DFlash-b16
+    draft_revision: main
+    block_size: 16
+
+run_axes:
+  workload: [gsm8k]
+  concurrency: [1, 16]
+  seed: [1234]
+  repeat: [0]
+
+correctness:
+  floor_correct: 0.10
+  floor_degraded: 0.05

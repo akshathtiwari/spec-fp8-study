@@ -14,3 +14,4 @@
 {"ts":"2026-09-21T17:58:01.816784+00:00","phase":"probe","session_gpu_s":852.6,"cumulative_gpu_s":852.6}
 {"ts":"2026-09-22T03:26:15.951411+00:00","phase":"sweep","session_gpu_s":1081.7,"cumulative_gpu_s":1081.7}
 {"ts":"2026-09-22T03:48:00.428451+00:00","phase":"sweep","session_gpu_s":1181.2,"cumulative_gpu_s":1181.2}
+{"ts":"2026-09-22T06:21:11.683460+00:00","phase":"sweep","session_gpu_s":8264.8,"cumulative_gpu_s":8264.8}
