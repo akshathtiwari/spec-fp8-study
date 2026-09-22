@@ -625,8 +625,19 @@ def backend_report() -> str:
     image=vllm_image, gpu="L4", timeout=90 * 60, **GPU_GUARDRAILS,
     volumes={"/models": model_vol},
 )
-def boot_variance(boots: int = 2) -> str:
+def boot_variance(boots: int = 2, mechanism: str = "dflash") -> str:
     """Does --enforce-eager still win under load, or does it invert?
+
+    `mechanism` exists because the first run of this test answered the
+    question only for speculative cells. `--enforce-eager` is an
+    engine-wide switch, so pinning it for the grid also pins it for the
+    non-speculative baseline -- where CUDA graphs have no spec-decode
+    fallback to trip over and are expected to *help*. If eager costs the
+    baseline throughput and is applied to both arms anyway, the reported
+    speculative speedup is partly manufactured by the harness. Running the
+    identical code path at `mechanism="none"` is what rules that out; a
+    separate copied function would not, because the thing being compared is
+    the measurement procedure itself.
 
     findings/F021 measured it only at concurrency 1 -- precisely the regime
     this study argues is misleading. CUDA graphs earn their keep at larger
@@ -656,7 +667,7 @@ def boot_variance(boots: int = 2) -> str:
     from specfp8.workloads import get_workload
 
     cell = next(c for c in expand("sweeps/boot_stability.yaml")
-                if c.mechanism == "dflash")
+                if c.mechanism == mechanism)
     workload = get_workload("gsm8k")
     scraper = VllmMetricsScraper()
     sampling = workload.sampling()
@@ -664,7 +675,8 @@ def boot_variance(boots: int = 2) -> str:
     nreq = lambda c: min(max(16, c * 4), 256, workload.size)
 
     arms = {"default": [], "enforce_eager": ["--enforce-eager"]}
-    out = [f"concurrency x CUDA-graph test: {boots} boots x {len(arms)} arms",
+    out = [f"concurrency x CUDA-graph test: {boots} boots x {len(arms)} arms "
+           f"[mechanism={mechanism}]",
            f"cell: {cell.mechanism}|{cell.weight_precision}|"
            f"{cell.kv_cache_dtype}|{cell.attn_backend}", ""]
     data: dict[tuple, list[float]] = {}
@@ -923,7 +935,8 @@ def main(
         print(backend_report.remote())
         return
     if engine == "bootvar":
-        print(boot_variance.remote(boots=repeats if repeats > 1 else 2))
+        print(boot_variance.remote(boots=repeats if repeats > 1 else 2,
+                                   mechanism=sweep if sweep != "compat" else "dflash"))
         return
     if engine == "backends":
         print(list_attention_backends.remote())
