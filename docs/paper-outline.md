@@ -116,6 +116,51 @@ vulnerable to confound 2.
 - [ ] F008 (accuracy underpowered at n=16) is superseded by the n=256 run;
       confirm the paper cites the powered numbers.
 
+---
+
+## Pre-registered prediction for perf_v2 (recorded 2026-09-23, before the run)
+
+Written down in advance so it cannot be retrofitted to whatever the grid
+returns. If the measurement contradicts this, the contradiction gets reported
+as-is.
+
+The existing Phase 2 speculative rows at concurrency 1 split cleanly on
+weight precision:
+
+| mech | weights | kv | tok/s |
+|---|---|---|---|
+| dflash | bf16 | auto | 36.3 |
+| dflash | bf16 | fp8_e4m3 | 30.6 |
+| dflash | fp8 | auto | 109.6 |
+| dflash | fp8 | fp8_e4m3 | 97.4 |
+
+Read naively this is "FP8 weights make speculative decoding ~3x faster",
+which is close to the withdrawn 1.16x-vs-2.71x interaction (F020).
+
+**It is probably mostly mode assignment.** F021 measured *the same bf16 cell*
+at **74.2 tok/s** with CUDA graphs off. So the bf16 rows sit in the slow mode
+and the fp8 rows do not. Each of these cells is a single boot, and F020
+established that a single boot cannot tell you which mode you got.
+
+Concretely, the prediction is:
+
+1. With graphs off, **all four** speculative cells land in fast mode, and the
+   bf16 rows rise to roughly 70-80 tok/s rather than staying near 30.
+2. The FP8-weight advantage **survives but shrinks sharply** — from ~3x to
+   roughly 1.2-1.4x. It should not vanish: fewer weight bytes is a real
+   bandwidth saving, and 97-110 already exceeds the 74.2 that bf16 reaches
+   in fast mode, which is hard to explain by mode alone.
+3. The **fp8-weight rows move least** between arms, since they appear to be
+   in fast mode already.
+
+If (1) holds and (2) does not — if the gap stays near 3x with graphs off —
+then FP8 weights genuinely do carry a large speculative advantage and the
+mode story does not explain this split. That would be a real result, and it
+would mean the withdrawal in F020 was too aggressive.
+
+This is also the sharpest available test of whether making `enforce_eager` an
+axis was worth the extra eight boots.
+
 ## Deliberately not claimed
 
 - Nothing about SM90, since the study ran on SM89 only.

@@ -46,10 +46,48 @@ def load() -> dict[str, dict]:
     return latest
 
 
+#: Config fields shown as columns. Any field NOT here is invisible in the
+#: table, which is safe only if it never varies -- see `display_collisions`.
+DISPLAY_FIELDS = ("mechanism", "weight_precision", "kv_cache_dtype",
+                  "attn_backend", "enforce_eager")
+
+
 def key(rec: dict) -> tuple:
-    c = rec["config"]
-    return (c["mechanism"], c["weight_precision"], c["kv_cache_dtype"],
-            rec["load"]["workload"], rec["load"]["concurrency"])
+    """Group by the cell's content-addressed identity, not by a field list.
+
+    This used to be a hand-written tuple of (mechanism, weight_precision,
+    kv_cache_dtype), which meant any config axis not in that tuple was
+    silently averaged over. attn_backend was already missing -- harmless
+    only because perf.yaml pinned it -- and adding `enforce_eager` as an
+    axis would have merged a 31 tok/s default-mode cell with a 74 tok/s
+    eager cell into one "mean" (F021).
+
+    A hand-listed key fails the same way every time: add an axis, forget
+    the key, average across it. cell_id already IS the server config's
+    identity, so keying on it cannot miss a field.
+    """
+    return (rec["cell_id"], rec["load"]["workload"],
+            rec["load"]["concurrency"])
+
+
+def label(cfg: dict) -> tuple:
+    """The config values shown in the table for a cell."""
+    return tuple(cfg.get(f) for f in DISPLAY_FIELDS)
+
+
+def display_collisions(groups: dict) -> dict[tuple, set[str]]:
+    """Display labels that map to more than one distinct cell.
+
+    Keying on cell_id makes the aggregation correct, but the table still
+    shows a subset of fields. If two genuinely different configs render to
+    the same row, the table reads as a duplicate and the reader cannot tell
+    which is which. Catching it here means the next axis added shows up as
+    a warning rather than as two mysterious identical rows.
+    """
+    seen: dict[tuple, set[str]] = defaultdict(set)
+    for (cid, workload, conc), rs in groups.items():
+        seen[(label(rs[0]["config"]), workload, conc)].add(cid)
+    return {k: v for k, v in seen.items() if len(v) > 1}
 
 
 def main() -> None:
@@ -93,8 +131,9 @@ def main() -> None:
           "includes prompt-sampling variance, not just measurement noise -- "
           "it answers \"what would a different draw from GSM8K give?\" rather "
           "than \"how repeatable is this run?\".", "",
-          "| mech | weights | kv | conc | n | tok/s | +/- | req/s | tau | acc |",
-          "|---|---|---|---|---|---|---|---|---|---|"]
+          "| mech | weights | kv | backend | graphs | conc | n | tok/s | "
+          "+/- | req/s | tau | acc |",
+          "|---|---|---|---|---|---|---|---|---|---|---|---|"]
 
     def stat(vals):
         vals = [v for v in vals if v is not None]
@@ -103,40 +142,73 @@ def main() -> None:
         return (statistics.mean(vals),
                 statistics.stdev(vals) if len(vals) > 1 else 0.0)
 
-    for k in sorted(groups):
+    for k in sorted(groups, key=lambda k: (label(groups[k][0]["config"]), k[2])):
         rs = groups[k]
+        cfg = rs[0]["config"]
+        mech, wp, kv, backend, eager = label(cfg)
         tok, tok_sd = stat([r["throughput"]["output_tokens_per_s"] for r in rs])
         rps, _ = stat([r["throughput"]["requests_per_s"] for r in rs])
         tau, _ = stat([(r.get("spec") or {}).get("tau") for r in rs])
         acc, _ = stat([r["task"]["accuracy"] for r in rs])
         n = rs[0]["load"]["n_requests"]
         pct = f"{tok_sd / tok * 100:.1f}%" if tok else "-"
+        # "graphs" is the reader-facing sense of the flag: enforce_eager
+        # means CUDA graphs are OFF, and a column that inverts its meaning
+        # between name and value is a column that gets misread.
+        graphs = "off" if eager else "on"
         L.append(
-            f"| {k[0]} | {k[1]} | {k[2]} | {k[4]} | {n} | {tok:.1f} | "
+            f"| {mech} | {wp} | {kv} | {backend or 'auto'} | {graphs} | "
+            f"{k[2]} | {n} | {tok:.1f} | "
             f"{pct} | {rps:.3f} | {f'{tau:.2f}' if tau else '-'} | "
             f"{f'{acc:.1%}' if acc else '-'} |")
 
     # Scaling: what does concurrency actually buy, per configuration?
+    conc_levels = sorted({k[2] for k in groups if k[2] != 1})
     L += ["", "## Throughput scaling with concurrency", "",
           "Ratio to that configuration's own concurrency-1 throughput. "
-          "Perfectly linear scaling would give 4 / 16 / 64.", "",
-          "| mech | weights | kv | c=1 tok/s | x4 | x16 | x64 |",
-          "|---|---|---|---|---|---|---|"]
-    cfgs = sorted({k[:3] for k in groups})
-    for cfg in cfgs:
+          "Perfectly linear scaling would give the concurrency itself.", "",
+          "| mech | weights | kv | backend | graphs | c=1 tok/s | "
+          + " | ".join(f"x{c}" for c in conc_levels) + " |",
+          "|---|---|---|---|---|---|" + "---|" * len(conc_levels)]
+    cells = sorted({k[0] for k in groups},
+                   key=lambda cid: label(next(groups[k][0]["config"]
+                                              for k in groups if k[0] == cid)))
+    for cid in cells:
+        rows_for = {k[2]: groups[k] for k in groups if k[0] == cid}
+        if 1 not in rows_for:
+            continue
         base = stat([r["throughput"]["output_tokens_per_s"]
-                     for r in groups.get((*cfg, "gsm8k", 1), [])])[0]
+                     for r in rows_for[1]])[0]
         if not base:
             continue
-        row = [f"| {cfg[0]} | {cfg[1]} | {cfg[2]} | {base:.1f} "]
-        for c in (4, 16, 64):
+        mech, wp, kv, backend, eager = label(rows_for[1][0]["config"])
+        row = [f"| {mech} | {wp} | {kv} | {backend or 'auto'} | "
+               f"{'off' if eager else 'on'} | {base:.1f} "]
+        for c in conc_levels:
             v = stat([r["throughput"]["output_tokens_per_s"]
-                      for r in groups.get((*cfg, "gsm8k", c), [])])[0]
+                      for r in rows_for.get(c, [])])[0]
             row.append(f"| {v / base:.1f}x " if v else "| - ")
         L.append("".join(row) + "|")
 
+    collisions = display_collisions(groups)
+    if collisions:
+        warn = ["", "> **Warning — rows that differ in a field this table "
+                "does not show.** Each of these labels covers more than one "
+                "distinct cell, so the rows are not duplicates and cannot be "
+                "told apart here. Add the differing field to "
+                "`DISPLAY_FIELDS`:", ""]
+        for (lab, workload, conc), cids in sorted(
+                collisions.items(), key=lambda kv: str(kv[0])):
+            warn.append(f"> - {lab} @ {workload} c={conc}: "
+                        f"{len(cids)} cells ({', '.join(sorted(cids))})")
+        warn.append("")
+        L = L[:4] + warn + L[4:]
+
     (OUT / "throughput.md").write_text("\n".join(L) + "\n")
     print(f"  wrote analysis/out/tables/throughput.md ({len(groups)} cells)")
+    if collisions:
+        print(f"  WARNING {len(collisions)} display label(s) cover multiple "
+              f"cells -- a config axis is missing from DISPLAY_FIELDS")
     if inconsistent:
         print(f"  WARNING inconsistent request counts at concurrency "
               f"{sorted(inconsistent)}")
