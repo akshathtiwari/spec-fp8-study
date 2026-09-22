@@ -51,9 +51,13 @@ are the first thing to move out.
 results/
 ├── README.md                    provenance and regeneration instructions
 ├── cells.jsonl                  one record per probed cell, append-only
+├── sweep.jsonl                  one record per Phase 2 measurement
+├── probes.jsonl                 one record per bespoke-probe measurement
+├── boot_failures.jsonl          one record per boot that never became healthy
 ├── budget.log                   GPU seconds per phase
 ├── runs.json                    run manifests (see below)
 ├── requests/<cell_id>.jsonl     one record per generated request
+├── runs/<run_id>.jsonl          per-request rows for a Phase 2 measurement
 └── logs/<cell_id>.log           engine stdout/stderr for that cell
 ```
 
@@ -117,6 +121,19 @@ The total is a **floor**: container start and image pull fall outside the
 timed region, and four GPU entrypoints were unbilled before 2026-09-23 —
 including the runs behind F020 and F021. The report states both gaps rather
 than presenting a number that looks more precise than it is.
+
+**`probes.jsonl`** exists because the bespoke GPU probes previously wrote
+nothing at all, so findings built on them cited terminal output — which §4
+rule 4 forbids, and which left F009, F014 and F021 with no raw evidence in
+the repo. A probe that cannot write a record produces a claim that cannot
+be checked.
+
+**`boot_failures.jsonl`** records boots that never became healthy: verbatim
+error, config, argv, and the free GPU memory the precondition saw. It is
+deliberately **not** `cells.jsonl` — a harness OOM sitting in the
+compatibility matrix is the exact confusion F012 was about. Without it a
+failed boot left a silent hole: nothing said the cell had been attempted,
+and the verbatim error was summarised to one word and dropped.
 
 **`runs.json`** groups cells into the invocations that produced them. It is
 **derived** by `analysis/build_runs.py`, not appended to — the only regenerated
