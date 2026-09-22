@@ -80,6 +80,33 @@ tau comparisons are only meaningful with the backend held fixed, and F003 shows
   finding is unaffected, because every cell in it was measured over the same
   set; only the absolute values move.
 
+## Cross-finding correction (2026-09-22): the backend claim is not separable from noise
+
+F020 and F021 later measured tau's **boot-to-boot** variation for an identical
+configuration with identical prompts: **1.32%** (4.0913 - 4.1452 over four
+boots). Comparing that against this finding's two claims:
+
+| claim | measured effect | boot-to-boot noise | separable? |
+|---|---|---|---|
+| precision does **not** move tau | 0.7% | 1.32% | effect is *below* noise — consistent with no effect |
+| backend **does** move tau | 2.25% | 1.32% | only 1.7x noise, from **single boots** — not separable |
+
+**The primary claim strengthens.** A precision effect of 0.7% sits below the
+noise floor, so "tau is invariant to FP8 precision" is supported in the
+precise sense that no effect larger than roughly 1.3% is detectable.
+
+**The secondary claim weakens and is now withdrawn as stated.** The 2.708 -
+2.769 spread across backends was measured one boot per backend, and at 1.7x
+the boot-to-boot noise it cannot be distinguished from having sampled
+different boots. Establishing it would need several boots per backend. This
+is the third time this particular claim has moved — asserted, withdrawn by
+F018 (wrongly), restored by F019, and now withdrawn on sounder grounds — and
+the reason it kept moving is that it was always near the noise floor and
+nobody had measured that floor.
+
+Neither correction touches the precision comparison, which is what this
+finding exists for.
+
 ## How to reproduce
 
 ```bash
