@@ -625,38 +625,31 @@ def backend_report() -> str:
     image=vllm_image, gpu="L4", timeout=90 * 60, **GPU_GUARDRAILS,
     volumes={"/models": model_vol},
 )
-def boot_variance(boots: int = 3) -> str:
-    """Can the 2.16x boot-to-boot swing in speculative throughput be removed?
+def boot_variance(boots: int = 2) -> str:
+    """Does --enforce-eager still win under load, or does it invert?
 
-    findings/F020 established the swing but not its cause. The engine warns
-    that FULL_AND_PIECEWISE CUDA graphs are unsupported with spec-decode on
-    FlashInfer and falls back to PIECEWISE; if how much gets captured varies
-    per boot, throughput varies with it.
+    findings/F021 measured it only at concurrency 1 -- precisely the regime
+    this study argues is misleading. CUDA graphs earn their keep at larger
+    batch sizes, so the ~1.9x advantage could reverse at 16 or 64. That
+    decides whether the speculative grid can be re-measured at one boot per
+    cell (cheap, stable by construction) or needs boot-level repeats.
 
-    Three arms, each booted `boots` times in ONE container with identical
-    prompts:
+    `piecewise` is dropped: F021 showed it reproduces `default` exactly
+    (30.04 vs 30.57), so it carries no extra information. `default` stays as
+    the in-container control -- without it, a stable enforce_eager could just
+    mean "this container was stable", which is the F018 trap.
 
-      default          reproduce the instability here, so the comparison is
-                       within-container rather than against earlier runs
-      enforce_eager    no CUDA graphs at all. Should be stable but slower --
-                       if it is, capture variance is the cause
-      piecewise        cudagraph_mode pinned to PIECEWISE rather than
-                       negotiated down from FULL_AND_PIECEWISE
-
-    A stable arm that is also fast is the win: it makes the grid cheaper
-    *and* meaningful, instead of averaging over noise.
-
-    This deliberately does not touch ServerCell. Adding a field there would
+    Not routed through ServerCell on purpose: adding a field there would
     change every cell_id and orphan every result collected so far.
     """
-    import asyncio, json as _json, os, statistics, subprocess, time
+    import asyncio, os, statistics, time
 
     os.environ["SPECFP8_MODEL_CACHE"] = "/models"
     _setup_repo()
 
-    from specfp8.cells import expand, cell_id
+    from specfp8.cells import expand
     from specfp8.client import load_run
-    from specfp8.launchers.base import find_free_port, poll_health, stop_process
+    from specfp8.launchers.base import find_free_port, stop_process
     from specfp8.launchers.vllm import VllmLauncher
     from specfp8.metrics.base import scrape_spec_stats, delta as mdelta
     from specfp8.metrics.vllm import VllmMetricsScraper
@@ -665,73 +658,61 @@ def boot_variance(boots: int = 3) -> str:
     cell = next(c for c in expand("sweeps/boot_stability.yaml")
                 if c.mechanism == "dflash")
     workload = get_workload("gsm8k")
-    prompts = workload.prompts(16, seed=1234)
-    sampling = workload.sampling()
     scraper = VllmMetricsScraper()
+    sampling = workload.sampling()
+    CONC = [1, 16, 64]
+    nreq = lambda c: min(max(16, c * 4), 256, workload.size)
 
-    arms = {
-        "default": [],
-        "enforce_eager": ["--enforce-eager"],
-        "piecewise": ["--compilation-config",
-                      _json.dumps({"cudagraph_mode": "PIECEWISE"})],
-    }
-
-    out: list[str] = [f"boot-variance test: {boots} boots x {len(arms)} arms",
-                      f"cell: {cell.mechanism}|{cell.weight_precision}|"
-                      f"{cell.kv_cache_dtype}|{cell.attn_backend}", ""]
-    results: dict[str, list[float]] = {}
+    arms = {"default": [], "enforce_eager": ["--enforce-eager"]}
+    out = [f"concurrency x CUDA-graph test: {boots} boots x {len(arms)} arms",
+           f"cell: {cell.mechanism}|{cell.weight_precision}|"
+           f"{cell.kv_cache_dtype}|{cell.attn_backend}", ""]
+    data: dict[tuple, list[float]] = {}
 
     for arm, extra in arms.items():
         base = VllmLauncher()
         launcher = VllmLauncher()
-        # Append the arm's flags without disturbing ServerCell identity.
         launcher.argv = lambda c, p, _b=base, _e=extra: _b.argv(c, p) + _e
-        tps: list[float] = []
         for i in range(boots):
-            port = find_free_port()
-            handle = launcher.start(cell, f"bv_{arm}_{i}", port, "logs")
+            handle = launcher.start(cell, f"cv_{arm}_{i}", find_free_port(), "logs")
             try:
                 h = launcher.wait_healthy(handle, timeout_s=900)
                 if not h.ok:
                     out.append(f"  {arm} boot {i+1}: FAILED ({h.status})")
                     continue
-                before = scrape_spec_stats(handle.base_url, scraper)
-                t0 = time.monotonic()
-                res = asyncio.run(load_run(
-                    handle.base_url, cell.model, prompts, sampling,
-                    concurrency=1, n_warmup=2, timeout_s=600.0))
-                wall = time.monotonic() - t0
-                after = scrape_spec_stats(handle.base_url, scraper)
-                toks = sum(r.output_tokens for r in res if r.ok)
-                tok_s = toks / wall if wall else 0.0
-                tau = None
-                if before and after:
-                    tau = mdelta(before, after).tau
-                tps.append(tok_s)
-                out.append(f"  {arm:14} boot {i+1}: {tok_s:7.2f} tok/s  "
-                           f"boot={handle.boot_time_s:5.0f}s  "
-                           f"tau={tau:.3f}" if tau else
-                           f"  {arm:14} boot {i+1}: {tok_s:7.2f} tok/s")
+                for c in CONC:
+                    prompts = workload.prompts(nreq(c), seed=1234)
+                    before = scrape_spec_stats(handle.base_url, scraper)
+                    t0 = time.monotonic()
+                    res = asyncio.run(load_run(
+                        handle.base_url, cell.model, prompts, sampling,
+                        concurrency=c, n_warmup=min(4, nreq(c)), timeout_s=900.0))
+                    wall = time.monotonic() - t0
+                    after = scrape_spec_stats(handle.base_url, scraper)
+                    toks = sum(r.output_tokens for r in res if r.ok)
+                    tok_s = toks / wall if wall else 0.0
+                    tau = mdelta(before, after).tau if (before and after) else None
+                    data.setdefault((arm, c), []).append(tok_s)
+                    out.append(f"  {arm:14} boot {i+1} c={c:<3} "
+                               f"{tok_s:8.2f} tok/s  tau={tau:.3f}" if tau
+                               else f"  {arm:14} boot {i+1} c={c:<3} {tok_s:8.2f} tok/s")
             finally:
                 stop_process(handle)
                 time.sleep(5)
-        results[arm] = tps
 
-    out.append("")
-    out.append(f"{'arm':16}{'mean':>9}{'sd':>8}{'sd%':>8}{'min':>9}{'max':>9}{'ratio':>8}")
-    out.append("-" * 68)
-    for arm, tps in results.items():
-        if len(tps) < 2:
-            out.append(f"{arm:16}  insufficient boots")
+    out += ["", f"{'concurrency':>12}{'default':>12}{'eager':>12}{'eager/default':>15}"]
+    out.append("-" * 51)
+    for c in CONC:
+        d = data.get(("default", c), [])
+        e = data.get(("enforce_eager", c), [])
+        if not d or not e:
             continue
-        m = statistics.mean(tps); sd = statistics.stdev(tps)
-        out.append(f"{arm:16}{m:>9.2f}{sd:>8.2f}{sd/m*100:>7.1f}%"
-                   f"{min(tps):>9.2f}{max(tps):>9.2f}{max(tps)/min(tps):>7.2f}x")
-    out.append("")
-    out.append("Target: an arm with ratio near 1.0. If it is also fast, the "
-               "grid gets cheaper and meaningful. If only enforce_eager is "
-               "stable, capture variance is confirmed as the cause but costs "
-               "speed.")
+        dm, em = statistics.mean(d), statistics.mean(e)
+        out.append(f"{c:>12}{dm:>12.1f}{em:>12.1f}{em/dm:>14.2f}x")
+    out += ["", "Ratio > 1 at every concurrency: pin --enforce-eager and "
+                "re-measure at one boot per cell.",
+            "Ratio inverting at 16 or 64: the advantage is low-concurrency "
+            "only, and the grid needs boot-level repeats instead."]
     return "\n".join(out)
 
 
@@ -942,7 +923,7 @@ def main(
         print(backend_report.remote())
         return
     if engine == "bootvar":
-        print(boot_variance.remote(boots=repeats if repeats > 1 else 3))
+        print(boot_variance.remote(boots=repeats if repeats > 1 else 2))
         return
     if engine == "backends":
         print(list_attention_backends.remote())
