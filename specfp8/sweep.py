@@ -42,6 +42,7 @@ from specfp8.probe import (
 from specfp8.store import (
     append,
     append_budget_log,
+    append_record,
     argv_fingerprint,
     completed_cells,
     persist_log,
@@ -222,7 +223,9 @@ def run_sweep(sweep_path: str, results_dir: str, force: bool = False,
         print(f"\n{'=' * 64}\n{head}\n  {len(pending)} measurements, one boot"
               f"\n{'=' * 64}")
 
-        free = wait_for_gpu_free(MIN_FREE_GPU_MIB, timeout_s=180.0)
+        # 300s: a killed vLLM releases ~20 GiB, and the whole point of the
+        # raised threshold is to wait for that rather than boot into it.
+        free = wait_for_gpu_free(MIN_FREE_GPU_MIB, timeout_s=300.0)
         if free is not None and free < MIN_FREE_GPU_MIB:
             print(f"  GPU only {free:.0f} MiB free — harness fault, skipping "
                   f"group (it will be retried, not recorded as a result)")
@@ -236,6 +239,34 @@ def run_sweep(sweep_path: str, results_dir: str, force: bool = False,
             health = launcher.wait_healthy(handle, timeout_s=HEALTH_TIMEOUT_S)
             if not health.ok:
                 print(f"  boot failed: {health.status} — skipping group")
+                # Record it. Previously a failed boot left the grid with a
+                # silent hole: nothing in results/ said the cell had been
+                # attempted, let alone why, and the verbatim error was
+                # summarised to one word and discarded -- which is exactly
+                # what F012 says must never happen to a boot failure.
+                #
+                # Written to its own file, never to cells.jsonl: a harness
+                # OOM sitting in the compatibility matrix is the confusion
+                # F012 was about.
+                append_record({
+                    "ts": datetime.now(timezone.utc).isoformat(),
+                    "phase": "sweep_boot_failure",
+                    "sweep": sweep_path,
+                    "cell_id": sid,
+                    "config": server.model_dump(),
+                    "env": env.model_dump(),
+                    "argv": launcher.argv(server, handle.port),
+                    "outcome": {
+                        "status": health.status,
+                        "error_verbatim": health.error_verbatim,
+                    },
+                    # What the precondition saw, so a threshold that is too
+                    # low shows up in the record rather than in a guess.
+                    "gpu_free_mib_before_boot": free,
+                    "min_free_gpu_mib": MIN_FREE_GPU_MIB,
+                    "skipped_measurements": len(pending),
+                    "log_path": f"results/logs/{sid}.log",
+                }, results_path, "boot_failures.jsonl")
                 continue
             print(f"  healthy in {handle.boot_time_s:.0f}s | "
                   f"backend {launcher.selected_backend(handle)} | "
