@@ -167,7 +167,8 @@ def _print_results(results_path="/results/cells.jsonl"):
     },
 )
 def run_vllm_probe(sweep_file: str = "compat", retry_failed: bool = False,
-                   quality: bool = False, repeats: int = 1):
+                   quality: bool = False, repeats: int = 1,
+                   force: bool = False):
     """Run the probe with vLLM engine."""
     import os
 
@@ -224,7 +225,7 @@ def run_vllm_probe(sweep_file: str = "compat", retry_failed: bool = False,
             + (["--quality"] if quality else [])
             # Every repeat after the first must bypass the staleness skip,
             # otherwise the cells it just completed are treated as done.
-            + (["--force"] if repeats > 1 else []),
+            + (["--force"] if (force or repeats > 1) else []),
             )
     finally:
         stop_commits.set()
@@ -769,6 +770,7 @@ def main(
     retry_failed: bool = False,
     quality: bool = False,
     repeats: int = 1,
+    force: bool = False,
 ):
     """Entry point: modal run cloud/modal_probe.py [--engine vllm|sglang|status|help] [--sweep mini|compat]"""
     if engine == "help":
@@ -797,7 +799,8 @@ def main(
         return
     if engine == "vllm":
         count = run_vllm_probe.remote(sweep_file=sweep, retry_failed=retry_failed,
-                                      quality=quality, repeats=repeats)
+                                      quality=quality, repeats=repeats,
+                                      force=force)
         print(f"\nDone. {count} cells completed.")
     elif engine == "sglang":
         run_sglang_probe.remote(retry_failed=retry_failed)
