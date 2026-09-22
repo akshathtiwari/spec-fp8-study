@@ -1,6 +1,11 @@
 # Data model — how results, analyses and findings are recorded
 
-**rev 1 · 2026-09-21**
+**rev 2 · 2026-09-23**
+
+> Changes since rev 1: the cell-id rule is now a versioned schema (§2.1), the
+> budget log derives its own running total and covers every GPU entrypoint
+> (§2.2), and the chain in §5 is enforced by a script rather than by
+> intention (§6).
 
 This document specifies where every artifact lives, what may change it, and how a
 claim in the paper is traced back to the bytes that justify it. It exists because
@@ -67,6 +72,51 @@ merge. Two fields guard against a stale record being mistaken for a current one:
 - `argv` and `argv_fingerprint` — the exact launch command, with port and
   download directory normalised out so the hash is stable across hosts.
 - `sampling_params` — changes tau and accuracy without changing argv.
+
+### 2.1 The cell-id rule is a versioned schema
+
+`cell_id` is content-addressed, which makes the hashing rule part of the
+on-disk format rather than an implementation detail. Hashing the whole model
+dump made the schema unextendable: any new field rehashed every cell,
+orphaning committed results and breaking the ids cited in findings. The
+effect was that knobs worth measuring got tested *outside* the record —
+the boot-variance probes deliberately bypassed `ServerCell` — so the store's
+design was pushing evidence out of the store.
+
+The rule now has two tiers:
+
+- **v1 fields** (`_ID_SCHEMA_V1` in `specfp8/cells.py`) are always hashed.
+  This reproduces every pre-existing id byte for byte.
+- **Post-v1 fields** are hashed only when set to a non-default value. A cell
+  that does not use a new knob keeps its old id, which is correct — it is
+  the same configuration. A cell that does use it gets a new one.
+
+Simply omitting every field at its default would not work: `attn_backend`
+defaults to `"auto"` and is already inside the existing hashes, so omitting
+it would rewrite the ids the rule exists to protect.
+
+**Post-v1 defaults may not be changed.** Editing one silently re-partitions
+ids, which orphans results without any individual record looking wrong.
+`analysis/check_provenance.py` recomputes every stored id from its stored
+config and fails if the rule drifts.
+
+### 2.2 `budget.log`
+
+One line per GPU invocation. `session_gpu_s` is that invocation;
+`cumulative_gpu_s` is the running total, **derived by the writer** from the
+sum of session figures on file rather than supplied by the caller — both
+callers previously passed the session figure for both fields, so the total
+restarted on every run and read an order of magnitude low.
+
+Consumers should sum `session_gpu_s` rather than read the last
+`cumulative_gpu_s`, because entries written before 2026-09-23 carry the
+restarted value and `results/` is append-only, so they cannot be corrected
+in place. `analysis/budget_report.py` does this.
+
+The total is a **floor**: container start and image pull fall outside the
+timed region, and four GPU entrypoints were unbilled before 2026-09-23 —
+including the runs behind F020 and F021. The report states both gaps rather
+than presenting a number that looks more precise than it is.
 
 **`runs.json`** groups cells into the invocations that produced them. It is
 **derived** by `analysis/build_runs.py`, not appended to — the only regenerated
@@ -175,7 +225,40 @@ finding.
 
 ---
 
-## 6. Naming and time
+## 6. The chain is checked, not merely asserted
+
+`analysis/check_provenance.py` walks the chain a reader would walk and exits
+with the number of defects, so it can gate a commit:
+
+1. Every `analysis/out/...` path cited by a finding exists.
+2. Every cited `cell_id` appears in `results/cells.jsonl`.
+3. Those cells have a persisted engine log — backend selection and verbatim
+   failure text live only there (F012, F017).
+4. Frontmatter is present and uses the declared vocabulary.
+5. `supersedes` / `superseded_by` are symmetric and resolve; a one-way link
+   is how a retracted claim keeps getting cited.
+6. Every stored `cell_id` still recomputes from its stored config (§2.1).
+
+Rev 1 stated the rule in §5 and nothing enforced it. On first run the script
+found seven defects. Five were retractions missing "What this does NOT
+establish", which is the wrong rule for them — a withdrawal states what was
+wrong rather than making a claim — so retractions are exempt and the script
+says why. Two were real.
+
+Writing one of the two paid for itself immediately: stating F020's limits
+made clear that reading a 2.16x range as *continuous* variance is what made
+its hypothesis look reasonable, when six boots cannot separate a wide
+unimodal spread from two tight modes. That is the error F021 corrected, and
+it had been sitting in an unwritten section the whole time. This is the
+argument for rule 2 of §4 being enforced rather than aspirational.
+
+A check that has never fired is not known to work, so rule 6 was verified
+against a deliberate break (dropping one v1 field reports all 30 cells as
+orphaned). F013 was a check that keyed on the wrong thing and looked fine.
+
+---
+
+## 7. Naming and time
 
 - Run ids: `YYYY-MM-DDTHH-MMZ_<sweep>`, UTC, sortable.
 - All timestamps in records are UTC with explicit `Z`.
