@@ -213,9 +213,17 @@ def run_sweep(sweep_path: str, results_dir: str, force: bool = False,
             r for r in runs
             if _run_id(r) not in done
         ]
+        # The progress label must show every axis the sweep varies. It
+        # omitted enforce_eager, so two cells that differ only in that flag
+        # printed identically -- and a failure on one of them was diagnosed
+        # against the other's results, which is F022 instance 13. A label
+        # that cannot distinguish two cells is a label that will be used to
+        # confuse them.
         head = (f"[{gi}/{len(groups)}] {server.mechanism}|"
                 f"{server.weight_precision}|{server.kv_cache_dtype}|"
-                f"{server.attn_backend}")
+                f"{server.attn_backend}|"
+                f"graphs={'off' if server.enforce_eager else 'on'} "
+                f"({sid[:8]})")
         if not pending:
             print(f"\n{head} — all {len(runs)} measurements done, skipping boot")
             continue
