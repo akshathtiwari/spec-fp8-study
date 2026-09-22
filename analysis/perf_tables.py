@@ -75,6 +75,43 @@ def label(cfg: dict) -> tuple:
     return tuple(cfg.get(f) for f in DISPLAY_FIELDS)
 
 
+#: Repeats of one cell run back-to-back against an already-booted server,
+#: so a gap larger than this means the group spans more than one boot.
+#: Generous: a slow repeat at c=64 takes minutes, a boot takes ~5.
+SAME_BOOT_WINDOW_S = 30 * 60
+
+
+def boot_spanning(groups: dict) -> dict[tuple, float]:
+    """Groups whose repeats are too far apart in time to share a boot.
+
+    The table used to assert that every cell's repeats came from a single
+    boot, and then describe the resulting spread as prompt variance. That
+    is a provenance claim the table never checked, and it was false: one
+    cell's "three repeats" were two from 05:16 and one from a re-run four
+    hours later, so its 1.66x spread was a cross-boot comparison mislabelled
+    as prompt variance -- while F020/F021 put the boot term at up to 1.64x
+    and the prompt term near 1.17x.
+
+    Detected by timestamp span because no boot id is recorded per cell; that
+    gap is the same one runs.json flags with `reconstructed: true`. Stamping
+    a boot id live is the proper fix and would make this exact.
+    """
+    from datetime import datetime
+
+    out: dict[tuple, float] = {}
+    for k, rs in groups.items():
+        stamps = []
+        for r in rs:
+            try:
+                stamps.append(datetime.fromisoformat(
+                    r["ts"].replace("Z", "+00:00")).timestamp())
+            except (KeyError, ValueError):
+                pass
+        if len(stamps) > 1 and (span := max(stamps) - min(stamps)) > SAME_BOOT_WINDOW_S:
+            out[k] = span
+    return out
+
+
 def display_collisions(groups: dict) -> dict[tuple, set[str]]:
     """Display labels that map to more than one distinct cell.
 
@@ -121,11 +158,12 @@ def main() -> None:
 
     L += ["> **Speculative rows carry an error term this table does not show.** "
           "Throughput for a speculative configuration varies 2.16x across "
-          "boots while acceptance does not (findings/F020). Every cell below "
-          "has three repeats from a SINGLE boot, so the spread shown is "
-          "prompt variance within one boot and is silent about the dominant "
-          "source of error. Non-speculative rows are unaffected (0.6% "
-          "across-boot reproducibility).", "",
+          "boots while acceptance does not (findings/F020, F021). Repeats "
+          "run back-to-back against one booted server, so for cells not "
+          "flagged below the spread shown is prompt variance within a single "
+          "boot and is silent about the dominant source of error. "
+          "Non-speculative rows are unaffected (0.6% across-boot "
+          "reproducibility).", "",
           "Mean of 3 repeats, +/- sample standard deviation. Repeats draw "
           "**different** prompts (seed offset by repeat), so the spread "
           "includes prompt-sampling variance, not just measurement noise -- "
@@ -190,6 +228,21 @@ def main() -> None:
             row.append(f"| {v / base:.1f}x " if v else "| - ")
         L.append("".join(row) + "|")
 
+    spanning = boot_spanning(groups)
+    if spanning:
+        warn = ["", "> **Warning — these rows average across boots.** Their "
+                "repeats are too far apart in time to come from one booted "
+                "server, so the spread shown is NOT prompt variance: it "
+                "mixes the boot-level term, which reaches 1.64x on "
+                "speculative cells (F021). Treat the mean as "
+                "uninterpretable rather than as a noisy estimate.", ""]
+        for k, span in sorted(spanning.items(), key=lambda kv: -kv[1]):
+            mech, wp, kv_, backend, eager = label(groups[k][0]["config"])
+            warn.append(f"> - {mech}/{wp}/{kv_} c={k[2]}: repeats span "
+                        f"{span / 3600:.1f}h ({len(groups[k])} measurements)")
+        warn.append("")
+        L += warn
+
     collisions = display_collisions(groups)
     if collisions:
         warn = ["", "> **Warning — rows that differ in a field this table "
@@ -209,6 +262,9 @@ def main() -> None:
     if collisions:
         print(f"  WARNING {len(collisions)} display label(s) cover multiple "
               f"cells -- a config axis is missing from DISPLAY_FIELDS")
+    if spanning:
+        print(f"  WARNING {len(spanning)} group(s) average across boots; "
+              f"their spread is not prompt variance")
     if inconsistent:
         print(f"  WARNING inconsistent request counts at concurrency "
               f"{sorted(inconsistent)}")
