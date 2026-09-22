@@ -88,6 +88,8 @@ def _run_one_measurement(
             "ttft_ms": round(r.ttft_ms, 3),
             "e2e_ms": round(r.e2e_ms, 3),
             "output_tokens": r.output_tokens,
+            "tokens_from_usage": r.output_tokens_from_usage,
+            "n_stream_chunks": r.n_stream_chunks,
             "itl_ms": [round(x, 3) for x in r.itl_ms],
             "correct": workload.validate(i, r.output_text) if r.ok else None,
             "error": r.error,
@@ -113,6 +115,10 @@ def _run_one_measurement(
         }
 
     out_tokens = sum(r.output_tokens for r in ok)
+    # A chunk count undercounts by ~tau under speculation, so a run that fell
+    # back to it does not carry a usable throughput number and must say so.
+    n_fallback = sum(1 for r in ok if not r.output_tokens_from_usage)
+    chunks = sum(r.n_stream_chunks for r in ok)
     return {
         "run_id": rid,
         "cell_id": cell_id(server),
@@ -135,6 +141,11 @@ def _run_one_measurement(
             "output_tokens": out_tokens,
             "output_tokens_per_s": round(out_tokens / wall_s, 2) if wall_s else None,
             "requests_per_s": round(len(ok) / wall_s, 4) if wall_s else None,
+            "tokens_from_usage": n_fallback == 0,
+            "n_chunk_counted": n_fallback,
+            # Observable proxy for acceptance: under speculation one chunk
+            # can carry several accepted tokens.
+            "tokens_per_chunk": round(out_tokens / chunks, 3) if chunks else None,
         },
         "task": {
             "scored": scored, "correct": correct,
@@ -215,10 +226,12 @@ def run_sweep(sweep_path: str, results_dir: str, force: bool = False) -> None:
                 _append_sweep(rec, results_path)
                 t = rec["throughput"]
                 acc = rec["task"]["accuracy"]
+                warn = "" if t["tokens_from_usage"] else "  ** CHUNK-COUNTED **"
                 print(f"{t['output_tokens_per_s']} tok/s, "
                       f"{t['requests_per_s']} req/s"
                       + (f", acc {acc:.1%}" if acc is not None else "")
-                      + (f", tau {rec['spec']['tau']}" if rec["spec"] else ""))
+                      + (f", tau {rec['spec']['tau']}" if rec["spec"] else "")
+                      + warn)
         finally:
             launcher.stop(handle)
             persist_log(sid, handle.log_path, results_path)

@@ -27,6 +27,12 @@ class RequestResult:
     output_tokens: int
     itl_ms: list[float]         # inter-token latencies
     ok: bool
+    #: True when output_tokens came from the server's usage field. False means
+    #: it is a chunk count, which undercounts by ~tau under speculation.
+    output_tokens_from_usage: bool = False
+    #: Streamed chunks received. Under speculation a chunk can carry several
+    #: tokens, so chunks/token is an observable proxy for acceptance.
+    n_stream_chunks: int = 0
     output_text: str = ""
     sampling_params: dict = field(default_factory=dict)
     error: str | None = None
@@ -55,11 +61,17 @@ async def generate_one(
         "model": model,
         "messages": messages,
         "stream": True,
+        # Ask the server for real token counts. Counting streamed chunks
+        # instead undercounts by roughly tau under speculative decoding,
+        # because accepted draft tokens arrive together in one chunk -- which
+        # makes speculation look slower than no speculation at all.
+        "stream_options": {"include_usage": True},
         **sampling_params,
     }
 
     token_times: list[float] = []
     output_chunks: list[str] = []
+    usage_tokens: int | None = None
     first_token_time: float | None = None
     start = time.monotonic()
 
@@ -92,6 +104,11 @@ async def generate_one(
                 except json.JSONDecodeError:
                     continue
 
+                # The final usage chunk carries no choices.
+                usage = chunk.get("usage")
+                if usage and usage.get("completion_tokens") is not None:
+                    usage_tokens = usage["completion_tokens"]
+
                 choices = chunk.get("choices", [])
                 if not choices:
                     continue
@@ -120,10 +137,15 @@ async def generate_one(
     # Recompute ITL properly from absolute timestamps
     itl_ms = _compute_itl(first_token_time, token_times, start)
 
+    # Prefer the server's count. Fall back to chunk count only if usage is
+    # missing, and say so, because that fallback is wrong under speculation.
     return RequestResult(
         ttft_ms=((first_token_time - start) * 1000) if first_token_time else 0,
         e2e_ms=(end - start) * 1000,
-        output_tokens=len(output_chunks),
+        output_tokens=usage_tokens if usage_tokens is not None
+                      else len(output_chunks),
+        output_tokens_from_usage=usage_tokens is not None,
+        n_stream_chunks=len(output_chunks),
         itl_ms=itl_ms,
         ok=True,
         output_text=output_text,
