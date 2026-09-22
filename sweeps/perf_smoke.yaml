@@ -1,0 +1,41 @@
+# Smoke test for the Phase 2 harness. Not a result.
+#
+# 2 ServerCells x 2 concurrency levels = 4 measurements, 2 boots, ~15 min.
+# Exists to prove the orchestration works -- boot reuse, per-request
+# persistence, spec counters, resume -- before committing to the full sweep.
+# Concurrency 16 is included because bugs in the concurrent path do not show
+# up at concurrency 1.
+
+model: Qwen/Qwen3-4B
+model_revision: main
+spec_tokens: 5
+
+axes:
+  engine: [vllm]
+  engine_ref: [vllm-0.29.0]
+  mechanism: [none, dflash]
+  weight_precision: [bf16]
+  kv_cache_dtype: [auto]
+  attn_backend: [FLASHINFER]
+
+defaults:
+  draft_model: null
+  draft_revision: null
+  block_size: null
+  guided_decoding: false
+
+per_mechanism:
+  dflash:
+    draft_model: z-lab/Qwen3-4B-DFlash-b16
+    draft_revision: main
+    block_size: 16
+
+run_axes:
+  workload: [gsm8k]
+  concurrency: [1, 16]
+  seed: [1234]
+  repeat: [0]
+
+correctness:
+  floor_correct: 0.10
+  floor_degraded: 0.05

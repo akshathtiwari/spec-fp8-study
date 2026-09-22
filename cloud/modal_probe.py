@@ -156,6 +156,47 @@ def _print_results(results_path="/results/cells.jsonl"):
 @app.function(
     image=vllm_image,
     gpu="L4",
+    timeout=150 * 60,
+    **GPU_GUARDRAILS,
+    volumes={"/results": results_vol, "/models": model_vol},
+)
+def run_vllm_sweep(sweep_file: str = "perf", force: bool = False):
+    """Phase 2 performance sweep: boot once per ServerCell, run many."""
+    import os, subprocess, threading
+
+    os.environ["SPECFP8_MODEL_CACHE"] = "/models"
+    _print_gpu_info()
+    _setup_repo()
+
+    source = f"sweeps/{sweep_file}.yaml"
+    if not os.path.exists(source):
+        raise FileNotFoundError(
+            f"No sweep at {source}. Available: {sorted(os.listdir('sweeps'))}")
+    print(f"\n=== Phase 2 sweep: {source} ===")
+
+    stop = threading.Event()
+    committer = threading.Thread(target=_commit_periodically, args=(stop,),
+                                 daemon=True)
+    committer.start()
+    try:
+        result = subprocess.run(
+            ["python", "-u", "-m", "specfp8.sweep",
+             "--sweep", source, "--results", "/results"]
+            + (["--force"] if force else []),
+        )
+    finally:
+        stop.set()
+        committer.join(timeout=5)
+        results_vol.commit()
+
+    if result.returncode != 0:
+        print(f"\nSweep exited with code {result.returncode}")
+    return result.returncode
+
+
+@app.function(
+    image=vllm_image,
+    gpu="L4",
     # 120 min: the quality stage adds several minutes per cell on top of boot
     # and gate. Resume plus per-60s volume commits cap the cost of hitting
     # this at one re-run cell, so headroom is cheaper than a clipped sweep.
@@ -784,6 +825,10 @@ def main(
         return
     if engine == "correctness":
         print(correctness_matrix.remote(model=sweep if sweep != "compat" else "Qwen/Qwen3-4B"))
+        return
+    if engine == "sweep":
+        rc = run_vllm_sweep.remote(sweep_file=sweep, force=force)
+        print(f"\nSweep finished (exit {rc}).")
         return
     if engine == "prefetch":
         print(prefetch_models.remote(sweep_file=sweep))

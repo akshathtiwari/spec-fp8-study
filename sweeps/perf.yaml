@@ -1,0 +1,54 @@
+# Phase 2 — goodput under concurrency.
+#
+# This is the study's novelty claim: prior work measures single-request
+# latency (2505.22179) or step-level behaviour (SpecKV), and nobody reports
+# goodput under a declared SLO across a concurrency sweep, which is where
+# lost KV capacity actually binds.
+#
+# attn_backend is PINNED rather than left on auto, for the reason F003 and
+# F019 establish: vLLM serves BF16 KV on FlashAttention-2 and FP8 KV on
+# FlashInfer, so a precision comparison under `auto` silently changes the
+# backend too. Pinning the target removes that for the target. It does NOT
+# remove it for the draft, which selects independently and also shifts with
+# KV dtype (F019) -- an acknowledged confound on the dflash rows, recorded
+# per cell rather than pretended away.
+#
+# 8 ServerCells x 4 concurrencies = 32 measurements, 8 boots. Request count
+# scales with concurrency (8x, capped at the workload pool) so a high
+# concurrency level is not measured on a handful of requests.
+
+model: Qwen/Qwen3-4B
+model_revision: main
+spec_tokens: 5
+
+axes:
+  engine: [vllm]
+  engine_ref: [vllm-0.29.0]
+  mechanism: [none, dflash]
+  weight_precision: [bf16, fp8]
+  kv_cache_dtype: [auto, fp8_e4m3]
+  attn_backend: [FLASHINFER]
+
+defaults:
+  draft_model: null
+  draft_revision: null
+  block_size: null
+  guided_decoding: false
+
+per_mechanism:
+  dflash:
+    draft_model: z-lab/Qwen3-4B-DFlash-b16
+    draft_revision: main
+    block_size: 16
+
+run_axes:
+  workload: [gsm8k]
+  # 1 is the single-request point prior work reports, and appears only as a
+  # point on the curve (R6), never as the headline.
+  concurrency: [1, 4, 16, 64]
+  seed: [1234]
+  repeat: [0]
+
+correctness:
+  floor_correct: 0.10
+  floor_degraded: 0.05
