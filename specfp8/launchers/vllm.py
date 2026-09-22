@@ -50,9 +50,19 @@ class VllmLauncher:
         if cell.kv_cache_dtype != "auto":
             cmd += ["--kv-cache-dtype", cell.kv_cache_dtype]
 
-        # Attention backend
+        # Attention backend.
+        #
+        # --attention-backend is accepted, echoed back in the server's
+        # non-default args, and validated against -- but NOT used to select
+        # (findings/F018). Cells requesting TRITON_ATTN ran FlashInfer and
+        # cells requesting FLASHINFER at BF16 ran FlashAttention, silently.
+        # --attention-config is the structured form and is what this now
+        # sends. Whether it actually takes effect is never assumed: the probe
+        # reads the engine's own selection line after boot and records it
+        # alongside the request (see Launcher.selected_backend).
         if cell.attn_backend != "auto":
-            cmd += ["--attention-backend", cell.attn_backend]
+            cmd += ["--attention-config",
+                    json.dumps({"backend": cell.attn_backend})]
 
         # Speculative decoding
         spec = self.speculative_config(cell)
@@ -160,6 +170,23 @@ class VllmLauncher:
             return resp.json().get("version")
         except Exception:
             return None
+
+    def selected_backend(self, handle: ServerHandle) -> str | None:
+        """The attention backend the engine actually chose, from its own log.
+
+        Never infer this from the flag that was passed. F018 exists because a
+        flag was accepted and then disregarded, turning an entire
+        experimental axis into one backend repeated.
+        """
+        try:
+            with open(handle.log_path, errors="replace") as f:
+                content = f.read()
+        except FileNotFoundError:
+            return None
+        match = re.search(
+            r"Using\s+([A-Za-z0-9_]+)\s+attention\s+backend", content
+        )
+        return match.group(1).upper() if match else None
 
     def kv_capacity(self, handle: ServerHandle) -> int | None:
         """Parse KV cache capacity, in tokens, from the vLLM startup log."""

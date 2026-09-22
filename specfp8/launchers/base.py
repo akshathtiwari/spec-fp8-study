@@ -76,6 +76,13 @@ class Launcher(Protocol):
         """
         ...
 
+    def selected_backend(self, handle: ServerHandle) -> str | None:
+        """Attention backend the engine actually selected, read from its log.
+
+        Requested is not selected. See findings/F018.
+        """
+        ...
+
     def kv_capacity(self, handle: ServerHandle) -> int | None:
         """Parse KV-token capacity from startup log. None if unavailable."""
         ...

@@ -157,6 +157,18 @@ class SglangLauncher:
                     return str(data[k])
         return None
 
+    def selected_backend(self, handle: ServerHandle) -> str | None:
+        """Attention backend actually chosen, from the server log."""
+        try:
+            with open(handle.log_path, errors="replace") as f:
+                content = f.read()
+        except FileNotFoundError:
+            return None
+        match = re.search(
+            r"[Aa]ttention backend[:=\s]+([A-Za-z0-9_]+)", content
+        )
+        return match.group(1).upper() if match else None
+
     def kv_capacity(self, handle: ServerHandle) -> int | None:
         """Parse KV capacity from SGLang startup log."""
         try:

@@ -196,6 +196,24 @@ def probe_one_cell(
         engine_version = launcher.engine_version(handle)
         print(f"  Engine version: {engine_version}")
 
+        # Verify the engine honoured the backend request. A flag that is
+        # accepted and then ignored silently collapses an experimental axis
+        # (findings/F018), so the requested and selected values are both
+        # recorded and a mismatch is stated loudly rather than inferred later.
+        selected = launcher.selected_backend(handle)
+        requested = cell.attn_backend
+        backend_honoured = (
+            None if selected is None or requested == "auto"
+            else selected == requested
+        )
+        if backend_honoured is False:
+            print(f"  ** BACKEND MISMATCH: requested {requested}, "
+                  f"engine selected {selected} — this cell does NOT test "
+                  f"{requested} **")
+        else:
+            print(f"  Attention backend: {selected or 'unknown'}"
+                  f"{'' if requested == 'auto' else ' (as requested)'}")
+
         # Scrape metrics BEFORE
         stats_before = scrape_spec_stats(handle.base_url, scraper)
 
@@ -320,6 +338,8 @@ def probe_one_cell(
             outputs=probe_result.outputs,
             engine_version=engine_version,
             quality=quality,
+            selected_backend=selected,
+            backend_honoured=backend_honoured,
         )
 
     finally:
@@ -351,6 +371,8 @@ def _make_record(
     outputs: list[str] | None = None,
     engine_version: str | None = None,
     quality: dict | None = None,
+    selected_backend: str | None = None,
+    backend_honoured: bool | None = None,
 ) -> dict:
     """Build a result record for cells.jsonl."""
     argv = get_launcher(cell.engine).argv(cell, 0)
@@ -369,6 +391,10 @@ def _make_record(
         "sampling_params": SAMPLING_PARAMS,
         "prompt_set_fingerprint": prompt_set_fingerprint(),
         "engine_version": engine_version,
+        # Requested is not selected: both are recorded so no analysis has to
+        # trust the flag (findings/F018).
+        "selected_backend": selected_backend,
+        "backend_honoured": backend_honoured,
         "outcome": {
             "status": status,
             "error_verbatim": error,
