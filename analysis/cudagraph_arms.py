@@ -67,8 +67,18 @@ def load() -> list[dict]:
     return list(latest.values())
 
 
+#: Records at or after this timestamp belong to the perf_v2 grid. Arms
+#: measured on opposite sides of it were not taken in the same session.
+GRID_CUTOFF = "2026-09-22T19:00:00"
+
+
 def pair_key(cfg: dict) -> tuple:
     return tuple(cfg.get(f) for f in PAIR_FIELDS)
+
+
+def session_of(recs: list[dict]) -> str:
+    """Which measurement session a set of records came from."""
+    return "grid" if max(r["ts"] for r in recs) >= GRID_CUTOFF else "prior"
 
 
 def mean(vals) -> float | None:
@@ -101,9 +111,15 @@ def main() -> int:
          "`--enforce-eager`. Each arm is a separate boot, so a speculative "
          "`graphs on` figure is one draw from the bimodal distribution of "
          "findings/F021, not a stable mean.", "",
+         "A ratio in **bold** compares two boots from the same run. A ratio "
+         "in (parentheses) has one arm from an earlier session and is NOT a "
+         "controlled comparison — hours apart, different container, and for "
+         "speculative cells a 2.2x bimodal mode flip sits inside that gap "
+         "(F021). Parenthesised rows are excluded from the prediction "
+         "checks below.", "",
          "| mech | weights | kv | conc | graphs on | graphs off | off/on | "
-         "tau on | tau off |",
-         "|---|---|---|---|---|---|---|---|---|"]
+         "tau on | tau off | pairing |",
+         "|---|---|---|---|---|---|---|---|---|---|"]
 
     def label(rs):
         c = rs[0]["config"]
@@ -119,15 +135,24 @@ def main() -> int:
         tau_off = mean([(r.get("spec") or {}).get("tau") for r in arms[True]])
         mech, wp, kv = label(arms[False] or arms[True])
         ratio = off / on if (on and off) else None
+        # A pair whose arms come from different sessions is not a
+        # controlled comparison: the two boots are separated by hours, a
+        # container, and possibly a different physical GPU, and for
+        # speculative cells by a 2.2x bimodal mode flip (F021). Such a row
+        # is reported but never counted, because reading a ratio off it is
+        # the exact error this study keeps making.
+        same_session = session_of(arms[False]) == session_of(arms[True])
         rows.append({"mech": mech, "weights": wp, "kv": kv, "conc": conc,
                      "on": on, "off": off, "ratio": ratio,
-                     "tau_on": tau_on, "tau_off": tau_off})
+                     "tau_on": tau_on, "tau_off": tau_off,
+                     "same_session": same_session})
         L.append(
             f"| {mech} | {wp} | {kv} | {conc} | "
             f"{on:.1f} | {off:.1f} | "
-            f"{f'**{ratio:.2f}x**' if ratio else '-'} | "
+            f"{(f'**{ratio:.2f}x**' if same_session else f'({ratio:.2f}x)') if ratio else '-'} | "
             f"{f'{tau_on:.3f}' if tau_on else '-'} | "
-            f"{f'{tau_off:.3f}' if tau_off else '-'} |")
+            f"{f'{tau_off:.3f}' if tau_off else '-'} | "
+            f"{'same run' if same_session else '**cross-session**'} |")
 
     if unpaired:
         L += ["", "> **Unpaired cells.** These configurations appear in only "
@@ -143,7 +168,8 @@ def main() -> int:
     L += ["", "## Pre-registered prediction (docs/paper-outline.md)", "",
           "Recorded before this grid ran. Reported as measured either way.", ""]
 
-    spec1 = [r for r in rows if r["mech"] != "none" and r["conc"] == 1]
+    usable = [r for r in rows if r["same_session"]]
+    spec1 = [r for r in usable if r["mech"] != "none" and r["conc"] == 1]
     bf16 = [r for r in spec1 if r["weights"] == "bf16"]
     fp8 = [r for r in spec1 if r["weights"] == "fp8"]
 
@@ -195,6 +221,7 @@ def main() -> int:
     (OUT / "cudagraph_arms.md").write_text("\n".join(L) + "\n")
     print(f"  wrote analysis/out/tables/cudagraph_arms.md "
           f"({len(paired)} paired, {len(unpaired)} unpaired)")
+    print(f"    usable (same-run) pairs: {len(usable)} of {len(rows)}")
     for n, p in (("1", p1), ("2", p2), ("3", p3)):
         print(f"    prediction {n}: {verdict(p).replace('**', '')}")
     return 0
