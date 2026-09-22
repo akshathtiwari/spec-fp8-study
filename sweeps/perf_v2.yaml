@@ -1,0 +1,84 @@
+# Phase 2 rev 2 — goodput under concurrency, with the execution path as an axis.
+#
+# Supersedes sweeps/perf.yaml. Three changes, each from a finding.
+#
+# 1. `enforce_eager` is an AXIS, not a pinned setting.
+#
+#    F021 shows it moves speculative throughput 1.37-2.38x and collapses
+#    boot-to-boot spread from 1.64x to 1.04x. The obvious response is to pin
+#    the fast setting -- but --enforce-eager is engine-wide, and on the
+#    non-speculative baseline CUDA graphs have no spec-decode fallback to
+#    trip over and are expected to help. Pinning it for both arms of a
+#    comparison whose baseline it penalises would manufacture part of the
+#    speculative speedup, which is the same error shape as F007, F018 and
+#    the F006 backend claim: holding a third thing "fixed" at a value that
+#    is only right for one side.
+#
+#    Measuring it instead of choosing it costs one extra boot per cell and
+#    removes the judgement call entirely. It also generalises F021, which
+#    currently rests on a single cell (dflash / bf16 / FLASHINFER) -- here
+#    it is tested on all eight, speculative and not, across both precisions.
+#
+# 2. Concurrency drops 4; repeats drop to two.
+#
+#    perf.yaml ran 4 concurrencies x 3 repeats. Those three repeats all came
+#    from ONE boot (sweep.py boots once and runs many), so they varied
+#    prompts and never varied the boot -- they never sampled the dominant
+#    variance source, while looking like error bars. Two repeats still give
+#    the prompt term (F009: 2-8% on throughput, <=0.002 on tau); the boot
+#    term comes from F021's direct measurement and is reported as such
+#    rather than being silently folded in.
+#
+#    c=1 stays, as a labelled point on the curve and never the headline
+#    (R6) -- it is the regime this study argues is misleading, so it has to
+#    be shown, not omitted.
+#
+# 3. attn_backend stays PINNED to FLASHINFER (F003, F019).
+#
+#    `auto` serves BF16 KV on FlashAttention-2 and FP8 KV on FlashInfer, so
+#    a precision A/B under auto silently swaps the kernel too. Pinning fixes
+#    the TARGET. It does NOT fix the draft, which selects independently and
+#    also shifts with KV dtype (F019) -- an acknowledged confound on the
+#    dflash rows, recorded per cell rather than pretended away.
+#
+# 16 ServerCells x 3 concurrencies x 2 repeats = 96 measurements, 16 boots.
+
+model: Qwen/Qwen3-4B
+model_revision: main
+spec_tokens: 5
+
+axes:
+  engine: [vllm]
+  engine_ref: [vllm-0.29.0]
+  mechanism: [none, dflash]
+  weight_precision: [bf16, fp8]
+  kv_cache_dtype: [auto, fp8_e4m3]
+  attn_backend: [FLASHINFER]
+  # The execution path under test. `false` is the engine default, kept as
+  # the control: without it, a stable eager arm could just mean "this run
+  # was stable", which is the F018 trap.
+  enforce_eager: [false, true]
+
+defaults:
+  draft_model: null
+  draft_revision: null
+  block_size: null
+  guided_decoding: false
+
+per_mechanism:
+  dflash:
+    draft_model: z-lab/Qwen3-4B-DFlash-b16
+    draft_revision: main
+    block_size: 16
+
+run_axes:
+  workload: [gsm8k]
+  concurrency: [1, 16, 64]
+  seed: [1234]
+  # Prompt-variance repeats only. sweep.py offsets the seed by repeat index
+  # so repeat 2 cannot inherit a prefix cache warmed by repeat 1.
+  repeat: [0, 1]
+
+correctness:
+  floor_correct: 0.10
+  floor_degraded: 0.05
