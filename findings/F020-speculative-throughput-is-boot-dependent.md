@@ -86,6 +86,20 @@ silent about the dominant source of error.
 
 The non-speculative half of the Phase 2 grid is sound at 0.6% reproducibility.
 
+## What this does NOT establish
+
+- **A cause.** This finding measures the spread and shows acceptance is not
+  responsible. It does not identify what varies. F021 answers this.
+- **That the spread is continuous.** "Varies 2.16x" describes the range, not
+  the distribution. Six boots cannot distinguish a wide unimodal spread from
+  two tight modes, and reading it as continuous variance is what made the
+  wrong hypothesis below look reasonable. It is bimodal (F021).
+- **That 2.16x is the maximum.** It is the range observed in six boots of one
+  configuration on one GPU. The eager-vs-default comparison in F021 later saw
+  1.64x between just two boots at c=16, so six boots was not near saturation.
+- **Anything about other engines, GPUs, or backends.** vLLM 0.29.0, L4/SM89,
+  FLASHINFER, dflash only.
+
 ## Consequence for measurement design
 
 Speculative throughput needs **boot-level repeats**, not prompt-level. Three

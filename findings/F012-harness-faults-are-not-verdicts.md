@@ -48,6 +48,20 @@ Nothing in the schema distinguished them.
    produced by a different launch command or different sampling settings is
    detected as stale rather than silently reused.
 
+## What this does NOT establish
+
+- **That the seven affected cells are compatible.** The leaked process made
+  their `launch_failed` records meaningless in both directions; they were
+  re-run, and it is the re-run that carries evidence, not this finding.
+- **That no other host fault was recorded as a compatibility signal.** A
+  missing toolkit, a driver fault or an OOM fails a cell without changing
+  the launch command, so `argv_fingerprint` cannot detect it. The fix adds a
+  free-memory precondition and a distinct status; it does not make the
+  harness able to recognise every environment fault.
+- **That process-group kill is sufficient in general.** It covers workers
+  forked by the engine. A process that re-parents itself out of the group,
+  or a GPU held by a different container, would still be invisible.
+
 ## Lesson
 
 A compatibility matrix must be able to say "the harness was broken" as a

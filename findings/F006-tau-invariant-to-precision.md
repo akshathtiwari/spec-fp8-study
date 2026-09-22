@@ -1,9 +1,9 @@
 ---
 id: F006
-title: tau is invariant to FP8 precision; backend choice perturbs it more
+title: tau is invariant to FP8 precision, to below the 1.32% boot-to-boot noise floor
 kind: result
 status: established
-confidence: medium
+confidence: high
 superseded_by: []
 date: 2026-09-21
 evidence:
