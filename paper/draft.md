@@ -197,6 +197,22 @@ speculative rows 1.62–1.66×. The concurrency-16 figure, 1.624×, matches the
 1.64× from the deliberate test above to within 1% — and was recorded before
 anyone was looking for it.
 
+**The fix is not free.** `--enforce-eager` increases KV allocation rather
+than reducing it: vLLM reserves headroom for CUDA-graph capture, so
+graphs-on runs at an effective `gpu_memory_utilization` of 0.8843 rather
+than the requested 0.92, and removing graphs hands that reservation to the
+KV cache. On our 22 GiB L4 this is enough to make one speculative
+configuration fail to boot entirely, with a 892 MiB float32 logits
+allocation failing against 745 MiB free on an otherwise clean card. The
+recommendation is therefore conditional: eager removes the bimodality and
+is faster at every concurrency we tested, on configurations that can boot
+with it, and it costs headroom that memory-tight hardware may not have.
+
+This is also why we carry the flag as a grid *axis* rather than pinning it.
+Pinned, that cell would have vanished from the results behind a one-word
+`oom`, and the natural reading would have been that the configuration is
+unsupported on SM89 — a compatibility claim, and a false one.
+
 **Why this matters beyond one engine.** A single-boot speculative benchmark
 on this stack can report any speedup in a 1.16×–2.71× range depending on
 which mode it happened to boot into. Single-run reporting is, from our

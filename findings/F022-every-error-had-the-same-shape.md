@@ -43,7 +43,8 @@ Every correction in `findings/`, classified by what was assumed constant:
 | budget.log | cumulative spend | that "cumulative" accumulated | it restarted per session | spend understated ~4.5x |
 | cell_id | configurations | that the schema could grow | any new field rehashed all 30 | every stored result orphaned |
 
-Eleven instances, one shape.
+Eleven instances, one shape. Two more arrived the day this was written;
+both are below.
 
 ### The twelfth, found the same day this was written
 
@@ -69,6 +70,45 @@ never noticing what is missing — is worth suspecting elsewhere.
 That the prediction was confirmed this quickly is weak evidence that the
 rate of undiscovered instances is higher than the eleven above suggest, not
 that the list is now complete at twelve.
+
+### The thirteenth, in the act of diagnosing a failure
+
+A boot failed with `oom` on the perf_v2 grid. Diagnosing it, I matched the
+failure record against prior results on
+`(mechanism, weight_precision, kv_cache_dtype)` and concluded "this exact
+cell booted fine before, so the OOM is a host condition", then raised a
+memory threshold to fix it.
+
+Every step was wrong, in the same shape:
+
+| # | Compared | Assumed fixed | Actually varied | Cost if unreported |
+|---|---|---|---|---|
+| 13 | failing cell vs prior results | that the two shared a configuration | `enforce_eager`, the grid's own axis | a real result (F023) filed as a host fault, and a threshold changed for nothing |
+
+The matched tuple omitted `enforce_eager`. The failing cell was
+`4ae0a860802f247c` (eager on); the cell with 12 prior measurements was
+`5824814b68901229` (eager off). Different cells, different `cell_id`, and
+the field that distinguishes them is the one the grid exists to vary.
+
+Two things make this the sharpest instance so far:
+
+1. It is the **same bug** fixed in `analysis/perf_tables.py` earlier the
+   same day, where a hand-listed grouping tuple would have averaged the two
+   arms together. The fix there was to key on `cell_id` because "a
+   hand-listed key fails the same way every time: add an axis, forget the
+   key". Hours later I hand-wrote the tuple again, in a throwaway
+   diagnostic script rather than in committed code — which is precisely
+   where the discipline lapses.
+2. The wrong diagnosis **produced action**: a real finding was nearly
+   recorded as a host fault, and `MIN_FREE_GPU_MIB` was raised to fix
+   something it had not caused. The failing boot had 22561 MiB free on a
+   22.03 GiB card. The comment at that constant now says so.
+
+What caught it was not care. It was `boot_failures.jsonl`, added an hour
+earlier, recording `gpu_free_mib_before_boot` alongside the verbatim error.
+A clean card in the record contradicted the residual-memory story outright.
+The lesson is the recurring one: the defence that works is a record that
+can contradict you, not an intention to be careful.
 
 ## Reasoning
 

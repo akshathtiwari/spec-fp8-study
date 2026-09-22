@@ -73,13 +73,17 @@ SAMPLING_PARAMS = {
 #: This was 8000 MiB, which could not do its job. vLLM boots at
 #: gpu_memory_utilization=0.92, so on a 22.03 GiB L4 a cell reserves
 #: ~20.27 GiB and a successful boot logs "Free memory on device (21.84/22.03
-#: GiB) on startup". A threshold of 8000 MiB (7.8 GiB) therefore green-lit a
-#: boot needing 20.3 GiB whenever a quarter of the card was free, so a
-#: previous server still releasing memory produced an OOM that looked like a
-#: property of the configuration -- the failure mode F012 exists to prevent.
+#: GiB) on startup". A threshold of 8000 MiB (7.8 GiB) green-lit a boot
+#: needing 20.3 GiB whenever a quarter of the card was free.
 #:
 #: Sized just under a clean card so a genuinely clean GPU always passes,
 #: while a partially-released one waits instead of failing.
+#:
+#: Honest note on provenance: this was raised to fix an OOM it did not
+#: cause. The failing boot had **22561 MiB free** -- an entirely clean card
+#: -- and failed for the reason in findings/F023. 8000 is still too low and
+#: 20000 is still right, but the change should not be credited with a fix
+#: it did not make, and the diagnosis that motivated it was wrong.
 MIN_FREE_GPU_MIB = 20000.0
 
 #: Booting a large model from a cold weight cache includes the download, which

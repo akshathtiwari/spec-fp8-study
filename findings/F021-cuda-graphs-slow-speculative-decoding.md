@@ -139,6 +139,19 @@ across all eight cells and runs through `specfp8.sweep`, which records
 normally. That is stronger than re-running the probe, since it tests the
 claim on eight configurations rather than the one this finding used.
 
+## Qualified by F023: eager is not free
+
+`--enforce-eager` increases KV allocation rather than reducing it. vLLM's
+memory profiler reserves headroom for CUDA-graph capture, so graphs-on runs
+at an effective utilization of 0.8843 instead of 0.92; removing graphs hands
+that reservation to the KV cache. On a 22 GiB L4 that is enough to make
+`dflash | bf16 | fp8_e4m3 | eager` fail to boot outright (F023).
+
+So the recommendation here holds only for configurations that can boot with
+it. The honest form is: eager removes the bimodality and is faster at every
+concurrency tested, **on cells where it starts**, and it costs headroom that
+memory-tight hardware may not have.
+
 ## What this does NOT establish
 
 - **Why a default boot picks one mode over the other.** The selector is

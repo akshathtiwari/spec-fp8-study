@@ -12,7 +12,8 @@ followed the link and found nothing -- which is the worst possible time.
 Checks, in the order a reader would follow them:
 
 1. Every `analysis/out/...` path cited by a finding exists.
-2. Every cell_id cited by a finding appears in results/cells.jsonl.
+2. Every cell_id cited by a finding appears in some record file in
+   results/ (cells, sweep, probes, or boot_failures).
 3. Every cell that a finding leans on has its engine log persisted, since
    backend selection and verbatim failure text live only there (F012, F017).
 4. Frontmatter is well-formed and uses declared vocabulary, so the corpus
@@ -65,17 +66,28 @@ def _list_field(fm: str, key: str) -> list[str]:
 
 
 def known_cell_ids() -> set[str]:
+    """Cell ids appearing in ANY raw record file, not just cells.jsonl.
+
+    Phase 1 compatibility records live in cells.jsonl, but a cell can also
+    be evidenced by a Phase 2 measurement (sweep.jsonl), a bespoke probe
+    (probes.jsonl), or a boot that never became healthy
+    (boot_failures.jsonl). F023's entire claim is that a cell does NOT
+    boot, so its only possible evidence is a failure record; scanning
+    cells.jsonl alone would reject the finding for citing the one file that
+    could substantiate it.
+    """
     ids: set[str] = set()
-    if not CELLS.exists():
-        return ids
-    for line in CELLS.read_text().splitlines():
-        line = line.strip()
-        if not line:
-            continue
-        try:
-            ids.add(json.loads(line)["cell_id"])
-        except (json.JSONDecodeError, KeyError):
-            continue
+    for path in sorted((ROOT / "results").glob("*.jsonl")):
+        for line in path.read_text().splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                cid = json.loads(line).get("cell_id")
+            except json.JSONDecodeError:
+                continue
+            if cid:
+                ids.add(cid)
     return ids
 
 
@@ -184,7 +196,8 @@ def main() -> int:
                 defects.append(f"{fid}: malformed cell id {cid!r}")
                 continue
             if cid not in cells:
-                defects.append(f"{fid}: cites cell {cid} absent from cells.jsonl")
+                defects.append(f"{fid}: cites cell {cid}, absent from every "
+                               f"record file in results/")
             elif not (LOGS / f"{cid}.log").exists():
                 defects.append(f"{fid}: cell {cid} has no persisted engine log")
 
