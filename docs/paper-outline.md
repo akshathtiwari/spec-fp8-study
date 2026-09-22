@@ -115,6 +115,20 @@ vulnerable to confound 2.
       This is the single highest-value remaining experiment.
 - [ ] F008 (accuracy underpowered at n=16) is superseded by the n=256 run;
       confirm the paper cites the powered numbers.
+- [ ] **Check whether F020's non-speculative stability claim is
+      concurrency-dependent.** First cell of `perf_v2` reproduces the prior
+      grid at c=1 (0.97x) and c=16 (1.03x) but is **1.15x** at c=64, for a
+      non-speculative cell with graphs on in both sessions. F020 puts
+      non-speculative across-boot reproducibility at 0.6-1.1%, which a 15%
+      gap does not fit. Two samples against three proves nothing, but the
+      full grid has the statistics to settle it.
+
+      This matters because the non-speculative arm is the **control** that
+      isolates the bimodality to the speculative path (F021's corroboration
+      table). If the control is itself unstable at high concurrency, that
+      argument weakens exactly where the goodput results live. Noticed
+      2026-09-23 from the first cell, before the grid finished, and recorded
+      then rather than after seeing whether it was convenient.
 
 ---
 
