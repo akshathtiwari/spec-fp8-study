@@ -621,6 +621,120 @@ def backend_report() -> str:
     return format_report(analyse("/results"))
 
 
+@app.function(
+    image=vllm_image, gpu="L4", timeout=90 * 60, **GPU_GUARDRAILS,
+    volumes={"/models": model_vol},
+)
+def boot_variance(boots: int = 3) -> str:
+    """Can the 2.16x boot-to-boot swing in speculative throughput be removed?
+
+    findings/F020 established the swing but not its cause. The engine warns
+    that FULL_AND_PIECEWISE CUDA graphs are unsupported with spec-decode on
+    FlashInfer and falls back to PIECEWISE; if how much gets captured varies
+    per boot, throughput varies with it.
+
+    Three arms, each booted `boots` times in ONE container with identical
+    prompts:
+
+      default          reproduce the instability here, so the comparison is
+                       within-container rather than against earlier runs
+      enforce_eager    no CUDA graphs at all. Should be stable but slower --
+                       if it is, capture variance is the cause
+      piecewise        cudagraph_mode pinned to PIECEWISE rather than
+                       negotiated down from FULL_AND_PIECEWISE
+
+    A stable arm that is also fast is the win: it makes the grid cheaper
+    *and* meaningful, instead of averaging over noise.
+
+    This deliberately does not touch ServerCell. Adding a field there would
+    change every cell_id and orphan every result collected so far.
+    """
+    import asyncio, json as _json, os, statistics, subprocess, time
+
+    os.environ["SPECFP8_MODEL_CACHE"] = "/models"
+    _setup_repo()
+
+    from specfp8.cells import expand, cell_id
+    from specfp8.client import load_run
+    from specfp8.launchers.base import find_free_port, poll_health, stop_process
+    from specfp8.launchers.vllm import VllmLauncher
+    from specfp8.metrics.base import scrape_spec_stats, delta as mdelta
+    from specfp8.metrics.vllm import VllmMetricsScraper
+    from specfp8.workloads import get_workload
+
+    cell = next(c for c in expand("sweeps/boot_stability.yaml")
+                if c.mechanism == "dflash")
+    workload = get_workload("gsm8k")
+    prompts = workload.prompts(16, seed=1234)
+    sampling = workload.sampling()
+    scraper = VllmMetricsScraper()
+
+    arms = {
+        "default": [],
+        "enforce_eager": ["--enforce-eager"],
+        "piecewise": ["--compilation-config",
+                      _json.dumps({"cudagraph_mode": "PIECEWISE"})],
+    }
+
+    out: list[str] = [f"boot-variance test: {boots} boots x {len(arms)} arms",
+                      f"cell: {cell.mechanism}|{cell.weight_precision}|"
+                      f"{cell.kv_cache_dtype}|{cell.attn_backend}", ""]
+    results: dict[str, list[float]] = {}
+
+    for arm, extra in arms.items():
+        base = VllmLauncher()
+        launcher = VllmLauncher()
+        # Append the arm's flags without disturbing ServerCell identity.
+        launcher.argv = lambda c, p, _b=base, _e=extra: _b.argv(c, p) + _e
+        tps: list[float] = []
+        for i in range(boots):
+            port = find_free_port()
+            handle = launcher.start(cell, f"bv_{arm}_{i}", port, "logs")
+            try:
+                h = launcher.wait_healthy(handle, timeout_s=900)
+                if not h.ok:
+                    out.append(f"  {arm} boot {i+1}: FAILED ({h.status})")
+                    continue
+                before = scrape_spec_stats(handle.base_url, scraper)
+                t0 = time.monotonic()
+                res = asyncio.run(load_run(
+                    handle.base_url, cell.model, prompts, sampling,
+                    concurrency=1, n_warmup=2, timeout_s=600.0))
+                wall = time.monotonic() - t0
+                after = scrape_spec_stats(handle.base_url, scraper)
+                toks = sum(r.output_tokens for r in res if r.ok)
+                tok_s = toks / wall if wall else 0.0
+                tau = None
+                if before and after:
+                    tau = mdelta(before, after).tau
+                tps.append(tok_s)
+                out.append(f"  {arm:14} boot {i+1}: {tok_s:7.2f} tok/s  "
+                           f"boot={handle.boot_time_s:5.0f}s  "
+                           f"tau={tau:.3f}" if tau else
+                           f"  {arm:14} boot {i+1}: {tok_s:7.2f} tok/s")
+            finally:
+                stop_process(handle)
+                time.sleep(5)
+        results[arm] = tps
+
+    out.append("")
+    out.append(f"{'arm':16}{'mean':>9}{'sd':>8}{'sd%':>8}{'min':>9}{'max':>9}{'ratio':>8}")
+    out.append("-" * 68)
+    for arm, tps in results.items():
+        if len(tps) < 2:
+            out.append(f"{arm:16}  insufficient boots")
+            continue
+        m = statistics.mean(tps); sd = statistics.stdev(tps)
+        out.append(f"{arm:16}{m:>9.2f}{sd:>8.2f}{sd/m*100:>7.1f}%"
+                   f"{min(tps):>9.2f}{max(tps):>9.2f}{max(tps)/min(tps):>7.2f}x")
+    out.append("")
+    out.append("Target: an arm with ratio near 1.0. If it is also fast, the "
+               "grid gets cheaper and meaningful. If only enforce_eager is "
+               "stable, capture variance is confirmed as the cause but costs "
+               "speed.")
+    return "\n".join(out)
+
+
 @app.function(image=vllm_image, timeout=15 * 60, max_containers=1)
 def list_attention_backends() -> str:
     """Enumerate the attention backends this vLLM accepts.
@@ -826,6 +940,9 @@ def main(
         return
     if engine == "which-backend":
         print(backend_report.remote())
+        return
+    if engine == "bootvar":
+        print(boot_variance.remote(boots=repeats if repeats > 1 else 3))
         return
     if engine == "backends":
         print(list_attention_backends.remote())
