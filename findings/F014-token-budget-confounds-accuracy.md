@@ -60,6 +60,22 @@ The gate's 27% understates the effect for the quality set because the gate uses
 GSM8K test indices 0-15, which are among the easiest problems; the quality set
 spans 256 problems including substantially harder ones.
 
+## Provenance gap (recorded 2026-09-23)
+
+The measurements behind this finding were taken by a bespoke GPU probe that
+wrote **nothing to `results/`**. Its only output was stdout, so the numbers
+above currently rest on terminal scrollback -- which `docs/data-model.md`
+section 4 rule 4 explicitly forbids, and which means a reader cannot check
+them against raw records.
+
+This is not a claim that the numbers are wrong; it is a claim that they are
+presently **unverifiable by a third party**, which for this study's purposes
+is close to the same thing.
+
+The probe now writes one record per measurement to `results/probes.jsonl`
+and persists each boot's engine log, so a re-run produces citable evidence.
+`analysis/check_provenance.py` fails on this finding until it does.
+
 ## What this does NOT establish
 
 That 768 tokens is sufficient — only that 256 is not. `truncated` is now

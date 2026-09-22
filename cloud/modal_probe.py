@@ -548,7 +548,9 @@ def prefetch_models(sweep_file: str = "h1") -> str:
     gpu="L4",
     timeout=45 * 60,
     **GPU_GUARDRAILS,
-    volumes={"/models": model_vol},
+    # /results so `billed` can record GPU seconds; without the mount the
+    # write fails silently and the run is unbilled again.
+    volumes={"/models": model_vol, "/results": results_vol},
 )
 @billed('determinism')
 def determinism_check() -> str:
@@ -674,7 +676,10 @@ def backend_report() -> str:
 
 @app.function(
     image=vllm_image, gpu="L4", timeout=90 * 60, **GPU_GUARDRAILS,
-    volumes={"/models": model_vol},
+    # /results is mounted because this probe now writes records and logs.
+    # Without it the writes land in the container filesystem and vanish on
+    # exit, which is the same failure as not recording at all.
+    volumes={"/models": model_vol, "/results": results_vol},
 )
 @billed('boot_variance')
 def boot_variance(boots: int = 2, mechanism: str = "dflash") -> str:
@@ -710,12 +715,16 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash") -> str:
     os.environ["SPECFP8_MODEL_CACHE"] = "/models"
     _setup_repo()
 
-    from specfp8.cells import expand
+    from datetime import datetime, timezone
+
+    from specfp8.cells import expand, cell_id as compute_cell_id
     from specfp8.client import load_run
+    from specfp8.env import capture as capture_env
     from specfp8.launchers.base import find_free_port, stop_process
     from specfp8.launchers.vllm import VllmLauncher
     from specfp8.metrics.base import scrape_spec_stats, delta as mdelta
     from specfp8.metrics.vllm import VllmMetricsScraper
+    from specfp8.store import append_record, argv_fingerprint, persist_log
     from specfp8.workloads import get_workload
 
     cell = next(c for c in expand("sweeps/boot_stability.yaml")
@@ -727,6 +736,14 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash") -> str:
     nreq = lambda c: min(max(16, c * 4), 256, workload.size)
 
     arms = {"default": [], "enforce_eager": ["--enforce-eager"]}
+    # Every measurement is written to results/probes.jsonl as it is taken.
+    # Without this the probe's only output is stdout, and a finding built on
+    # it cites terminal scrollback -- which docs/data-model.md section 4
+    # rule 4 forbids, and which is how F009, F014 and F021 ended up with no
+    # raw evidence in the repo.
+    env = capture_env()
+    probe_run = datetime.now(timezone.utc).strftime(
+        "%Y-%m-%dT%H-%MZ_boot_variance")
     out = [f"concurrency x CUDA-graph test: {boots} boots x {len(arms)} arms "
            f"[mechanism={mechanism}]",
            f"cell: {cell.mechanism}|{cell.weight_precision}|"
@@ -738,11 +755,28 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash") -> str:
         launcher = VllmLauncher()
         launcher.argv = lambda c, p, _b=base, _e=extra: _b.argv(c, p) + _e
         for i in range(boots):
-            handle = launcher.start(cell, f"cv_{arm}_{i}", find_free_port(), "logs")
+            boot_tag = f"{probe_run}_{arm}_{i}"
+            handle = launcher.start(cell, boot_tag, find_free_port(), "logs")
+            argv = launcher.argv(cell, handle.port)
             try:
                 h = launcher.wait_healthy(handle, timeout_s=900)
                 if not h.ok:
                     out.append(f"  {arm} boot {i+1}: FAILED ({h.status})")
+                    # A failed boot is evidence too -- and the verbatim
+                    # error lives only in the engine log, which is why F012
+                    # was diagnosable at all.
+                    persist_log(boot_tag, handle.log_path, "/results")
+                    append_record({
+                        "probe_run": probe_run, "phase": "boot_variance",
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                        "arm": arm, "boot": i, "cell_id": compute_cell_id(cell),
+                        "config": cell.model_dump(), "env": env.model_dump(),
+                        "argv": argv, "argv_fingerprint": argv_fingerprint(argv),
+                        "outcome": {"status": h.status,
+                                    "error_verbatim": h.error_verbatim},
+                        "log_path": f"results/logs/{boot_tag}.log",
+                    }, "/results", "probes.jsonl")
+                    results_vol.commit()
                     continue
                 for c in CONC:
                     prompts = workload.prompts(nreq(c), seed=1234)
@@ -757,10 +791,43 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash") -> str:
                     tok_s = toks / wall if wall else 0.0
                     tau = mdelta(before, after).tau if (before and after) else None
                     data.setdefault((arm, c), []).append(tok_s)
+                    d = mdelta(before, after) if (before and after) else None
+                    append_record({
+                        "probe_run": probe_run, "phase": "boot_variance",
+                        "ts": datetime.now(timezone.utc).isoformat(),
+                        # arm and boot are what this probe varies; neither is
+                        # part of cell_id, so both must be explicit or the
+                        # records collapse into indistinguishable duplicates.
+                        "arm": arm, "boot": i,
+                        "enforce_eager": arm == "enforce_eager",
+                        "cell_id": compute_cell_id(cell),
+                        "config": cell.model_dump(), "env": env.model_dump(),
+                        "argv": argv, "argv_fingerprint": argv_fingerprint(argv),
+                        "sampling_params": sampling,
+                        "load": {"workload": "gsm8k", "concurrency": c,
+                                 "seed": 1234, "n_requests": nreq(c)},
+                        "outcome": {
+                            "status": "ok" if all(r.ok for r in res) else "partial",
+                            "requests_ok": sum(1 for r in res if r.ok),
+                            "requests_total": len(res)},
+                        "throughput": {
+                            "wall_clock_s": round(wall, 3),
+                            "output_tokens": toks,
+                            "output_tokens_per_s": round(tok_s, 3)},
+                        "spec": None if d is None else {
+                            "tau": round(d.tau, 4) if d.tau else None,
+                            "accepted_tokens": d.accepted_tokens,
+                            "draft_tokens": d.draft_tokens,
+                            "verification_steps": d.verification_steps},
+                        "log_path": f"results/logs/{boot_tag}.log",
+                    }, "/results", "probes.jsonl")
+                    results_vol.commit()
                     out.append(f"  {arm:14} boot {i+1} c={c:<3} "
                                f"{tok_s:8.2f} tok/s  tau={tau:.3f}" if tau
                                else f"  {arm:14} boot {i+1} c={c:<3} {tok_s:8.2f} tok/s")
             finally:
+                persist_log(boot_tag, handle.log_path, "/results")
+                results_vol.commit()
                 stop_process(handle)
                 time.sleep(5)
 
@@ -930,7 +997,8 @@ def check_results():
     _print_results()
 
 
-@app.function(image=vllm_image, gpu="L4", timeout=900)
+@app.function(image=vllm_image, gpu="L4", timeout=900,
+              volumes={"/results": results_vol})
 @billed('vllm_help')
 def dump_vllm_help() -> str:
     """Introspect vLLM's CLI surface so launcher flags can be verified

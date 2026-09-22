@@ -117,6 +117,28 @@ three measurements into one mean and described the result as prompt
 variance within a single boot -- a provenance claim the table asserted and
 never checked. It now checks it.
 
+## Provenance gap (recorded 2026-09-23)
+
+The measurements behind this finding were taken by a bespoke GPU probe that
+wrote **nothing to `results/`**. Its only output was stdout, so the numbers
+above currently rest on terminal scrollback -- which `docs/data-model.md`
+section 4 rule 4 explicitly forbids, and which means a reader cannot check
+them against raw records.
+
+This is not a claim that the numbers are wrong; it is a claim that they are
+presently **unverifiable by a third party**, which for this study's purposes
+is close to the same thing.
+
+The probe now writes one record per measurement to `results/probes.jsonl`
+and persists each boot's engine log, so a re-run produces citable evidence.
+`analysis/check_provenance.py` fails on this finding until it does.
+
+For this finding specifically, `sweeps/perf_v2.yaml` supplies the evidence as
+a side effect of its main purpose: it carries `enforce_eager` as an axis
+across all eight cells and runs through `specfp8.sweep`, which records
+normally. That is stronger than re-running the probe, since it tests the
+claim on eight configurations rather than the one this finding used.
+
 ## What this does NOT establish
 
 - **Why a default boot picks one mode over the other.** The selector is

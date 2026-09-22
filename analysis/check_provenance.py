@@ -188,6 +188,21 @@ def main() -> int:
             elif not (LOGS / f"{cid}.log").exists():
                 defects.append(f"{fid}: cell {cid} has no persisted engine log")
 
+        # 7. data-model.md section 4, rule 4: findings never cite terminal
+        # output. A result or method claim has to point at something in
+        # results/ or analysis/out/, or it cannot be checked by a reader --
+        # and the earlier rules are silent about it, because they validate
+        # citations that exist rather than noticing their absence.
+        #
+        # Retractions and gaps are exempt: a withdrawal's evidence is the
+        # finding it withdraws, and a gap records something not measured.
+        if _field(fm, "kind") in ("result", "method"):
+            if not _list_field(fm, "cells") and not _list_field(fm, "analysis"):
+                defects.append(
+                    f"{fid}: no evidence in results/ or analysis/out/ -- "
+                    f"cites neither a cell nor an analysis output, so the "
+                    f"claim rests on terminal output only")
+
         supersedes[fid] = [x.strip("'\"") for x in _list_field(fm, "supersedes")]
         superseded_by[fid] = [x.strip("'\"")
                               for x in _list_field(fm, "superseded_by")]

@@ -45,6 +45,31 @@ Every correction in `findings/`, classified by what was assumed constant:
 
 Eleven instances, one shape.
 
+### The twelfth, found the same day this was written
+
+"What this does NOT establish" below predicted that a twelfth instance
+existed and was not on the list. It was found within the hour:
+
+| # | Compared | Assumed fixed | Actually varied | Cost if unreported |
+|---|---|---|---|---|
+| 12 | findings vs their evidence | that every probe recorded its measurements | four GPU entrypoints wrote nothing to `results/` | F009, F014 and F021 rest on terminal output |
+
+The shape holds exactly. The claim being checked was "this finding is
+supported"; the thing assumed fixed was "the harness wrote the data down";
+and it had not, for the bespoke probes. F021 — the study's strongest result
+and the paper's central confound — had `cells: []` and `analysis: []`.
+
+Worth noting how it was found, because it was not by inspection.
+`check_provenance.py` validated every citation a finding *made* and was
+silent about citations a finding *omitted*. An absence is not a malformed
+value, so nothing looked wrong. The check that catches it had to be written
+as a separate rule, and the same asymmetry — verifying what is present,
+never noticing what is missing — is worth suspecting elsewhere.
+
+That the prediction was confirmed this quickly is weak evidence that the
+rate of undiscovered instances is higher than the eleven above suggest, not
+that the list is now complete at twelve.
+
 ## Reasoning
 
 The pattern is not carelessness about *measurement*. Each individual number

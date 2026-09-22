@@ -127,14 +127,28 @@ def argv_fingerprint(argv: list[str]) -> str:
 
 
 def append(record: dict, results_dir: str | Path) -> None:
-    """Atomically append one result record to cells.jsonl.
+    """Atomically append one result record to cells.jsonl."""
+    append_record(record, results_dir, "cells.jsonl")
+
+
+def append_record(
+    record: dict, results_dir: str | Path, filename: str
+) -> None:
+    """Atomically append one record to an arbitrary JSONL file.
 
     Write to a temp file, fsync, then os.replace to achieve atomic append.
     This means a kill mid-write leaves the last good record intact.
+
+    Generic rather than hardcoded to cells.jsonl because the bespoke GPU
+    probes had no way to record at all, so findings F009, F014 and F021
+    ended up resting on terminal output -- which docs/data-model.md section
+    4 rule 4 forbids, and which left the study's strongest result with no
+    raw evidence in the repo. A probe that cannot write a record will
+    produce a claim that cannot be checked.
     """
     results_dir = Path(results_dir)
     results_dir.mkdir(parents=True, exist_ok=True)
-    cells_path = results_dir / "cells.jsonl"
+    cells_path = results_dir / filename
 
     line = json.dumps(record, separators=(",", ":")) + "\n"
 
