@@ -35,6 +35,19 @@ class ServerCell(BaseModel):
     block_size: int | None = None
     guided_decoding: bool = False
 
+    # Post-v1 (see _ID_SCHEMA_V1). Disables CUDA graphs engine-wide.
+    #
+    # A config axis rather than a harness flag because F021 shows it changes
+    # speculative throughput 1.37-2.38x and collapses boot-to-boot spread
+    # from 1.64x to 1.04x. A knob with that much leverage over the headline
+    # number has to be in the record that identifies a measurement; leaving
+    # it outside would let two results with the same cell_id differ by more
+    # than any effect the study reports.
+    #
+    # Its default must stay False: post-v1 defaults are part of the on-disk
+    # id format.
+    enforce_eager: bool = False
+
 
 class RunCell(BaseModel):
     """One measurement against a booted server."""
@@ -46,13 +59,60 @@ class RunCell(BaseModel):
     repeat: int
 
 
+#: The field set that cell ids were originally computed over. Frozen.
+#:
+#: Hashing `model_dump()` directly made the schema unextendable: every field
+#: added rehashes every cell, orphaning 30 committed results and breaking the
+#: cell ids cited in findings. That is why the boot-variance probes route
+#: around ServerCell entirely and test a knob the record cannot express --
+#: the store's own design was pushing evidence out of the store.
+#:
+#: Naively "omit fields at their default" does not work either: `attn_backend`
+#: already defaults to "auto" and is already inside the existing hashes, so
+#: omitting it would rewrite exactly the ids being protected.
+#:
+#: So the v1 field set is pinned. Fields in it are always hashed, which
+#: reproduces every existing id byte for byte. Fields added later are hashed
+#: only when set to something other than their default, so a cell that does
+#: not use a new knob keeps its old id -- which is correct, because it is the
+#: same configuration -- while a cell that does use it gets a new one.
+#:
+#: Consequence to respect: changing the default of a post-v1 field silently
+#: re-partitions ids. Post-v1 defaults are therefore part of the on-disk
+#: format and must not be edited.
+_ID_SCHEMA_V1 = (
+    "engine", "engine_ref", "model", "model_revision", "mechanism",
+    "draft_model", "draft_revision", "weight_precision", "kv_cache_dtype",
+    "attn_backend", "spec_tokens", "block_size", "guided_decoding",
+    # RunCell adds these; absent on a ServerCell and simply skipped.
+    "server", "workload", "concurrency", "seed", "repeat",
+)
+
+
+def id_payload(cell: ServerCell | RunCell) -> dict:
+    """The dict a cell's id is computed from. Exposed for tests and audits."""
+    dumped = cell.model_dump()
+    defaults = {
+        name: field.default
+        for name, field in type(cell).model_fields.items()
+    }
+    payload = {}
+    for key, value in dumped.items():
+        if key in _ID_SCHEMA_V1:
+            payload[key] = value
+        elif value != defaults.get(key):
+            payload[key] = value
+    return payload
+
+
 def cell_id(cell: ServerCell | RunCell) -> str:
     """Stable, machine-independent ID from canonical JSON.
 
     Canonical = keys sorted recursively, no whitespace, no trailing commas.
+    See `_ID_SCHEMA_V1` for why the payload is not simply `model_dump()`.
     """
     canonical = json.dumps(
-        cell.model_dump(), sort_keys=True, separators=(",", ":")
+        id_payload(cell), sort_keys=True, separators=(",", ":")
     )
     return hashlib.sha256(canonical.encode()).hexdigest()[:16]
 

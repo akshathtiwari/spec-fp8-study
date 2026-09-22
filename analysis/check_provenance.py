@@ -79,6 +79,50 @@ def known_cell_ids() -> set[str]:
     return ids
 
 
+def _id_stability_defects() -> list[str]:
+    """Recompute every stored cell_id from its stored config.
+
+    A mismatch means the id rule changed under the existing records. The
+    fix is never to rewrite results/ -- it is append-only -- but to make the
+    new field post-v1 so cells that do not set it keep their ids. See
+    `_ID_SCHEMA_V1` in specfp8/cells.py.
+    """
+    sys.path.insert(0, str(ROOT))
+    try:
+        from specfp8.cells import ServerCell, cell_id
+    except ImportError as e:
+        return [f"cannot import specfp8.cells to verify ids: {e}"]
+
+    if not CELLS.exists():
+        return []
+
+    out: list[str] = []
+    checked: set[str] = set()
+    for line in CELLS.read_text().splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            rec = json.loads(line)
+            stored, config = rec["cell_id"], rec["config"]
+        except (json.JSONDecodeError, KeyError):
+            continue
+        if stored in checked:
+            continue
+        checked.add(stored)
+        try:
+            recomputed = cell_id(ServerCell(**config))
+        except Exception as e:
+            out.append(f"cell {stored}: config no longer parses as "
+                       f"ServerCell ({type(e).__name__}: {e})")
+            continue
+        if recomputed != stored:
+            out.append(f"cell {stored}: id rule changed, config now hashes "
+                       f"to {recomputed} -- {len(checked)} stored results "
+                       f"would be orphaned")
+    return out
+
+
 def main() -> int:
     defects: list[str] = []
     cells = known_cell_ids()
@@ -147,6 +191,16 @@ def main() -> int:
         supersedes[fid] = [x.strip("'\"") for x in _list_field(fm, "supersedes")]
         superseded_by[fid] = [x.strip("'\"")
                               for x in _list_field(fm, "superseded_by")]
+
+    # 6. stored ids still recompute from their stored configs
+    #
+    # cell_id is content-addressed, so the schema and the hashing rule are
+    # part of the on-disk format. Adding a field, renaming one, or changing
+    # a post-v1 default silently re-partitions every id: old results stop
+    # being findable, findings cite cells that no longer resolve, and a
+    # sweep re-runs work it already paid for. Nothing else catches it,
+    # because every individual piece still looks well-formed.
+    defects.extend(_id_stability_defects())
 
     # 5. retraction links are symmetric and point somewhere real
     for fid, targets in supersedes.items():

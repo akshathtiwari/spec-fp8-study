@@ -64,6 +64,17 @@ class VllmLauncher:
             cmd += ["--attention-config",
                     json.dumps({"backend": cell.attn_backend})]
 
+        # CUDA graphs.
+        #
+        # Off is not the neutral setting and is never applied implicitly: it
+        # is requested per cell and is part of that cell's id, because F021
+        # measures it moving speculative throughput 1.37-2.38x. Its effect on
+        # the non-speculative baseline is measured separately rather than
+        # assumed, since the flag is engine-wide and a comparison that slows
+        # only one arm manufactures its own result.
+        if cell.enforce_eager:
+            cmd += ["--enforce-eager"]
+
         # Speculative decoding
         spec = self.speculative_config(cell)
         if spec is not None:
