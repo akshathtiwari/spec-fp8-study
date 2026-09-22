@@ -81,12 +81,44 @@ consumption. vLLM sizes the KV cache to fill whatever the profiler says is
 available, so removing a reservation hands that memory to the KV cache
 rather than leaving it free.
 
-This makes the flag's effect configuration-dependent in a way the
-throughput result alone does not reveal. F021 measured it on
-`dflash | bf16 | auto KV`, which boots in both arms. The cell that fails
-here pairs bf16 weights with FP8 KV, which is the heaviest combination in
-the grid: FP8 KV raises the token capacity per byte (F004), so the engine
-packs more KV into the same budget, and there is less slack to lose.
+### Correction: weight precision is not the discriminator
+
+This finding first reasoned that the failing cell was "the heaviest
+combination in the grid" because it pairs bf16 weights with FP8 KV. **That
+was wrong**, and the grid falsified it within the hour:
+`dflash | fp8 | fp8_e4m3 | eager` failed too, with *lighter* weights.
+
+All three recorded failures are identical to the byte:
+
+| time | cell | free before boot | allocation attempted |
+|---|---|---|---|
+| 20:00:57 | dflash\|bf16\|fp8_e4m3\|eager | 22561 MiB | 892.00 MiB |
+| 20:15:58 | dflash\|bf16\|fp8_e4m3\|eager | 22561 MiB | 892.00 MiB |
+| 20:35:30 | dflash\|fp8\|fp8_e4m3\|eager | 22561 MiB | 892.00 MiB |
+
+The identical 892 MiB across both weight precisions is the tell: the logits
+buffer is sized by speculative width times vocabulary in float32, and has
+nothing to do with how the weights are stored.
+
+The correct mechanism is more interesting than the one it replaces.
+**vLLM sizes the KV cache to fill whatever the profiler leaves**, so the
+residual headroom is *invariant* to weight precision. FP8 weights free up
+roughly 4.8 GiB compared to bf16 — and the engine spends all of it on KV.
+Lighter weights do not buy free memory; they buy more KV cache at the same
+free memory. Which is why the same allocation fails by the same margin in
+both.
+
+That also means the trade cannot be escaped by quantizing more. Anything
+that frees memory is absorbed by the KV cache, so the only lever that
+changes the outcome is the utilization target itself — deliberately not
+touched here, since it defines the quantity F004 measures.
+
+### What still varies
+
+F021 measured the flag on `dflash | bf16 | auto` KV, which boots in both
+arms. Every failure so far is `fp8_e4m3` KV. Whether eager speculative
+cells with **bf16 KV** also fail is not yet known; those cells are later in
+the grid and will settle it.
 
 ## What this does NOT establish
 
