@@ -62,6 +62,16 @@ The logits buffer is large because this is speculative decoding: the
 verification step materialises logits for the drafted tokens, so the buffer
 scales with speculative width times a ~151k vocabulary in float32.
 
+### Reproduced
+
+The failure occurred twice, in two separate Modal containers on different
+L4 instances (the first run was preempted mid-grid and retried). Both had a
+clean card and failed identically at the same allocation. It is a property
+of the configuration on this hardware, not a one-off allocation race.
+
+The paired graphs-on cell `5824814b68901229` booted successfully in the
+same session, so the two are not separated by anything but the flag.
+
 ## Reasoning
 
 The intuition is that turning CUDA graphs off should *save* memory, since
