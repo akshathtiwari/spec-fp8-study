@@ -1,0 +1,57 @@
+# Is speculative throughput stable across BOOTS within one container?
+#
+# An identical dflash config with identical prompts decoded 2x faster in one
+# container run than another (3505ms vs 7316-7923ms mean e2e, same output
+# lengths). The non-speculative cell reproduced exactly across the same two
+# containers, so it is not the GPU or thermal state.
+#
+# The suspected cause is CUDA-graph capture: the engine logs
+#   "CUDAGraphMode.FULL_AND_PIECEWISE is not supported with spec-decode for
+#    attention backend FlashInfer"
+# and falls back to PIECEWISE. If what gets captured varies between boots, a
+# 2x swing follows.
+#
+# Design: two ServerCells, one speculative and one not, measured at c=1, with
+# the whole sweep repeated across several BOOTS inside a single container.
+# `none` is the control: if it is stable across boots while dflash is not,
+# the instability is speculation-specific rather than environmental.
+#
+# Outcome decides how throughput may be reported:
+#   stable within container  -> never compare throughput across containers;
+#                               the existing grid stands with that caveat
+#   unstable within container -> speculative throughput needs boot-level
+#                               repeats and the sweep needs redesigning
+
+model: Qwen/Qwen3-4B
+model_revision: main
+spec_tokens: 5
+
+axes:
+  engine: [vllm]
+  engine_ref: [vllm-0.29.0]
+  mechanism: [none, dflash]
+  weight_precision: [bf16]
+  kv_cache_dtype: [auto]
+  attn_backend: [FLASHINFER]
+
+defaults:
+  draft_model: null
+  draft_revision: null
+  block_size: null
+  guided_decoding: false
+
+per_mechanism:
+  dflash:
+    draft_model: z-lab/Qwen3-4B-DFlash-b16
+    draft_revision: main
+    block_size: 16
+
+run_axes:
+  workload: [gsm8k]
+  concurrency: [1]
+  seed: [1234]
+  repeat: [0]
+
+correctness:
+  floor_correct: 0.10
+  floor_degraded: 0.05

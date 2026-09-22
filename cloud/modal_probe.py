@@ -160,7 +160,8 @@ def _print_results(results_path="/results/cells.jsonl"):
     **GPU_GUARDRAILS,
     volumes={"/results": results_vol, "/models": model_vol},
 )
-def run_vllm_sweep(sweep_file: str = "perf", force: bool = False):
+def run_vllm_sweep(sweep_file: str = "perf", force: bool = False,
+                   boot_repeats: int = 1):
     """Phase 2 performance sweep: boot once per ServerCell, run many."""
     import os, subprocess, threading
 
@@ -179,11 +180,17 @@ def run_vllm_sweep(sweep_file: str = "perf", force: bool = False):
                                  daemon=True)
     committer.start()
     try:
-        result = subprocess.run(
-            ["python", "-u", "-m", "specfp8.sweep",
-             "--sweep", source, "--results", "/results"]
-            + (["--force"] if force else []),
-        )
+        for attempt in range(max(1, boot_repeats)):
+            if boot_repeats > 1:
+                print(f"\n########## BOOT PASS {attempt + 1} of "
+                      f"{boot_repeats} ##########")
+            result = subprocess.run(
+                ["python", "-u", "-m", "specfp8.sweep",
+                 "--sweep", source, "--results", "/results"]
+                # Every pass must re-measure, otherwise pass 2 sees pass 1's
+                # records and skips -- which would defeat the whole test.
+                + (["--force"] if (force or boot_repeats > 1) else []),
+            )
     finally:
         stop.set()
         committer.join(timeout=5)
@@ -827,7 +834,8 @@ def main(
         print(correctness_matrix.remote(model=sweep if sweep != "compat" else "Qwen/Qwen3-4B"))
         return
     if engine == "sweep":
-        rc = run_vllm_sweep.remote(sweep_file=sweep, force=force)
+        rc = run_vllm_sweep.remote(sweep_file=sweep, force=force,
+                                   boot_repeats=repeats)
         print(f"\nSweep finished (exit {rc}).")
         return
     if engine == "prefetch":
