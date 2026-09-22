@@ -214,7 +214,7 @@ def _print_results(results_path="/results/cells.jsonl"):
     volumes={"/results": results_vol, "/models": model_vol},
 )
 def run_vllm_sweep(sweep_file: str = "perf", force: bool = False,
-                   boot_repeats: int = 1):
+                   boot_repeats: int = 1, since: str | None = None):
     """Phase 2 performance sweep: boot once per ServerCell, run many."""
     import os, subprocess, threading
 
@@ -240,6 +240,11 @@ def run_vllm_sweep(sweep_file: str = "perf", force: bool = False,
             result = subprocess.run(
                 ["python", "-u", "-m", "specfp8.sweep",
                  "--sweep", source, "--results", "/results"]
+                # Modal preempts containers and retries the function. With
+                # bare --force the retry restarts the whole grid; --since
+                # lets it resume over what this session already banked
+                # while still ignoring pre-session records.
+                + (["--since", since] if since else [])
                 # Every pass must re-measure, otherwise pass 2 sees pass 1's
                 # records and skips -- which would defeat the whole test.
                 + (["--force"] if (force or boot_repeats > 1) else []),
@@ -1051,6 +1056,7 @@ def main(
     quality: bool = False,
     repeats: int = 1,
     force: bool = False,
+    since: str = "",
 ):
     """Entry point: modal run cloud/modal_probe.py [--engine vllm|sglang|status|help] [--sweep mini|compat]"""
     if engine == "help":
@@ -1071,7 +1077,7 @@ def main(
         return
     if engine == "sweep":
         rc = run_vllm_sweep.remote(sweep_file=sweep, force=force,
-                                   boot_repeats=repeats)
+                                   boot_repeats=repeats, since=since or None)
         print(f"\nSweep finished (exit {rc}).")
         return
     if engine == "prefetch":

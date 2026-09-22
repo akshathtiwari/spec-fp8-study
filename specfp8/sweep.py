@@ -163,7 +163,8 @@ def _run_one_measurement(
     }
 
 
-def run_sweep(sweep_path: str, results_dir: str, force: bool = False) -> None:
+def run_sweep(sweep_path: str, results_dir: str, force: bool = False,
+              since: str | None = None) -> None:
     results_path = Path(results_dir)
     log_dir = Path("logs")
 
@@ -177,22 +178,39 @@ def run_sweep(sweep_path: str, results_dir: str, force: bool = False) -> None:
     print(f"\n{sweep_path}: {len(run_cells)} RunCells over "
           f"{len(groups)} ServerCells")
 
+    # `since` is what makes --force survive a preemption.
+    #
+    # --force exists to re-measure cells whose stored records predate a
+    # change in method -- perf_v2's default arm collides on run_id with the
+    # old perf.yaml runs, which analysis/perf_tables.py now flags as
+    # averaging across boots. But --force also discards work THIS session
+    # already did, so when Modal preempted the container four minutes in,
+    # the retry restarted the whole 4-hour grid from zero.
+    #
+    # Passing the session start time instead means "anything not measured
+    # since T is pending": stale records are ignored exactly as --force
+    # intends, while a retry resumes over what this session has banked.
     done = set()
-    if not force:
+    if not force or since:
         path = results_path / "sweep.jsonl"
         if path.exists():
             with open(path) as f:
                 for line in f:
-                    if line.strip():
-                        done.add(json.loads(line).get("run_id"))
-        print(f"  already complete: {len(done)}")
+                    if not line.strip():
+                        continue
+                    rec = json.loads(line)
+                    if since and (rec.get("ts") or "") < since:
+                        continue
+                    done.add(rec.get("run_id"))
+        label = f" since {since}" if since else ""
+        print(f"  already complete{label}: {len(done)}")
 
     session_gpu_s = 0.0
     for gi, (sid, runs) in enumerate(sorted(groups.items()), 1):
         server = runs[0].server
         pending = [
             r for r in runs
-            if force or _run_id(r) not in done
+            if _run_id(r) not in done
         ]
         head = (f"[{gi}/{len(groups)}] {server.mechanism}|"
                 f"{server.weight_precision}|{server.kv_cache_dtype}|"
@@ -267,8 +285,14 @@ def main() -> None:
     ap.add_argument("--results", default="results")
     ap.add_argument("--force", action="store_true",
                     help="Re-run measurements even if already recorded.")
+    ap.add_argument("--since", default=None,
+                    help="Treat records older than this ISO timestamp as "
+                         "absent. With --force, lets a preempted run resume "
+                         "over this session's work while still ignoring "
+                         "stale records.")
     args = ap.parse_args()
-    run_sweep(args.sweep, args.results, force=args.force)
+    run_sweep(args.sweep, args.results, force=args.force,
+              since=args.since)
 
 
 if __name__ == "__main__":
