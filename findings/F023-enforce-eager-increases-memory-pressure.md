@@ -21,10 +21,11 @@ throughput. It is **not free**. Disabling CUDA graphs makes vLLM allocate
 *more* KV cache, not less, and on a memory-tight card that is enough to make
 a speculative configuration fail to boot.
 
-`dflash | bf16 weights | fp8_e4m3 KV | FLASHINFER | enforce_eager=True`
-(cell `4ae0a860802f247c`) **cannot boot on a 22.03 GiB L4**. The same
-configuration with CUDA graphs on (cell `5824814b68901229`) boots and has
-12 recorded measurements.
+On a 22.03 GiB L4 the failing set is precisely **speculative decoding +
+`fp8_e4m3` KV cache + `enforce_eager`**: both such cells in the grid fail
+to boot, three times across two containers. The same cells with CUDA graphs
+on boot normally, and eager cells with bf16 KV boot normally — including
+the very cell F021's recommendation was measured on.
 
 ## Evidence
 
@@ -113,14 +114,49 @@ that frees memory is absorbed by the KV cache, so the only lever that
 changes the outcome is the utilization target itself — deliberately not
 touched here, since it defines the quantity F004 measures.
 
-### What still varies
+### The boundary: KV dtype, not weights and not speculation alone
 
-F021 measured the flag on `dflash | bf16 | auto` KV, which boots in both
-arms. Every failure so far is `fp8_e4m3` KV. Whether eager speculative
-cells with **bf16 KV** also fail is not yet known; those cells are later in
-the grid and will settle it.
+The grid settles it. `dflash | bf16 | auto KV | eager` (cell
+`a15aaeb7ae8ece66`) **boots** — 72s to healthy, KV 69808 tokens, and runs
+at 74.6 / 84.3 tok/s at c=1, matching F021's eager measurements of the same
+configuration. Non-speculative eager cells boot too (`6bf93e55`, `9d09fcab`).
+
+So the failing set is precisely **speculative + `fp8_e4m3` KV + eager**:
+
+| mechanism | KV dtype | eager | boots? |
+|---|---|---|---|
+| none | auto | yes | yes |
+| none | fp8_e4m3 | yes | yes |
+| dflash | auto | yes | **yes** |
+| dflash | fp8_e4m3 | yes | **no** (x3) |
+| dflash | fp8_e4m3 | no | yes |
+
+### What the 892 MiB actually is
+
+The allocation is identical in all three failures because it does not
+depend on anything that varied:
+
+```
+max_num_seqs (256) x (5 speculative + 1 bonus) x vocab (152064) x 4 bytes
+  = 891.00 MiB        observed: 892.00 MiB
+```
+
+A float32 logits buffer over the full speculative verification batch. It is
+fixed by scheduler width and speculative width, which is why weight
+precision moved it not at all.
 
 ## What this does NOT establish
+
+- **Why `fp8_e4m3` KV specifically tips it over.** This is the honest gap.
+  The logits buffer is constant, the utilization target is constant, and
+  non-speculative FP8 KV cells boot fine under eager. Something about the
+  FP8 KV path leaves less residual headroom than the bf16 path at the same
+  utilization — plausibly FlashInfer FP8 workspace, or block-allocation
+  granularity at doubled token capacity (F004) — but this study has not
+  measured which, and the difference is not visible in the recorded
+  capacities. Stated as unexplained rather than guessed at.
+
+### Further limits
 
 - **That it fails on other hardware.** This is a 22.03 GiB L4. A 40 or 80
   GiB card has slack to absorb the difference and would very likely boot
