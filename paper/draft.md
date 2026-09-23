@@ -1,9 +1,14 @@
 # What You Are Actually Measuring When You Benchmark Speculative Decoding Under FP8
 
-**Draft rev 1 · 2026-09-23.** Sections 1–5, 7 and 8 are written against
-established findings. Section 6 is blocked on `sweeps/perf_v2.yaml`, in
-flight. Every number carries a finding id; `analysis/check_provenance.py`
-verifies each one resolves to raw records.
+**Draft rev 2 · 2026-09-23.** All sections written against established
+findings; the performance grid has been run twice end to end. Every figure
+carries a finding id, `analysis/check_paper.py` verifies each one resolves
+to a record (130 figures, 0 untraceable), and
+`analysis/check_provenance.py` verifies each finding resolves to raw data.
+
+**Not yet submittable.** Outstanding: author block, LaTeX conversion,
+a real bibliography, and §7's "remaining results" still summarises rather
+than reports. See `docs/paper-outline.md`.
 
 ---
 
