@@ -61,6 +61,32 @@ def load_requests(run_id: str) -> list[dict]:
         return [json.loads(l) for l in f if l.strip()]
 
 
+#: Mirrors specfp8.client.MAX_PLAUSIBLE_ITL_MS. Duplicated rather than
+#: imported so the analysis layer does not depend on the harness package.
+MAX_PLAUSIBLE_ITL_MS = 60_000.0
+
+
+def itl_is_valid(requests: list[dict]) -> bool:
+    """False when a run's inter-token latencies predate the F025 fix.
+
+    Runs recorded before 2026-09-23 carry itl_ms arrays that alternate sign
+    and reach +/-Infinity, so every request in them fails any ITL target and
+    contributes a spurious 0% to met_fraction. Averaging those together with
+    valid runs produced a goodput table showing 40% met for a configuration
+    whose raw records show 255/256 requests inside the target.
+
+    Detected rather than dated: a timestamp cutoff would silently mislabel
+    any future run that reintroduces the bug, and the condition is directly
+    checkable.
+    """
+    import math
+    for r in requests:
+        for v in (r.get("itl_ms") or []):
+            if not math.isfinite(v) or v < 0 or v > MAX_PLAUSIBLE_ITL_MS:
+                return False
+    return True
+
+
 def goodput(requests: list[dict], wall_s: float,
             itl_slo_ms: float, ttft_slo_ms: float) -> dict:
     """Requests/sec that succeeded AND met both latency targets."""
@@ -140,8 +166,15 @@ def main() -> None:
 
     OUT.mkdir(parents=True, exist_ok=True)
     rows = []
+    skipped = 0
     for rec in runs:
         reqs = load_requests(rec["run_id"])
+        # A run with corrupt ITL cannot contribute a meaningful SLO figure,
+        # and averaging its spurious zeros into valid runs is worse than
+        # dropping it (F025).
+        if reqs and not itl_is_valid(reqs):
+            skipped += 1
+            continue
         wall = rec["throughput"]["wall_clock_s"]
         cfg, load = rec["config"], rec["load"]
         for itl in ITL_SLOS_MS:
@@ -180,7 +213,9 @@ def main() -> None:
             for r in rows]
     (OUT / "goodput.csv").write_text("\n".join(csv) + "\n")
     print(f"  wrote analysis/out/tables/goodput.csv "
-          f"({len(rows)} rows from {len(runs)} measurements)")
+          f"({len(rows)} rows from {len(runs) - skipped} measurements)")
+    if skipped:
+        print(f"  skipped {skipped} measurement(s) with pre-F025 corrupt ITL")
 
     # A readable slice at one SLO; the CSV carries the full sweep.
     ref = [r for r in rows if r["itl_slo_ms"] == 50 and r["ttft_slo_ms"] == 1000]
