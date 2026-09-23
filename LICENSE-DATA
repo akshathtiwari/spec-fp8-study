@@ -1,0 +1,13 @@
+The contents of `results/`, `findings/`, `analysis/out/`, `docs/` and `paper/`
+in this repository are licensed under a Creative Commons Attribution 4.0
+International License (CC BY 4.0).
+
+https://creativecommons.org/licenses/by/4.0/
+
+Code in this repository is licensed separately under the MIT License; see
+LICENSE.
+
+The split is deliberate. The code is a harness and should be reusable with
+minimal friction. The measurements and findings are the scientific record,
+and attribution is the one condition worth attaching to them -- a number
+reproduced without its provenance is the failure this study is about.

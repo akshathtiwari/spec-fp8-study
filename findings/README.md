@@ -37,6 +37,7 @@ wrong turns and what caught them — is part of the evidence.
 | [`F012`](F012-harness-faults-are-not-verdicts.md) | A leaked GPU process was recording host faults as compatibility verdicts | established | high |
 | [`F014`](F014-token-budget-confounds-accuracy.md) | A 256-token budget truncates GSM8K reasoning and is scored as no answer | superseded | high |
 | [`F022`](F022-every-error-had-the-same-shape.md) | Every substantive error in this study was a comparison holding a third variable fixed by assumption rather than by measurement | established | high |
+| [`F028`](F028-instruments-were-never-swept-backward.md) | Every checker built in this study was run forward on new questions and never swept backward over settled claims, which is how a headline survived a test designed to catch it | established | high |
 
 ## Known gaps
 
@@ -58,4 +59,4 @@ wrong turns and what caught them — is part of the evidence.
 
 ---
 
-27 findings: 14 result, 5 method, 1 gap, 7 retraction.
+28 findings: 14 result, 6 method, 1 gap, 7 retraction.

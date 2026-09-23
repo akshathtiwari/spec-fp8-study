@@ -1,87 +1,130 @@
-# Speculative Decoding × FP8 Compatibility Study
+# What You Are Actually Measuring When You Benchmark Speculative Decoding Under FP8
 
-**Does FP8 KV cache actually work with speculative decoding on the GPUs people rent?**
+An independent measurement study of speculative decoding and FP8 quantization
+on vLLM 0.29.0 / NVIDIA L4 (SM89), with the harness, the raw records, and the
+full history of its own corrections.
 
-This repo contains the measurement harness for an independent study of how FP8
-quantization interacts with speculative decoding across draft mechanisms,
-precision configurations, and serving engines.
+**Paper:** [`paper/paper.pdf`](paper/paper.pdf) (source: `paper/paper.tex`)
 
-## The question
+---
 
-Production LLM serving stacks speculative decoding and FP8 quantization
-together. The published literature evaluates them separately. We measure the
-interaction directly: compatibility, acceptance length (τ), and goodput under
-SLO across a concurrency sweep.
+## What this found
 
-The specific hypothesis (H1): FP8 KV cache combined with non-causal speculative
-drafting (DFlash) may be silently broken on SM89 (Ada: RTX 4090 / L4 / L40S)
-because the dequant path is gated to SM100 (datacenter Blackwell).
+We set out to measure how FP8 quantization interacts with speculative
+decoding. We could not, four times, until the measurement apparatus itself
+was fixed. Those four obstacles turned out to be larger than the effect they
+obscured:
 
-## Quick start
+1. **Attention-backend selection is conditioned on KV-cache dtype.** At BF16
+   KV vLLM selects FlashAttention-2; at `fp8_e4m3` it selects FlashInfer. A
+   precision A/B under default settings is a kernel A/B as well. Target and
+   draft models select *independently*, so pinning one does not pin the other.
+2. **Throughput of an identical speculative configuration varies up to 2.96x
+   across boots** while acceptance does not. The variation is associated with
+   the CUDA-graph execution path and is fixed at boot. It is specific to
+   *draft-model* speculation: n-gram speculation shows 1.10x over twelve boots.
+3. **Acceptance (tau) has a boot-to-boot noise floor of 1.32%** that we could
+   not find reported anywhere. Effects smaller than that are unfalsifiable;
+   we withdrew one of our own published claims that sat at 1.7x the floor.
+4. **"Inter-token latency" is inter-chunk latency.** A speculative step emits
+   every accepted token in one stream chunk, so a p95-ITL objective ranks the
+   highest-throughput configuration in our grid as fully non-compliant. This
+   one does not add error -- it inverts the decision.
+
+The original hypothesis that motivated the study --- that FP8 KV cache plus
+non-causal drafting is silently broken on Ada (SM89) --- was **refuted**
+(`findings/F002`). The combination runs. That refutation is why the study
+became a measurement-methodology paper.
+
+## The record
+
+```
+findings/        27 numbered findings: results, methods, retractions, gaps.
+                 Each carries a mandatory "What this does NOT establish".
+                 Wrong claims are superseded, never deleted.
+results/         Raw records, append-only. ~40 MB, committed on purpose:
+                 every claim is one click from its evidence.
+analysis/        Scripts that turn raw records into the tables in the paper.
+                 Derived output is regenerated, never hand-edited.
+docs/            Requirements, design, data model, paper outline.
+paper/           LaTeX source, figures, and build script.
+```
+
+Seven of the 27 findings are retractions. They are kept deliberately. The
+study's argument is that benchmark numbers are routinely reported without
+their error terms, and the most honest evidence for that is the list of times
+we did it ourselves and caught it.
+
+## Verifying it rather than trusting it
 
 ```bash
-# Clone and install
+python analysis/check_provenance.py
+```
+
+Walks the chain a reader would walk: every finding's citations resolve to
+stored records, stored ids still recompute from their stored configs,
+retraction links are symmetric, and no result rests on terminal output. Exits
+with the defect count.
+
+```bash
+python analysis/check_paper.py
+```
+
+Every distinctive numeric figure in the paper must appear in the underlying
+records. It states its own limits in its docstring: it proves no figure is
+invented, not that every figure is correct.
+
+```bash
+./paper/build.sh
+```
+
+Regenerates the figure from raw records, runs both checkers, and only then
+typesets. A paper that fails its own audit does not get built.
+
+## Reproducing the measurements
+
+Every result is re-derivable by a third party on rented hardware. The study
+cost tens of dollars of per-second L4 time in total; `analysis/budget_report.py`
+prints the ledger.
+
+```bash
 git clone https://github.com/akshathtiwari/spec-fp8-study.git
-cd spec-fp8-study
-pip install -e .
+cd spec-fp8-study && pip install -e .
 
-# Set model cache (optional)
-export SPECFP8_MODEL_CACHE=~/.cache/huggingface/hub
+# Phase 2 performance grid: 16 boots, both CUDA-graph arms
+modal run cloud/modal_probe.py --engine sweep --sweep perf_v2 --force
 
-# Phase 1: compatibility matrix
-./run.sh probe --sweep sweeps/compat.yaml
-
-# Phase 2: performance sweep (runs only cells Phase 1 marked ok)
-./run.sh sweep --sweep sweeps/perf.yaml
-
-# Regenerate figures from results
-./run.sh figures
+# Boot-to-boot variance for one mechanism
+modal run cloud/modal_probe.py --engine bootvar --sweep dflash --repeats 12
 ```
 
-## Hardware requirements
+Requires a CUDA GPU with compute capability >= 8.9 and ~22 GiB of VRAM. The
+`cloud/` runner uses [Modal](https://modal.com); the harness itself is
+engine-agnostic and speaks only HTTP.
 
-- One CUDA GPU with FP8 support (compute capability ≥ 8.9)
-- Target: RTX 4090 / L4 / L40S (Ada, SM89)
-- 24+ GB VRAM
-- vLLM and/or SGLang installed (in separate environments if needed)
+## Design principles that earned their keep
 
-## Project structure
+- **HTTP-only boundary.** The harness never imports vLLM. Engines run as
+  subprocesses and are addressed over the OpenAI-compatible API, so what is
+  measured is what a serving deployment runs.
+- **Content-addressed cells.** A configuration hashes to a `cell_id`;
+  identical configuration yields an identical id on any machine. The id
+  schema is versioned so new axes do not orphan old results.
+- **Append-only records.** A re-run supersedes rather than overwrites, and
+  the superseded record stays readable. Most of our corrections were caught
+  by re-reading stored records against a hypothesis formed later.
+- **Store raw, derive later.** Per-request timings are saved, so goodput at
+  any SLO is computed offline at zero GPU cost.
 
-```
-spec-fp8-study/
-├── docs/                    # SDD: requirements, design, tasks
-├── specfp8/                 # Measurement harness (pure Python, HTTP-only)
-│   ├── cells.py             # Cell model, stable ID, sweep expansion
-│   ├── env.py               # GPU/driver/CUDA version capture
-│   ├── store.py             # Atomic JSONL append + resume
-│   ├── client.py            # Async OpenAI-compatible load generator
-│   ├── correctness.py       # Three-layer correctness testing
-│   ├── probe.py             # Phase 1 — compatibility matrix
-│   ├── sweep.py             # Phase 2 — performance sweep
-│   ├── launchers/           # Engine-specific subprocess launchers
-│   ├── metrics/             # Prometheus counter scraping
-│   ├── workloads/           # Prompt sources and validators
-│   └── analysis/            # Offline analysis (goodput, figures)
-├── sweeps/                  # Sweep configuration YAMLs
-├── results/                 # Output (gitignored)
-└── run.sh                   # Single entrypoint (N6)
-```
+## Status
 
-## Design principles
-
-- **HTTP-only boundary**: the harness never imports vLLM or SGLang. Engines run
-  as subprocesses, communication is via the OpenAI-compatible API.
-- **Atomic resume**: results are written per-cell with fsync + os.replace. An
-  interrupted sweep resumes without re-running completed cells.
-- **Store raw, derive later**: per-request timings are saved so goodput at any
-  SLO is computed offline at zero GPU cost.
-
-## Documentation
-
-- [Requirements](docs/requirements.md) — what and why
-- [Design](docs/design.md) — how
-- [Tasks](docs/tasks.md) — build order
+The paper is a preprint draft. It has not been peer reviewed, and
+`check_provenance.py` currently reports two known defects (findings F009 and
+F014 rest on probe output that predates per-measurement recording; neither is
+cited in the paper). Both are stated in the paper rather than suppressed.
 
 ## License
 
-MIT
+Code is MIT (`LICENSE`). Measurements, findings and the paper are CC BY 4.0
+(`LICENSE-DATA`). The split is deliberate: the harness should be reusable
+with minimal friction, and the scientific record should carry attribution.

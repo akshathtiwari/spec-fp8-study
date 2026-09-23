@@ -107,6 +107,37 @@ nobody had measured that floor.
 Neither correction touches the precision comparison, which is what this
 finding exists for.
 
+### Correction to the correction (2026-09-24): the floor was transplanted
+
+The comparison above is itself cross-era, and the reasoning has to be
+restated.
+
+The 1.32% floor was measured at **tau ~4.1**, on GSM8K with
+`max_tokens=768`. The 2.25% backend spread was measured at **tau ~2.7**, on
+the probe prompt set with `max_tokens=256`. Those are different operating
+points, and this finding already noted in passing that workload alone shifts
+tau by 2%. Comparing an effect at one operating point against a noise floor
+measured at another assumes the *relative* floor is invariant across them,
+which nobody checked.
+
+**The withdrawal stands; the stated reason does not.** The defensible
+argument needs no transplanted number: the backend spread was measured
+**one boot per backend**, and F020/F021 establish that single boots are not
+a sound basis for a throughput or timing claim on this stack. An unreplicated
+2.25% difference is withdrawn because it is unreplicated, not because it
+failed a comparison against a floor measured elsewhere.
+
+Two consequences worth carrying:
+
+1. **tau is not a fixed property of a draft/target pair.** It measured 2.71
+   at `max_tokens=256` on probe prompts and 4.2 at `max_tokens=768` on
+   GSM8K — a 55% difference from configuration alone. Any tau quoted without
+   its generation length and prompt distribution is close to meaningless,
+   and the literature quotes tau freely.
+2. **The floor is operating-point-specific.** 1.32% is the floor *at tau
+   ~4.1 on GSM8K at 768 tokens*. It should not be carried to other regimes,
+   including by this finding.
+
 ## How to reproduce
 
 ```bash
