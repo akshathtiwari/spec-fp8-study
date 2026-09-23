@@ -114,6 +114,25 @@ Recovering it requires re-running the grid with the fixed client. That is
 about 1.9 GPU-hours, roughly $1.50, and would also yield a second
 independent set of boots for the bimodality statistics.
 
+## Fix verified on real data
+
+The re-run's first cell (`none | bf16 | fp8_e4m3`, c=1, 16 requests):
+
+```
+ITL samples 3534   implausible 0
+min 24.33ms   median 34.47ms   p95 36.41ms   max 70.12ms
+first eight  34.64, 33.00, 34.85, 34.71, 33.97, 34.98, 33.88, 34.51
+```
+
+Physically coherent: that cell runs ~26 tok/s at concurrency 1, which is
+~38 ms per token, and the median inter-token gap is 34 ms. The old records
+reached ±Infinity within the same request length.
+
+p95 of 36.41 ms sits under the 50 ms ITL target and TTFT of 71 ms under the
+1000 ms one, so goodput computes to a real number for the first time in the
+study's life. Zero implausible values across 3534 samples, against a
+validator that would raise on any.
+
 ## What this does NOT establish
 
 - **That the goodput *analysis* is wrong.** `analysis/goodput.py` appears
