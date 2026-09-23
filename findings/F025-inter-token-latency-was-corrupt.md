@@ -106,6 +106,17 @@ cursor — and the type system did not object because both are floats. The
 guard that would have caught it is not a checker but a **range assertion**:
 an inter-token latency above, say, a second on a local server is not a slow
 token, it is a bug. No such assertion existed anywhere in the harness.
+`MAX_PLAUSIBLE_ITL_MS` and `_compute_itl` now provide one, and it **raises**
+rather than flags: a wrong number that reaches a table costs more than a run
+that stops, and a confident `0.0` is invisible while an exception is not.
+
+The second lesson is sharper than the first. The bug was **documented in the
+source** and survived anyway, because it was documented in the register of a
+*known limitation* rather than of a *defect*. Writing something down is not
+the same as recording it: a caveat inside a docstring reads as a decision
+someone made and moved past, while the same sentence in `findings/` reads as
+an open problem someone owes an answer to. That distinction is not pedantry.
+It is the difference between months of zeros and a fix.
 
 This is the study's thesis in its purest form. `goodput.md` has been
 committed, regenerated and shipped repeatedly as a table of zeros, and the
