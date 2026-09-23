@@ -1,6 +1,6 @@
 ---
 id: F024
-title: enforce_eager halves FP8-weight throughput and leaves BF16 untouched, so pinning it would have manufactured the speculative speedup on every FP8 cell
+title: enforce_eager costs FP8-weight configurations a fifth to a half of their throughput and costs BF16 nothing, so pinning it would have manufactured the speculative speedup on every FP8 cell
 kind: result
 status: established
 confidence: high
@@ -15,10 +15,16 @@ superseded_by: []
 
 ## Claim
 
-`--enforce-eager` costs roughly **half the throughput** of any configuration
-using FP8 **weights**, and costs a BF16-weight configuration essentially
-nothing. The effect is present with and without speculation, and with both
-KV dtypes.
+`--enforce-eager` costs a **large fraction of the throughput** of any
+configuration using FP8 **weights** — between about a fifth and a half
+across two independent grids — and costs a BF16-weight configuration
+essentially nothing. The effect is present with and without speculation,
+and with both KV dtypes.
+
+The range is wide on purpose. The direction replicates on every cell; the
+coefficient does not, because the eager+FP8 arm is itself unstable across
+boots (see below). A single number here would be the same mistake F021 made
+with its speedup ratio.
 
 This is the reason `enforce_eager` had to be a grid axis rather than a
 pinned setting. Pinning it — the obvious response to F021 — would have
@@ -59,6 +65,44 @@ Speculative cells show the same split:
 tau is unaffected throughout (4.18-4.30 in both arms), so this is the cost
 of producing tokens, not a change in acceptance.
 
+## Replicated, with the magnitude not reproducing
+
+The grid was run a second time end to end (16 boots, independent
+containers). The **direction** replicates on every cell; the **size** does
+not, and the reason is informative.
+
+| cell | c | grid 1 | grid 2 | graphs-on g2/g1 | eager g2/g1 |
+|---|---|---|---|---|---|
+| none \| fp8 \| auto | 1 | 0.49x | 0.68x | 1.00x | **1.40x** |
+| none \| fp8 \| auto | 64 | 0.66x | 0.78x | 1.03x | **1.22x** |
+| none \| fp8 \| fp8_e4m3 | 1 | 0.50x | 0.66x | 0.99x | **1.31x** |
+| none \| bf16 \| auto | 1 | 0.95x | 0.96x | 1.00x | 1.02x |
+| none \| bf16 \| auto | 64 | 0.96x | 0.96x | 1.00x | 1.00x |
+| dflash \| fp8 \| auto | 1 | 0.61x | 0.76x | 1.02x | **1.26x** |
+
+Read the last two columns. The **graphs-on arm reproduces across grids on
+every cell** (0.95-1.06x). The **eager arm reproduces for bf16 weights**
+(1.00-1.05x) and **does not for FP8 weights** (1.22-1.40x).
+
+So the ratio moved because the eager+FP8 arm is itself unstable across
+boots, not because the baseline drifted. Within a boot it is tight — grid 1
+measured 20.2 and 20.5 tok/s on its two repeats — and between boots it
+moves 1.4x. That is boot-level instability, the same shape as F020, in a
+different configuration.
+
+**This study has now found two unstable dimensions, and each has a stable
+partner.** Speculative decoding is bimodal with CUDA graphs *on* and stable
+with them *off* (F021). FP8 weights are stable with graphs *on* and
+unstable with them *off* (here). A practitioner cannot infer from one which
+applies to the other, and neither can be discovered from a single boot.
+
+The claim this finding makes is therefore directional and bounded, not a
+coefficient: **eager costs FP8-weight configurations a large fraction of
+their throughput — between about a fifth and a half in the measurements
+here — and costs bf16 nothing.** Anyone wanting a coefficient needs
+boot-level repeats, which is the same conclusion F020 reached for
+speculation.
+
 ## Reasoning
 
 The penalty tracks **weight precision**, not speculation and not KV dtype.
@@ -95,10 +139,10 @@ Three things follow, in increasing order of importance.
    stack. It is the single most expensive flag combination in the grid.
 
 2. **F021's recommendation is now narrow.** Eager removes the bimodality
-   (F021), cannot boot speculative FP8-KV cells at all (F023), and halves
-   FP8-weight throughput (here). It is defensible only for BF16-weight
-   speculative configurations, where it buys stability at 1.05-1.13x
-   throughput.
+   (F021), cannot boot speculative FP8-KV cells at all (F023), and costs
+   FP8-weight configurations a fifth to a half of their throughput (here).
+   It is defensible only for BF16-weight speculative configurations, where
+   it buys stability at 1.05-1.32x throughput.
 
 3. **Methodological, and the reason this finding exists.** The obvious
    response to F021 was to pin eager for the re-measured grid. Had that

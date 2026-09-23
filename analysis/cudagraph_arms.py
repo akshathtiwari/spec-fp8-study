@@ -69,7 +69,7 @@ def load() -> list[dict]:
 
 #: Records at or after this timestamp belong to the perf_v2 grid. Arms
 #: measured on opposite sides of it were not taken in the same session.
-GRID_CUTOFF = "2026-09-22T19:00:00"
+GRID_CUTOFF = "2026-09-23T05:00:00"
 
 
 def pair_key(cfg: dict) -> tuple:
