@@ -22,7 +22,7 @@ wrong turns and what caught them — is part of the evidence.
 | [`F017`](F017-fp8-kv-is-backend-gated.md) | FP8 KV works on exactly two of four SM89 backends, and vLLM's auto-switch is why | established | high |
 | [`F019`](F019-target-and-draft-select-backends-independently.md) | Target and draft select attention backends independently; F018 was wrong | established | high |
 | [`F020`](F020-speculative-throughput-is-boot-dependent.md) | Speculative throughput varies 2.16x across boots while acceptance does not | established | high |
-| [`F021`](F021-cuda-graphs-slow-speculative-decoding.md) | Speculative throughput is bimodal; enforce_eager reliably selects the fast mode and removes the boot variance, but its throughput advantage depends entirely on which mode the comparison arm drew | established | high |
+| [`F021`](F021-cuda-graphs-slow-speculative-decoding.md) | RETRACTED (see F029) — the bimodality claim is refuted at n=23; what survives is that enforce_eager removes a 2.96x boot-to-boot variance | retracted | high |
 | [`F023`](F023-enforce-eager-increases-memory-pressure.md) | enforce_eager increases KV allocation and can make a speculative cell unbootable, so it is not a free fix for the bimodality | established | high |
 | [`F024`](F024-enforce-eager-halves-fp8-weight-throughput.md) | enforce_eager costs FP8-weight configurations a fifth to a half of their throughput and costs BF16 nothing, so pinning it would have manufactured the speculative speedup on every FP8 cell | established | high |
 | [`F026`](F026-itl-is-not-inter-token-under-speculation.md) | Client-measured inter-token latency is inter-chunk latency, so an ITL-based SLO penalises speculative decoding by a factor of tau and inverts the comparison it is meant to make | established | high |
@@ -56,7 +56,8 @@ wrong turns and what caught them — is part of the evidence.
 | [`F015`](F015-extractor-discarded-correct-answers.md) | The answer extractor silently discarded 58.6% of correct answers | retracted | high |
 | [`F018`](F018-attention-backend-flag-not-honoured.md) | RETRACTED — the backend axis was never real; --attention-backend does not select | retracted | high |
 | [`F025`](F025-inter-token-latency-was-corrupt.md) | Every inter-token latency recorded before 2026-09-23 is corrupt, so every goodput figure in the study is 0.0 and the SLO axis was never measured | retracted | high |
+| [`F029`](F029-bimodality-retracted.md) | RETRACTED — speculative throughput is not bimodal; it is one wide continuous distribution, and the two modes were a five-sample illusion | retracted | high |
 
 ---
 
-28 findings: 14 result, 6 method, 1 gap, 7 retraction.
+29 findings: 14 result, 6 method, 1 gap, 8 retraction.

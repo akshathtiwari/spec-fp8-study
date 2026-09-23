@@ -41,9 +41,10 @@ First, attention-backend selection is \emph{conditioned on KV-cache dtype},
 so an FP8-versus-BF16 comparison under default settings silently swaps the
 attention kernel as well; target and draft models select backends
 independently, so pinning one does not pin the other. Second, speculative
-throughput is \emph{bimodal across boots} of an identical configuration,
-varying up to $2.96\times$ while acceptance does not; the mode is selected
-by the CUDA-graph execution path and fixed at boot. Third, the acceptance
+throughput varies \emph{$2.96\times$ across boots} of an identical
+configuration while acceptance does not; the variance is attributable to the
+CUDA-graph execution path, and disabling it collapses the spread to
+$1.04\times$. Third, the acceptance
 rate $\tau$ has a \emph{boot-to-boot noise floor of 1.32\%} that no prior
 work reports, below which ``precision does not affect acceptance'' claims
 are unfalsifiable and above which small effects have been reported as real.
@@ -84,11 +85,11 @@ the effect they obscured.
 vLLM's \tw{auto} backend selection is conditioned on KV-cache dtype, and
 target and draft select independently. A precision A/B under defaults is a
 kernel A/B as well.
-\item \textbf{Bimodal speculative throughput} (\S\ref{sec:c2}). Identical
-configurations boot into a fast or slow mode and stay there. We localise
-this to \emph{draft-model} speculation: n-gram speculation shows no such
-behaviour across twelve boots. \tw{-{}-enforce-eager} removes the
-bimodality but is not a free control --- it costs FP8-weight configurations
+\item \textbf{Unreproducible speculative throughput} (\S\ref{sec:c2}).
+Identical configurations differ by $2.96\times$ across 23 boots at constant
+acceptance. We localise this to \emph{draft-model} speculation: n-gram
+speculation shows $1.10\times$ across twelve boots. \tw{-{}-enforce-eager} removes the
+variance but is not a free control --- it costs FP8-weight configurations
 a fifth to a half of their throughput and cannot boot speculative FP8-KV
 cells at all on this card.
 \item \textbf{The acceptance noise floor} (\S\ref{sec:c3}). $\tau$
@@ -200,30 +201,48 @@ corrected the report. The mistake is instructive because we compared
 requested-versus-selected backend for \emph{a server} when there is no such
 thing as a server's backend --- there are two.
 
-\section{Confound 2: speculative throughput is bimodal across boots}\label{sec:c2}
+\section{Confound 2: speculative throughput is unreproducible across boots}\label{sec:c2}
 
 Booting an identical speculative configuration repeatedly produces
-throughput in two clusters, not a spread. Acceptance is unchanged
+throughput anywhere in a $2.96\times$ band. Acceptance is unchanged
 throughout, so this is the cost of producing accepted tokens rather than how
 many are accepted.
+
+Pooling every valid default-arm boot at concurrency 1 (n = 23):
+\[
+\begin{aligned}
+&24.8\;\; 28.4\;\; 29.5\;\; 31.9\;\; 32.1\;\; 33.2\;\; 37.0\;\; 39.1\;\; 40.6\;\; 41.1\\
+&41.3\;\; 43.7\;\; 44.2\;\; 44.5\;\; 45.5\;\; 47.3\;\; 50.7\;\; 60.8\;\; 61.2\;\; 62.0\;\; 64.7\;\; 66.5\;\; 73.6
+\end{aligned}
+\]
+
+\textbf{We previously reported this as bimodal and retract that.} An
+earlier draft claimed two discrete modes, on the basis of five boots with a
+gap in the middle. At n = 23 the gap is filled: fitting one versus two
+Gaussian components gives BIC 190.50 against 192.10, a $\Delta$BIC of
+$-1.60$ \emph{favouring a single component}. The retraction is recorded in
+the artifact. It is the same error we document elsewhere in this paper —
+reading structure off a sample too small to support it — and we made it in
+our own headline.
 
 \begin{figure}[h]\centering
 \includegraphics[width=0.86\textwidth]{figures/bimodality.pdf}
 \caption{One dot per boot of an identical configuration at concurrency 1.
-DFlash's default arm separates into two clusters with empty space between
-them; n-gram's arms are single tight groups. A standard deviation cannot
-distinguish these cases, and reading the first as continuous variance is
-the error we originally made.}
+DFlash's default arm is a wide, continuously filled distribution; its eager
+arm and both n-gram arms are tight. Note that every eager boot exceeds every
+one of the 23 default boots. An earlier version of this figure showed five
+default boots and was captioned as two clusters; plotting all of them is
+what refuted that.}
 \label{fig:bimodality}
 \end{figure}
 
 \paragraph{The selector is the CUDA-graph path.} vLLM emits, at every
 speculative boot, a warning that \tw{CUDAGraphMode.FULL\_AND\_PIECEWISE} is
 unsupported with spec-decode for the FlashInfer backend, and falls back.
-Pinning \tw{cudagraph\_mode: PIECEWISE} reproduces the slow mode exactly
-(30.04 versus 30.57 tok/s), indicating the fallback \emph{is} the slow mode
-rather than a third state. Disabling CUDA graphs selects the fast mode
-reliably.
+Pinning \tw{cudagraph\_mode: PIECEWISE} lands at the low end of the range
+(30.04 versus a 30.57 default mean), which is consistent with the fallback
+being what the default path degrades to. Disabling CUDA graphs removes the
+variance entirely.
 
 \paragraph{The sharpest instance.} One content-addressed cell
 (\tw{dflash\,|\,bf16\,|\,fp8\_e4m3\,|\,FLASHINFER}, graphs on) was measured
@@ -250,35 +269,40 @@ demonstration of this effect compared \emph{something} --- different arms,
 different cells, boots inside a test built to show it. This compares nothing.
 
 \paragraph{We report no speedup ratio from this effect.} Measuring both arms
-inside a single run, with the default boot landing in the \emph{fast} mode,
-gives $1.13\times / 1.06\times / 1.05\times$ at concurrency 1/16/64. Against a
-slow-mode boot the same eager numbers give $2.19\times$. The ratio is a
-statement about which mode the comparison arm drew, not about the flag. What
-is stable is the \emph{spread}: two boots of an identical configuration
-differ by $1.64\times$ at concurrency 16 under defaults and by $1.07\times$
-with graphs off. Turning CUDA graphs off does not reliably make speculative
-decoding faster --- it makes it \emph{measurable}, and whatever throughput it
-gains is the slow-mode boots thereby avoided.
+inside a single run, with the default boot landing high in its range, gives
+$1.13\times / 1.06\times / 1.05\times$ at concurrency 1/16/64. Against a
+low-end boot the same eager numbers give $2.19\times$. The ratio is a
+statement about where in a $2.96\times$ band the comparison arm happened to
+land, not about the flag.
+
+What is stable is the \emph{spread}, and it is stable in both directions:
+23 default boots span $2.96\times$, while 8 eager boots span $1.04\times$
+and every one of them exceeds every default boot. Turning CUDA graphs off
+does not reliably make speculative decoding faster by a stated factor --- it
+makes it \emph{reproducible}, and whatever throughput it gains is however
+far down the band the default would otherwise have fallen.
 
 Our first write-up of this section led with $2.38\times$, obtained by
 comparing against an arm we assumed representative, which was one draw from
-the bimodal distribution this same section describes.
+the wide distribution this same section describes.
 
 \paragraph{It is specific to draft-model speculation.} Running the identical
-protocol with n-gram (prompt-lookup) speculation finds no bimodality across
-twelve boots --- spread $1.10\times$ against DFlash's $2.96\times$ --- and no
-benefit from \tw{-{}-enforce-eager} ($1.00\times$). These are the same fact
-arriving twice: if there is no slow mode, there is nothing for the flag to
-avoid. As a measurement sanity check, n-gram's acceptance is deterministic
+protocol with n-gram (prompt-lookup) speculation finds no such variance
+across twelve boots --- spread $1.10\times$ against DFlash's $2.96\times$ ---
+and no benefit from \tw{-{}-enforce-eager} ($1.00\times$). These are the same
+fact arriving twice: if throughput is already reproducible, there is nothing
+for the flag to stabilise. As a measurement sanity check, n-gram's acceptance is deterministic
 ($\tau = 1.732$ on every boot, spread $1.000\times$) where DFlash's moves
 4.09--4.43, which is what a prompt-matching mechanism should do.
 
-Twelve boots cannot prove absence. Pooling our DFlash default-arm boots
-gives $P(\text{slow}) \approx 0.38$, so twelve draws land all-fast about
-0.3\% of the time. We report this as a localisation, not an exclusion. The
+Twelve boots cannot prove absence; they bound it. DFlash's 23 boots span
+$2.96\times$ and n-gram's twelve span $1.10\times$, so if n-gram shared
+DFlash's distribution, drawing twelve boots that tight would be
+extraordinarily unlikely. We report this as a localisation, not an
+exclusion. The
 consequence is that a claim like ours has to name the mechanism:
-``speculative throughput is bimodal'' would be refuted by the first reader
-who tries prompt-lookup.
+``speculative throughput is unreproducible'' would be refuted by the first
+reader who tries prompt-lookup.
 
 \section{Confound 3: acceptance has a noise floor nobody had measured}\label{sec:c3}
 
@@ -430,7 +454,7 @@ boot-unstable --- tight within a boot (20.2 and 20.5 tok/s on grid 1's two
 repeats) and $1.4\times$ between them.
 
 This study therefore found \emph{two} unstable dimensions, each with a stable
-partner: speculation is bimodal with CUDA graphs on and stable with them off;
+partner: speculation is unreproducible with CUDA graphs on and stable with them off;
 FP8 weights are stable with graphs on and unstable with them off. Neither is
 visible in a single boot, and neither predicts the other.
 

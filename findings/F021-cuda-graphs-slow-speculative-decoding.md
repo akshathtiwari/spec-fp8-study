@@ -1,8 +1,8 @@
 ---
 id: F021
-title: Speculative throughput is bimodal; enforce_eager reliably selects the fast mode and removes the boot variance, but its throughput advantage depends entirely on which mode the comparison arm drew
+title: RETRACTED (see F029) — the bimodality claim is refuted at n=23; what survives is that enforce_eager removes a 2.96x boot-to-boot variance
 kind: result
-status: established
+status: retracted
 confidence: high
 date: 2026-09-22
 evidence:
@@ -12,7 +12,16 @@ evidence:
   analysis: [analysis/out/tables/cudagraph_arms.md]
   code_sha: 624ffdb
 supersedes: []
+superseded_by: [F029]
 ---
+
+> **RETRACTED 2026-09-24 — see findings/F029.** The bimodality claim below
+> is refuted. Pooling 23 default-arm boots gives a continuously filled
+> distribution ($\Delta$BIC -1.60 against two components), and the "two
+> modes" were an artefact of five samples. What survives: throughput varies
+> **2.96x** across boots at constant acceptance, and `--enforce-eager`
+> collapses that to **1.04x** while landing above every default boot. The
+> sections below are preserved unedited as the record of what was believed.
 
 ## Claim
 

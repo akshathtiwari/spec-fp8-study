@@ -1,14 +1,18 @@
-"""Figure 1: draft-model speculation is bimodal across boots; n-gram is not.
+"""Figure 1: boot-to-boot throughput variance by mechanism and execution path.
 
 One dot per boot of an identical configuration, drawn from the raw records
 rather than transcribed, so the figure cannot drift from the data it
 claims to show.
 
 The point of the figure is the *shape*, which a table communicates badly:
-DFlash's default arm separates into two clusters with empty space between
-them, while its eager arm and both n-gram arms are single tight groups.
-A standard deviation cannot distinguish those, and reading a wide spread as
-continuous variance is the error F020 made and F021 corrected.
+DFlash's default arm is a wide, continuously filled distribution, while its
+eager arm and both n-gram arms are tight groups.
+
+An earlier version of this figure was captioned as showing two clusters. It
+did not. At n=5 a gap looked like separation; at n=23 the distribution fills
+in and BIC favours a single component (findings/F029). The figure now plots
+every boot and lets the filling-in be visible, which is what refuted the
+claim.
 
     python analysis/fig_bimodality.py
 """
@@ -85,7 +89,9 @@ def probe_boots(mechanism: str, arm: str) -> list[float]:
 
 def main() -> int:
     series = [
-        ("DFlash\ndefault", dflash_boots(), "#c0392b"),
+        ("DFlash\ndefault", dflash_boots() + probe_boots("dflash", "default"),
+         "#c0392b"),
+        ("DFlash\neager", probe_boots("dflash", "enforce_eager"), "#e67e22"),
         ("n-gram\ndefault", probe_boots("ngram", "default"), "#2c6fbb"),
         ("n-gram\neager", probe_boots("ngram", "enforce_eager"), "#5a9bd5"),
     ]

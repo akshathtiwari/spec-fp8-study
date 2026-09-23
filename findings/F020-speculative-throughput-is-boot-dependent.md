@@ -137,8 +137,11 @@ noise floor. 2.23x on a configuration that is identical by construction.
 See F021.
 
 
-F021 resolves the mechanism: the variance is **bimodal, not continuous**, and
-the mode is selected by the CUDA-graph path. `--enforce-eager` removes it —
+**Superseded twice, and this finding's original reading was closer to
+right.** F021 claimed the variance was bimodal rather than continuous; F029
+refutes that at n=23 ($\Delta$BIC -1.60) and restores the reading here —
+one wide distribution. What F021 got right, and what stands, is the
+attribution to the CUDA-graph path. `--enforce-eager` removes it —
 boot spread falls from 1.64x to 1.04-1.07x while throughput rises 1.37-2.38x.
 The hypothesis offered below (that graph *capture* varies per boot) is wrong;
 each arm is individually stable, so whatever picks the mode is fixed at boot
