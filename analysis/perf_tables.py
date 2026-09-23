@@ -33,16 +33,40 @@ def sha() -> str:
         return "unknown"
 
 
+#: Records whose token counts came from counting streamed chunks rather
+#: than the server's usage field. A chunk can carry several accepted tokens
+#: under speculation, so such a record undercounts throughput by roughly
+#: tau and is not comparable with anything.
+def _token_counts_valid(rec: dict) -> bool:
+    return (rec.get("throughput") or {}).get("tokens_from_usage") is True
+
+
 def load() -> dict[str, dict]:
+    """Latest record per run_id, excluding invalid token counts.
+
+    sweep.py records `tokens_from_usage` precisely so a chunk-counted
+    measurement can be identified and dropped, and no analysis in this repo
+    was reading it. One surviving pre-fix record showed 7.26 tok/s for a
+    cell whose real throughput is 47-74, and it was being averaged into the
+    published table -- a recorded validity marker that nothing consumed,
+    which is the same shape as F025.
+    """
     path = RESULTS / "sweep.jsonl"
     latest: dict[str, dict] = {}
+    dropped = 0
     if not path.exists():
         return latest
     with open(path) as f:
         for line in f:
-            if line.strip():
-                r = json.loads(line)
-                latest[r["run_id"]] = r   # later supersedes earlier
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            if not _token_counts_valid(r):
+                dropped += 1
+                continue
+            latest[r["run_id"]] = r   # later supersedes earlier
+    if dropped:
+        print(f"  dropped {dropped} record(s) with chunk-counted tokens")
     return latest
 
 

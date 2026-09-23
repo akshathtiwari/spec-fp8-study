@@ -166,6 +166,17 @@ someone made and moved past, while the same sentence in `findings/` reads as
 an open problem someone owes an answer to. That distinction is not pedantry.
 It is the difference between months of zeros and a fix.
 
+The same shape turned up a third time while auditing this one.
+`sweep.py` records `tokens_from_usage` **specifically** so that a
+chunk-counted measurement — which undercounts throughput by roughly tau
+under speculation — can be identified and dropped. No analysis in the repo
+read it. A surviving pre-fix record showed **7.26 tok/s** for a cell whose
+real throughput is 47-74, and it was being averaged into the published
+table. `perf_tables.load()` now filters on it.
+
+Recording a validity marker and never consuming it is indistinguishable,
+in the output, from never having recorded one.
+
 This is the study's thesis in its purest form. `goodput.md` has been
 committed, regenerated and shipped repeatedly as a table of zeros, and the
 zeros were never read because nothing depended on them. **An unread number
