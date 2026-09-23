@@ -339,20 +339,38 @@ measurement shows the error would have been large.
 
 ### The execution-path flag is not a free control
 
-| config | conc | graphs on | graphs off | off/on |
-|---|---|---|---|---|
-| none \| bf16 \| auto | 1 | 26.9 | 25.6 | 0.95× |
-| none \| bf16 \| auto | 64 | 835.0 | 797.5 | 0.96× |
-| none \| **fp8** \| auto | 1 | 41.3 | 20.3 | **0.49×** |
-| none \| **fp8** \| auto | 64 | 1252.2 | 825.4 | **0.66×** |
-| none \| **fp8** \| fp8_e4m3 | 1 | 42.3 | 21.2 | **0.50×** |
-| dflash \| bf16 \| auto | 1 | 70.0 | 79.5 | 1.13× |
-| dflash \| **fp8** \| auto | 1 | 118.1 | 72.0 | **0.61×** |
+We ran the full grid **twice**, 16 boots each, in independent containers.
+Ratios are graphs-off over graphs-on, so below 1.0 means eager is slower:
 
-`--enforce-eager` costs roughly **half the throughput** of any FP8-weight
-configuration and costs BF16 essentially nothing (F024). Individual boots
-do not overlap on any FP8 row and overlap on every BF16 row. τ is unmoved
-throughout, so this is the cost of producing tokens, not acceptance.
+| config | conc | grid 1 | grid 2 |
+|---|---|---|---|
+| none \| bf16 \| auto | 1 | 0.95× | 0.96× |
+| none \| bf16 \| auto | 64 | 0.96× | 0.96× |
+| none \| **fp8** \| auto | 1 | **0.49×** | **0.68×** |
+| none \| **fp8** \| auto | 64 | **0.66×** | **0.78×** |
+| none \| **fp8** \| fp8_e4m3 | 1 | **0.50×** | **0.66×** |
+| dflash \| bf16 \| auto | 1 | 1.13× | 1.32× |
+| dflash \| **fp8** \| auto | 1 | **0.61×** | **0.76×** |
+
+`--enforce-eager` costs FP8-weight configurations **a fifth to a half** of
+their throughput and costs BF16 essentially nothing (F024). Individual
+boots do not overlap on any FP8 row and overlap on every BF16 row, in both
+grids. τ is unmoved throughout, so this is the cost of producing tokens,
+not acceptance.
+
+**The direction replicates on every cell; the coefficient does not**, and
+that is itself a result. Decomposing the two grids: the graphs-on arm
+reproduces everywhere (0.95–1.06×), the eager arm reproduces for BF16
+(1.00–1.05×) and does not for FP8 weights (1.22–1.40×). The eager+FP8 arm
+is boot-unstable — tight within a boot (20.2 and 20.5 tok/s on grid 1's two
+repeats) and 1.4× between them.
+
+This study therefore found **two** unstable dimensions, each with a stable
+partner: speculation is bimodal with CUDA graphs on and stable with them
+off (§4); FP8 weights are stable with graphs on and unstable with them off.
+Neither is visible in a single boot, and neither predicts the other. We
+report a bounded direction rather than a coefficient for exactly the reason
+§4 gives.
 
 Two further constraints on the same flag: it cannot boot speculative cells
 with FP8 KV at all on this card, failing on a 892 MiB float32 logits buffer

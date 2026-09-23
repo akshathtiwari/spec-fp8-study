@@ -179,6 +179,36 @@ would mean the withdrawal in F020 was too aggressive.
 This is also the sharpest available test of whether making `enforce_eager` an
 axis was worth the extra eight boots.
 
+## Outcome of the pre-registered prediction (recorded 2026-09-23, after two grids)
+
+Written here beside the prediction so the pair can be read together, and
+because `analysis/out/tables/cudagraph_arms.md` only ever holds the most
+recent grid.
+
+| | grid 1 | grid 2 |
+|---|---|---|
+| bf16 speculative c=1, graphs off | 79.5 tok/s | 83.6 tok/s |
+| FP8-weight speculative advantage, graphs **on** | **1.69x** | **1.90x** |
+| FP8-weight speculative advantage, graphs **off** | **0.91x** | **1.09x** |
+| bf16 arm movement between arms | 1.13x | 1.32x |
+| fp8 arm movement between arms | 0.61x | 0.76x |
+
+- **(1) HOLDS** in both grids: 79.5 and 83.6, inside the predicted 70-80
+  band or just above it.
+- **(2) FAILS** in both grids, instructively. The ~3x apparent advantage
+  does shrink, but to 1.7-1.9x rather than the predicted 1.2-1.4x, and the
+  further collapse to parity under graphs-off is a *second* effect (F024,
+  the eager penalty on FP8 weights) that did not exist in the model when
+  the prediction was written. Two effects, one of them unknown at the time,
+  landing near a band guessed for the other.
+- **(3) HOLDS** in both grids but for the wrong reason: fp8 rows move
+  *most* in absolute terms, downward, because eager penalises them.
+
+One of three held cleanly. The prediction was recorded so it could fail in
+public, and the way it failed — by being right about a direction for a
+mechanism that turned out not to be the operative one — is worth more than
+a clean hit would have been.
+
 ## Deliberately not claimed
 
 - Nothing about SM90, since the study ran on SM89 only.
