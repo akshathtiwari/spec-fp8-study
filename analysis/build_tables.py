@@ -42,8 +42,33 @@ def header(title: str, inputs: list[str]) -> str:
     )
 
 
+#: Statuses that describe the HOST, not the configuration. F012 established
+#: that a harness or environment fault must never be recorded as evidence
+#: about a configuration; these are the outcomes that carry that risk.
+_HOST_FAULT_STATUSES = {"oom", "harness_error", "timeout"}
+
+
 def latest_cells() -> dict[str, dict]:
-    """Last record per cell_id — cells.jsonl is append-only with supersession."""
+    """Best record per cell_id, not merely the last one.
+
+    cells.jsonl is append-only with supersession, and for most fields the
+    last record is the right one. **Compatibility is different: it is an
+    existence claim.** A configuration that has booted and served once has
+    been demonstrated to work, and a later host-level failure cannot
+    un-demonstrate it.
+
+    Taking the last record made the matrix report `oom` for
+    `dflash|bf16|fp8_e4m3|FLASHINFER`, a cell with three prior `ok` probes
+    and twenty-four successful Phase 2 measurements. That is a false
+    incompatibility, and it is exactly the confusion F012 exists to prevent,
+    re-emerging one layer up in the derived table rather than in the raw
+    records.
+
+    So a later host fault does not overwrite an earlier success. A later
+    *success* still supersedes an earlier one, and a later genuine
+    incompatibility (`unsupported_config`, `launch_failed`) still
+    supersedes, because those describe the configuration.
+    """
     latest: dict[str, dict] = {}
     with open(RESULTS / "cells.jsonl") as f:
         for line in f:
@@ -51,7 +76,15 @@ def latest_cells() -> dict[str, dict]:
             if not line:
                 continue
             rec = json.loads(line)
-            latest[rec["cell_id"]] = rec
+            cid = rec["cell_id"]
+            prev = latest.get(cid)
+            if prev is not None:
+                prev_ok = prev.get("outcome", {}).get("status") == "ok"
+                now_host_fault = (rec.get("outcome", {}).get("status")
+                                  in _HOST_FAULT_STATUSES)
+                if prev_ok and now_host_fault:
+                    continue
+            latest[cid] = rec
     return latest
 
 
