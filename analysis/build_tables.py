@@ -88,6 +88,31 @@ def latest_cells() -> dict[str, dict]:
     return latest
 
 
+def latest_cells_with(field: str) -> dict[str, dict]:
+    """Latest record per cell that actually carries `field`.
+
+    An absence must not supersede a presence. Quality measurements are
+    expensive and are taken once; a cell later re-probed for some other
+    purpose writes a record with no `quality` block, and plain
+    latest-record-wins then discards the measurement entirely.
+
+    That dropped three of eight cells from the accuracy table — including
+    **both bf16 baselines**, which are precisely the rows an FP8-vs-BF16
+    comparison needs. The table looked complete because five rows is a
+    plausible number of rows.
+    """
+    latest: dict[str, dict] = {}
+    with open(RESULTS / "cells.jsonl") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            rec = json.loads(line)
+            if rec.get(field):
+                latest[rec["cell_id"]] = rec
+    return latest
+
+
 def write(name: str, text: str) -> None:
     OUT.mkdir(parents=True, exist_ok=True)
     (OUT / name).write_text(text)
@@ -214,7 +239,7 @@ def t_quality() -> None:
     rescored = load_quality(RESULTS)
     L = [header("Powered task accuracy (256 GSM8K problems)",
                 ["results/cells.jsonl", "results/quality/"])]
-    rows = [r for r in cells.values() if r.get("quality")]
+    rows = list(latest_cells_with("quality").values())
     if not rows:
         L.append("No quality measurements yet. Run the probe with "
                  "`--quality` to populate `results/quality/`.\n")
