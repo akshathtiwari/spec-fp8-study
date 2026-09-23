@@ -49,7 +49,12 @@ SOURCES = [ROOT / "findings", ROOT / "analysis" / "out", ROOT / "docs"]
 #: arXiv ids, version pins, hardware names, and the finding ids themselves.
 _SKIP_CONTEXT = re.compile(
     r"(?:§\s*\d+|F\d{3}|\b20\d{2}\b|\b\d{4}\.\d{4,5}\b|vLLM\s*0\.\d+\.\d+"
-    r"|CUDA\s*\d+|SM\d+|rev\s*\d+|Qwen3-4B|#\d+)", re.I)
+    r"|CUDA\s*\d+|SM\d+|rev\s*\d+|Qwen3-4B|#\d+"
+    # LaTeX structure: lengths, column specs, class options, arXiv ids in
+    # the bibliography, and \ref-style cross references.
+    r"|\\[a-zA-Z]+\s*\{[^}]*\}|0\.\d+\\textwidth|\[\d+pt\]"
+    r"|arXiv:\d{4}\.\d{4,5}|\\bibitem\{[^}]*\}|\bp\{[^}]*\}"
+    r"|\\includegraphics.*|\\usepackage.*|\\documentclass.*)", re.I)
 
 #: A measurement: has a decimal point, or is a long integer.
 _NUMBER = re.compile(r"(?<![\w.])(\d+\.\d+|\d{3,})(?![\w.])")
@@ -101,7 +106,7 @@ def main() -> int:
     missing: list[tuple[str, int, str, str]] = []
     checked = 0
 
-    for doc in sorted(PAPER.rglob("*.md")):
+    for doc in sorted(list(PAPER.rglob("*.tex")) + list(PAPER.rglob("*.md"))):
         for lineno, line in enumerate(doc.read_text().splitlines(), 1):
             # Blank out structural tokens so their digits are not harvested.
             scrubbed = _SKIP_CONTEXT.sub(" ", line)
@@ -113,7 +118,7 @@ def main() -> int:
                     continue
                 missing.append((doc.name, lineno, tok, line.strip()[:72]))
 
-    print(f"paper files : {len(list(PAPER.rglob('*.md')))}")
+    print(f"paper files : {len(list(PAPER.rglob('*.tex'))) + len(list(PAPER.rglob('*.md')))}")
     print(f"figures     : {checked}")
     print(f"untraceable : {len(missing)}")
     for name, lineno, tok, ctx in missing:

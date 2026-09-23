@@ -11,3 +11,10 @@ build/
 .pytest_cache/
 models/
 .venv/
+
+# LaTeX engine binary, fetched by paper/build.sh; not source.
+paper/build/tectonic
+paper/build/*.pdf
+paper/*.aux
+paper/*.out
+paper/*.log
