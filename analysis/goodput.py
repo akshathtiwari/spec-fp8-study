@@ -85,6 +85,52 @@ def goodput(requests: list[dict], wall_s: float,
     }
 
 
+def selftest() -> int:
+    """Check the SLO logic against hand-built cases.
+
+    This exists because F025 left goodput.py in an awkward state: the code
+    was almost certainly correct, but it had only ever been run on corrupt
+    input, so every figure it had produced was 0.0 and nothing distinguished
+    "the analysis is right and the data was broken" from "both are broken".
+    Unverified is not the same as wrong, and it is not the same as right.
+
+    Synthetic cases settle it without GPU time. Run with --selftest.
+    """
+    def req(ok=True, itls=(30.0,), ttft=100.0):
+        return {"ok": ok, "itl_ms": list(itls), "ttft_ms": ttft}
+
+    cases = [
+        ("all within SLO", [req(), req(), req()], 3.0, 3),
+        ("p95 ITL over target", [req(itls=(30, 30, 80, 90))], 1.0, 0),
+        ("TTFT over target", [req(ttft=1500)], 1.0, 0),
+        ("failed request excluded", [req(ok=False), req()], 1.0, 1),
+        # A request that produced one token has no inter-token sample; it
+        # is judged on TTFT alone rather than being discarded or failed.
+        ("single-token judged on TTFT only", [req(itls=())], 1.0, 1),
+        ("single-token, bad TTFT", [req(itls=(), ttft=2000)], 1.0, 0),
+        ("exactly at threshold counts", [req(itls=(50.0,), ttft=1000.0)], 1.0, 1),
+    ]
+
+    failures = 0
+    for name, reqs, wall, expect in cases:
+        got = goodput(reqs, wall, 50, 1000)["met"]
+        ok = got == expect
+        failures += not ok
+        print(f"  {'PASS' if ok else 'FAIL'}  {name:<36} "
+              f"met={got} expected={expect}")
+
+    for name, vals, q, expect in [("p95 of 1..100", list(range(1, 101)), 0.95, 95),
+                                  ("p95 of single value", [10], 0.95, 10)]:
+        got = percentile(vals, q)
+        ok = got == expect
+        failures += not ok
+        print(f"  {'PASS' if ok else 'FAIL'}  {name:<36} "
+              f"got={got} expected={expect}")
+
+    print(f"\n{len(cases) + 2 - failures}/{len(cases) + 2} passed")
+    return failures
+
+
 def main() -> None:
     runs = load_runs()
     if not runs:
@@ -160,4 +206,6 @@ def main() -> None:
 
 
 if __name__ == "__main__":
+    if "--selftest" in sys.argv:
+        raise SystemExit(selftest())
     main()

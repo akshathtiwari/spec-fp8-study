@@ -135,9 +135,14 @@ validator that would raise on any.
 
 ## What this does NOT establish
 
-- **That the goodput *analysis* is wrong.** `analysis/goodput.py` appears
-  correct; it was fed corrupt input. It has never been exercised on valid
-  data, so it is unverified rather than known-good.
+- **That the goodput *analysis* is wrong.** It was fed corrupt input, not
+  written wrongly. `analysis/goodput.py --selftest` now checks the SLO
+  logic against hand-built cases — p95 over target, TTFT over target,
+  failed requests excluded, single-token requests judged on TTFT alone,
+  threshold inclusivity, and percentile correctness — and all nine pass.
+  Added because "unverified" is not the same as "wrong" and not the same
+  as "right", and with every stored figure at 0.0 nothing distinguished a
+  broken analysis from a broken input.
 - **That other stored arrays are fine.** Only `itl_ms` was inspected
   element-by-element. Fields that are scalars are harder to corrupt this
   way, but "harder" is not "checked".
