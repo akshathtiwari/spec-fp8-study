@@ -12,9 +12,9 @@ verifies each one resolves to raw records.
 Speculative decoding and FP8 quantization are both standard in production
 LLM serving, and their interaction is almost always reported from single
 runs. We set out to measure that interaction on Ada-class hardware and
-could not, three times, until the measurement apparatus itself was fixed.
+could not, four times, until the measurement apparatus itself was fixed.
 
-We identify and quantify three confounds on vLLM 0.29.0 / NVIDIA L4 (SM89).
+We identify and quantify four confounds on vLLM 0.29.0 / NVIDIA L4 (SM89).
 First, attention-backend selection is **conditioned on KV-cache dtype**, so
 an FP8-vs-BF16 comparison under default settings silently swaps the
 attention kernel as well; target and draft models select backends
@@ -24,14 +24,23 @@ varying up to 2.16× while acceptance does not; the mode is selected by the
 CUDA-graph execution path and is fixed at boot. Third, the acceptance rate
 τ has a **boot-to-boot noise floor of 1.32%** that no prior work reports,
 below which "precision does not affect acceptance" claims are unfalsifiable
-and above which small effects have been reported as real.
+and above which small effects have been reported as real. Fourth, the
+metric universally called **inter-token latency is inter-chunk latency**:
+a speculative step emits every accepted token in one stream chunk, so the
+measured gap exceeds the true per-token interval by roughly τ.
 
-Each confound is individually large enough to produce the headline result
-this study set out to report: the second alone spans a 1.16×–2.71× range in
-measured speculative speedup. We then report FP8 × speculative goodput under
-concurrency with all three controlled, and release the harness, raw records,
-and the full history of our own corrections — six retractions, each
-traceable to the same error shape.
+The first three add error; the fourth reverses the ranking. Under a
+standard p95-ITL service objective, every speculative configuration we
+measured scores **zero goodput at concurrency 64 while producing the most
+tokens per second in the grid** — 8.31 req/s served, 0% compliant. Each of
+the first three is independently large enough to produce the headline
+result this study set out to report; the second alone spans a 1.16×–2.71×
+range in measured speculative speedup.
+
+We then report FP8 × speculative goodput under concurrency with all four
+controlled, and release the harness, raw records, and the full history of
+our own corrections — seven retractions, each traceable to the same error
+shape.
 
 ---
 
@@ -58,17 +67,23 @@ the effect they obscured.
    independently. A precision A/B under defaults is a kernel A/B as well.
 2. **Bimodal speculative throughput** (§4). Identical configurations boot
    into a fast or slow mode and stay there. Spread reaches 1.64× between
-   two boots at concurrency 16. `--enforce-eager` removes the bimodality and
-   is faster at every concurrency tested.
+   two boots at concurrency 16. `--enforce-eager` removes the bimodality,
+   but is not a free control: it costs FP8-weight configurations a fifth to
+   a half of their throughput and cannot boot speculative FP8-KV cells at
+   all on this card.
 3. **The acceptance noise floor** (§5). τ reproduces to 1.32% across boots.
    We report FP8's effect on τ as bounded *below* that floor rather than as
    a null result, and withdraw one of our own published claims that sat at
    1.7× the floor.
-4. **Goodput with all three controlled** (§6), plus a compatibility matrix
+4. **ITL is inter-chunk latency** (§6). A speculative step emits every
+   accepted token in one stream chunk, so a p95-ITL objective ranks the
+   highest-throughput configuration in the grid as fully non-compliant.
+   This one does not add error — it inverts the decision.
+5. **Goodput with all four controlled** (§7), plus a compatibility matrix
    for FP8 KV across SM89 attention backends.
-5. **A fully auditable artifact** (§2, §7): append-only raw records,
-   script-regenerated derived tables, and every retraction preserved rather
-   than removed.
+6. **A fully auditable artifact** (§2, §10): append-only raw records,
+   script-regenerated derived tables, provenance checked by a script that
+   fails the build, and every retraction preserved rather than removed.
 
 We emphasise (5) because it is what made (1)–(3) findable. Eight of our
 twelve documented corrections were caught by re-reading stored records
@@ -228,7 +243,7 @@ unsupported on SM89 — a compatibility claim, and a false one.
 **Why this matters beyond one engine.** A single-boot speculative benchmark
 on this stack can report any speedup in a 1.16×–2.71× range depending on
 which mode it happened to boot into. Single-run reporting is, from our
-prior-art survey (§8), the norm.
+prior-art survey (§9), the norm.
 
 ---
 
@@ -264,7 +279,58 @@ because the floor feels like overhead rather than like a result.
 
 ---
 
-## 6. Results with all three controlled
+## 6. Confound 4 — "inter-token latency" is inter-chunk latency
+
+The first three confounds add error. This one **reverses the ranking**.
+
+A streaming client measures the gap between arrivals. vLLM emits one SSE
+chunk per decoding step, and a speculative verification step emits every
+accepted draft token at once. So the quantity universally called
+inter-token latency is *inter-chunk* latency, and on a speculative server
+it exceeds the true per-token interval by roughly τ.
+
+At concurrency 64, CUDA graphs on, FP8 weights, identical prompts:
+
+| | measured gap | tokens/chunk | implied per-token | throughput |
+|---|---|---|---|---|
+| speculative | **93.8 ms** | **4.122** | **22.8 ms** | **2219 tok/s** |
+| non-speculative | 33.8 ms | 1.007 | 33.6 ms | 1281 tok/s |
+
+Speculation is **1.5× faster per token** and appears **2.8× slower** on the
+metric. `tokens_per_chunk` of 4.122 tracks the measured τ of ~4.2, as it
+must.
+
+The effect on goodput under a p95 ITL ≤ 50 ms, TTFT ≤ 1000 ms target:
+
+| cell | conc | raw req/s | met | goodput req/s |
+|---|---|---|---|---|
+| dflash \| fp8 \| auto | 64 | **8.31** | **0%** | **0.000** |
+| dflash \| bf16 \| auto | 64 | 6.13 | 0% | 0.000 |
+| none \| fp8 \| auto | 64 | 5.20 | 100% | **5.188** |
+| none \| bf16 \| auto | 64 | 3.37 | 6% | 0.209 |
+
+**Every speculative configuration scores zero goodput while producing the
+most tokens in the grid.** The fastest system is ranked last.
+
+This is not an engine defect or a bug in our harness: a server cannot
+deliver four tokens at four separate times when it produced them at one
+time. Any client measuring arrival gaps, on any engine, sees this. At
+concurrency 1 the effect is present but does not bite — gaps are small in
+absolute terms and speculative cells meet the same target 100% of the time.
+It appears exactly where serving operates.
+
+We do not claim the quotient is the right metric. Dividing by
+`tokens_per_chunk` recovers a sensible average and discards the burstiness
+an ITL target exists to capture; whether a reader perceives four tokens
+every 94 ms as smoother than one every 34 ms is a question we did not
+study. What we claim is narrower and sufficient: **the metric as universally
+computed does not measure what its name says under speculation, and using
+it to gate a speculative deployment inverts the decision.**
+
+Prior work (§9) reports single-request latency, where the effect does not
+bite. That is consistent with it going unreported.
+
+## 7. Results with all four controlled
 
 The grid carries `enforce_eager` as an **axis** rather than a pinned
 setting: 16 boots, both arms of every configuration measured in one run.
@@ -311,10 +377,17 @@ between arms.
   predicted 70–80 band.
 - **(3) holds**, but for the wrong reason: FP8 rows move *most* in absolute
   terms, downward, because eager penalises them (F024).
-- **(2) fails.** With graphs on the FP8-weight speculative advantage is
-  **1.69×**, not the ~3× the single-boot data suggested and not the
-  1.2–1.4× predicted; with graphs off it **inverts to 0.91×**. The mode
-  story explains part of the original 3× and F024 explains the inversion.
+- **(2) fails**, though instructively. Measured across two independent
+  grids, the FP8-weight speculative advantage is **1.69× and 1.90× with
+  graphs on**, and **0.91× and 1.09× with graphs off**.
+
+  So the ~3× suggested by the original single-boot data does shrink — the
+  mode story accounts for roughly half of it — but to 1.7–1.9×, not to the
+  1.2–1.4× we predicted. The remaining collapse to parity under graphs-off
+  is not the mode story at all: it is the eager penalty on FP8 weights
+  (§7), which we had not yet discovered when the prediction was written.
+  Two separate effects, one of which did not exist in our model at the time
+  of writing, happened to land near a band we guessed for one of them.
 
 We report this as measured. The prediction was written down so it could
 fail in public, and one of three did.
@@ -330,7 +403,7 @@ be swept without further GPU time.
 
 ---
 
-## 7. Threats to validity
+## 8. Threats to validity
 
 - **One GPU, one model, one engine version, one draft mechanism.** Every
   result is SM89 / Qwen3-4B / vLLM 0.29.0 / DFlash. We make no claim about
@@ -351,7 +424,7 @@ than softening them.
 
 ---
 
-## 8. Related work
+## 9. Related work
 
 | Work | What it did | Gap this addresses |
 |---|---|---|
@@ -367,7 +440,7 @@ table is vulnerable to the confound in §4.
 
 ---
 
-## 9. Artifact
+## 10. Artifact
 
 Harness, raw records, derived tables and findings:
 `github.com/akshathtiwari/spec-fp8-study`.
