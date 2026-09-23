@@ -48,9 +48,30 @@ therefore `Infinity`, no request ever meets an ITL target, and
 `goodput.md` is a table of zeros — which is exactly what it has always
 shown, unread, since the day it was generated.
 
+## The code said so
+
+The harness contained a function whose entire body was `return raw_times`,
+under this docstring:
+
+> *"Compute inter-token latencies. The raw_times list already contains
+> deltas in ms from the streaming loop, but they're computed incorrectly
+> there. We just return what we have since the streaming loop does a
+> best-effort measurement."*
+
+**The defect was written down, in the code, inside a function that exists as
+if to fix it, and shipped.** "Computed incorrectly" is not a caveat about
+precision; it is an accurate description of values reaching 1e+31. Calling
+the result "best-effort" made a broken measurement sound like a considered
+trade-off, and that framing is what let it survive every later reading of
+the file.
+
+A function that names a defect and then propagates it is worse than no
+function at all, because it makes the defect look deliberate. It has been
+replaced with a validator that raises.
+
 ## How it went unnoticed
 
-Three reasons, all worth recording.
+Four reasons, all worth recording.
 
 1. **The first value is correct.** `itl_ms[0]` is a true latency, so a
    spot-check of the field's shape looks fine.
@@ -62,6 +83,9 @@ Three reasons, all worth recording.
    "the SLO was not met", which is a legitimate experimental outcome, not
    as "the metric is broken". A NaN or an exception would have been caught
    immediately; a confident zero was not.
+4. **The acknowledgment was phrased as a trade-off.** "Best-effort
+   measurement" is the language of an approximation, and it was applied to
+   numbers that were not approximations of anything.
 
 ## What is NOT affected
 
