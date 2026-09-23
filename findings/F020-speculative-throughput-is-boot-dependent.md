@@ -99,6 +99,9 @@ The non-speculative half of the Phase 2 grid is sound at 0.6% reproducibility.
   1.64x between just two boots at c=16, so six boots was not near saturation.
 - **Anything about other engines, GPUs, or backends.** vLLM 0.29.0, L4/SM89,
   FLASHINFER, dflash only.
+- **That it holds for other speculative mechanisms.** n-gram speculation
+  shows no such spread across four boots (F027). The claim is about
+  draft-model-backed speculation, and saying otherwise would overreach.
 
 ## Consequence for measurement design
 

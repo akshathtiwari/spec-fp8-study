@@ -235,8 +235,12 @@ memory-tight hardware may not have.
 - **Why a default boot picks one mode over the other.** The selector is
   still unidentified, and remains the open question. What is now clear is
   that the selection is made once per boot and then holds.
-- **That the effect generalises** beyond dflash / FLASHINFER / SM89 /
-  vLLM 0.29.0.
+- **That the effect generalises to speculative decoding as such.** It does
+  not, as far as this study can tell. n-gram (prompt-lookup) speculation
+  shows no bimodality and no eager benefit across four boots (F027), so
+  this finding is about **draft-model-backed** speculation on this stack.
+  An unqualified "speculative throughput is bimodal" would be refuted by
+  the first reader who tried prompt-lookup.
 - **That pinning eager for the grid is fair.** `--enforce-eager` is
   engine-wide. Its effect was measured only on speculative cells, where the
   spec-decode fallback exists; on the non-speculative baseline CUDA graphs

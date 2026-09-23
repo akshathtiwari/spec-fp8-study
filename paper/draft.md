@@ -240,6 +240,24 @@ Pinned, that cell would have vanished from the results behind a one-word
 `oom`, and the natural reading would have been that the configuration is
 unsupported on SM89 — a compatibility claim, and a false one.
 
+**It is specific to draft-model speculation.** Running the identical
+protocol with n-gram (prompt-lookup) speculation finds no bimodality across
+four boots — spread 1.08× on the default arm against DFlash's ~2.2× — and
+no benefit from `--enforce-eager` (1.00×). The two observations are the
+same fact arriving twice: if there is no slow mode, there is nothing for
+the flag to avoid. As a measurement sanity check, n-gram's acceptance is
+deterministic (τ = 1.732 on every boot, spread 1.000×) where DFlash's moves
+4.09–4.43, which is what a prompt-matching mechanism should do.
+
+Four boots cannot prove absence. Pooling our DFlash default-arm boots gives
+P(slow) ≈ 0.38, so four draws land all-fast about 15% of the time. We
+report this as a localisation, not an exclusion.
+
+The consequence is that our claim — and any claim like it — has to name the
+mechanism. "Speculative throughput is bimodal" is refuted by the first
+reader who tries prompt-lookup; "draft-model speculative throughput is
+bimodal on this stack" is what we measured.
+
 **Why this matters beyond one engine.** A single-boot speculative benchmark
 on this stack can report any speedup in a 1.16×–2.71× range depending on
 which mode it happened to boot into. Single-run reporting is, from our
