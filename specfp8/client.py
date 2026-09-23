@@ -18,18 +18,38 @@ from dataclasses import dataclass, field
 import httpx
 
 
-#: An inter-token latency above this on a local server is not a slow token,
-#: it is a bug. F025 wrote values up to 8e+31 and +/-Infinity for months
-#: because nothing asserted a range; the fix that would have caught it is
-#: this constant, not a checker.
-MAX_PLAUSIBLE_ITL_MS = 60_000.0
+#: Above this, an inter-token gap is worth flagging. It is NOT worth
+#: failing on: under concurrency vLLM preempts and recomputes requests
+#: under KV pressure, and a preempted request genuinely waits. A 253-second
+#: gap was observed at concurrency 64 with 256 queued requests, and it is a
+#: real measurement of a real stall.
+LARGE_ITL_MS = 60_000.0
 
 
-def itl_anomalies(itls: list[float]) -> int:
-    """Count inter-token latencies that cannot be real measurements."""
+def itl_impossible(itls: list[float]) -> int:
+    """Count inter-token latencies that cannot be measurements at all.
+
+    Negative or non-finite only. Time does not run backwards and a gap is
+    not infinite, so these are always harness defects — and they are the
+    F025 signature: that bug produced alternating signs within three tokens
+    and +/-Infinity within a hundred.
+
+    Deliberately NOT a magnitude test. The first version of this guard
+    raised on anything above 60s, on the reasoning that "an inter-token
+    latency above a second on a local server is a bug". That reasoning was
+    an assumption about the system stated without measuring it, which is
+    the error this entire study is about, and it killed a paid run on a
+    legitimate 253s preemption stall. The distinction that survives is
+    *impossible* versus *merely extreme*.
+    """
     import math
-    return sum(1 for v in itls
-               if not math.isfinite(v) or v < 0 or v > MAX_PLAUSIBLE_ITL_MS)
+    return sum(1 for v in itls if not math.isfinite(v) or v < 0)
+
+
+def itl_extreme(itls: list[float]) -> int:
+    """Count gaps large enough to be worth reporting but not to reject."""
+    import math
+    return sum(1 for v in itls if math.isfinite(v) and v > LARGE_ITL_MS)
 
 
 @dataclass
@@ -208,15 +228,16 @@ def _compute_itl(
     than a run that stops, and F025's whole lesson is that a confident 0.0
     is invisible while an exception is not.
     """
-    bad = itl_anomalies(raw_times)
+    import math
+
+    bad = itl_impossible(raw_times)
     if bad:
         sample = [v for v in raw_times
-                  if not (0 <= v <= MAX_PLAUSIBLE_ITL_MS)][:3]
+                  if not math.isfinite(v) or v < 0][:3]
         raise ValueError(
             f"{bad} of {len(raw_times)} inter-token latencies are "
-            f"implausible (>{MAX_PLAUSIBLE_ITL_MS:.0f}ms, negative or "
-            f"non-finite): {sample}. This is a harness bug, not a slow "
-            f"server -- see findings/F025."
+            f"impossible (negative or non-finite): {sample}. Time does not "
+            f"run backwards; this is a harness defect -- see findings/F025."
         )
     return raw_times
 

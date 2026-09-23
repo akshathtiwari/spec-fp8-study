@@ -6,12 +6,12 @@ Each row is repeated boots of one identical configuration. `spread` is max/min. 
 
 | mechanism | arm | conc | boots | min | max | spread | tau spread | split? |
 |---|---|---|---|---|---|---|---|---|
-| ngram | default | 1 | 4 | 32.4 | 34.9 | 1.08x | 1.000x | no (gap 2.4x within-group) |
-| ngram | default | 16 | 4 | 330.6 | 339.5 | 1.03x | 1.000x | no (gap 1.0x within-group) |
-| ngram | default | 64 | 4 | 839.5 | 864.2 | 1.03x | 1.007x | no (gap 1.0x within-group) |
-| ngram | enforce_eager | 1 | 4 | 33.5 | 34.2 | 1.02x | 1.000x | no (gap 1.5x within-group) |
-| ngram | enforce_eager | 16 | 4 | 339.0 | 348.3 | 1.03x | 1.002x | no (gap 1.8x within-group) |
-| ngram | enforce_eager | 64 | 4 | 839.8 | 885.2 | 1.05x | 1.003x | no (gap 1.1x within-group) |
+| ngram | default | 1 | 12 | 32.4 | 35.7 | 1.10x | 1.011x | no (gap 1.0x within-group) |
+| ngram | default | 16 | 12 | 330.6 | 353.8 | 1.07x | 1.002x | no (gap 0.5x within-group) |
+| ngram | default | 64 | 12 | 839.5 | 901.6 | 1.07x | 1.012x | no (gap 0.6x within-group) |
+| ngram | enforce_eager | 1 | 7 | 33.5 | 34.3 | 1.02x | 1.000x | no (gap 1.0x within-group) |
+| ngram | enforce_eager | 16 | 7 | 339.0 | 348.3 | 1.03x | 1.002x | no (gap 1.5x within-group) |
+| ngram | enforce_eager | 64 | 7 | 839.8 | 888.7 | 1.06x | 1.006x | no (gap 1.0x within-group) |
 
 ## Reading this
 

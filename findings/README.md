@@ -26,7 +26,7 @@ wrong turns and what caught them — is part of the evidence.
 | [`F023`](F023-enforce-eager-increases-memory-pressure.md) | enforce_eager increases KV allocation and can make a speculative cell unbootable, so it is not a free fix for the bimodality | established | high |
 | [`F024`](F024-enforce-eager-halves-fp8-weight-throughput.md) | enforce_eager costs FP8-weight configurations a fifth to a half of their throughput and costs BF16 nothing, so pinning it would have manufactured the speculative speedup on every FP8 cell | established | high |
 | [`F026`](F026-itl-is-not-inter-token-under-speculation.md) | Client-measured inter-token latency is inter-chunk latency, so an ITL-based SLO penalises speculative decoding by a factor of tau and inverts the comparison it is meant to make | established | high |
-| [`F027`](F027-bimodality-is-draft-model-specific.md) | n-gram speculation shows no bimodality and no eager benefit across four boots, which localises the CUDA-graph effect to draft-model speculation rather than to speculative decoding as such | established | medium |
+| [`F027`](F027-bimodality-is-draft-model-specific.md) | n-gram speculation shows no bimodality and no eager benefit across twelve boots, which localises the CUDA-graph effect to draft-model speculation rather than to speculative decoding as such | established | high |
 
 ## Method
 

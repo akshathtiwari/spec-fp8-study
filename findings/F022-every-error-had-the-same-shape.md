@@ -174,6 +174,48 @@ Knowing the pattern does not confer immunity from it. Every defence that
 worked today was mechanical — an append-only record, a cross-session guard,
 a checker that fails the build. None of them was vigilance.
 
+### The sixteenth, inside the guard written to prevent the fifteenth
+
+F025's lesson was that the missing defence is a **range assertion**, and
+one was added: inter-token latencies above 60 seconds raise, on the
+reasoning that "an inter-token latency above a second on a local server is
+not a slow token, it is a bug".
+
+That reasoning is an assumption about the system, stated without measuring
+it. Under concurrency vLLM preempts and recomputes requests when KV
+pressure is high, and a preempted request genuinely waits. At concurrency
+64 with 256 queued requests it waited **253 seconds**, the guard raised,
+and a paid run died on a correct measurement.
+
+| # | Compared | Assumed fixed | Actually varied | Cost if unreported |
+|---|---|---|---|---|
+| 16 | observed ITL vs "possible" ITL | that 60s exceeds any real gap | preemption stalls reach 253s | a killed run, and valid data rejected as corrupt |
+
+The guard was replaced with one that tests **impossibility** rather than
+magnitude: negative or non-finite only. Time does not run backwards and a
+gap is not infinite, so those are always defects, and they are the F025
+signature — that bug alternated sign within three tokens. Large positive
+gaps are now counted and reported, never rejected.
+
+Two things make this instance worth its own entry.
+
+**The error was inside the fix for the previous one.** F025 concluded that
+assumptions need assertions; the assertion then encoded a fresh unmeasured
+assumption. Being right about the *category* of defence says nothing about
+whether a particular instance of it is calibrated.
+
+**It failed in the safe direction, and that is the only reason it was
+cheap.** A guard that raises stops a run; a guard that silently filters
+would have deleted the 253-second stall from the record and left a goodput
+table that quietly excluded the worst-behaved requests — which is the
+precise shape of F025 itself, one layer up. The run cost $0.99 and lost
+nothing, because `boot_variance` appends per measurement and commits
+periodically: all eight default-arm boots were already on disk when the
+exception fired, and they are the boots the experiment needed.
+
+Choosing loud failure over silent correction is what made a wrong guard
+a fifteen-minute problem instead of a finding built on filtered data.
+
 ## Reasoning
 
 The pattern is not carelessness about *measurement*. Each individual number

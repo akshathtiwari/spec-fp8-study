@@ -1,9 +1,9 @@
 ---
 id: F027
-title: n-gram speculation shows no bimodality and no eager benefit across four boots, which localises the CUDA-graph effect to draft-model speculation rather than to speculative decoding as such
+title: n-gram speculation shows no bimodality and no eager benefit across twelve boots, which localises the CUDA-graph effect to draft-model speculation rather than to speculative decoding as such
 kind: result
 status: established
-confidence: medium
+confidence: high
 date: 2026-09-23
 evidence:
   runs: [2026-09-23T07-1xZ_boot_variance_ngram]
@@ -21,8 +21,8 @@ bimodality and no eager benefit**:
 
 | mechanism | arm | boots | spread | tau spread | split? |
 |---|---|---|---|---|---|
-| ngram | default | 4 | **1.08x** | 1.000x | no |
-| ngram | enforce_eager | 4 | **1.02x** | 1.000x | no |
+| ngram | default | **12** | **1.10x** | 1.011x | no |
+| ngram | enforce_eager | 7 | **1.02x** | 1.000x | no |
 | dflash | default | — | **~2.2x** | 1.007x | **yes** |
 
 The effect is therefore associated with **draft-model-backed** speculation,
@@ -31,13 +31,19 @@ F021, and it is the generalisation question a reader would ask first.
 
 ## Evidence
 
-Four boots per arm, one container, identical prompts, `bf16 | auto KV |
-FLASHINFER`, concurrency 1 / 16 / 64. Throughput at c=1:
+Two runs, **twelve** default-arm boots in total, identical prompts,
+`bf16 | auto KV | FLASHINFER`, concurrency 1 / 16 / 64. Throughput at c=1,
+sorted:
 
 ```
-default        34.16  34.15  32.35  34.89     spread 1.08x
-enforce_eager  33.54  33.72  34.01  34.22     spread 1.02x
+default (12)   32.35 34.02 34.15 34.16 34.71 34.89
+               34.92 35.17 35.19 35.40 35.60 35.71    spread 1.10x
+eager (7)      33.54 33.72 34.01 34.16 34.21 34.22 34.32   spread 1.02x
 ```
+
+The twelve default boots are not merely unsplit, they are *tight*: the
+entire range is 3.4 tok/s wide, narrower than the gap between two adjacent
+DFlash boots inside the same mode.
 
 Both arms are unimodal and indistinguishable from each other: mean 33.9
 against 33.9, a ratio of **1.00x**. For DFlash the same comparison gives
@@ -62,13 +68,11 @@ on GSM8K, and its throughput at c=1 (33.9) sits between non-speculative
 
 ## What this does NOT establish
 
-- **That ngram is free of the effect.** Four boots. Pooling the DFlash
-  default-arm boots recorded across this study gives roughly 5 slow to 8
-  fast, so P(slow) is near 0.38; four boots drawn from that distribution
-  land all-fast about **15%** of the time. A false negative at this sample
-  size is entirely plausible, and this finding is `confidence: medium` for
-  that reason alone. Eight more ngram boots would settle it and cost about
-  a dollar.
+- **That ngram is free of the effect** with certainty. Pooling the DFlash
+  default-arm boots recorded across this study gives P(slow) near 0.38;
+  twelve boots drawn from that distribution land all-fast **0.3%** of the
+  time. That is strong enough to state the localisation without hedging and
+  not strong enough to call the effect impossible in ngram.
 - **That the draft *model* is the cause.** DFlash and ngram differ in more
   than one way: a separate model to load and schedule, a different
   acceptance distribution, tau 4.2 against 1.7, and different scheduler
@@ -102,7 +106,7 @@ behave oppositely under the same flag.
 ## How to reproduce
 
 ```bash
-modal run cloud/modal_probe.py --engine bootvar --sweep ngram --repeats 4
+modal run cloud/modal_probe.py --engine bootvar --sweep ngram --repeats 8
 ```
 
 ```bash

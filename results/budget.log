@@ -21,3 +21,4 @@
 {"ts":"2026-09-22T09:26:22.892591+00:00","phase":"sweep","session_gpu_s":448.8,"cumulative_gpu_s":448.8}
 {"ts":"2026-09-22T22:06:05.956823+00:00","phase":"sweep","session_gpu_s":6857.5,"cumulative_gpu_s":39954.5,"detail":"sweeps/perf_v2.yaml"}
 {"ts":"2026-09-23T07:09:21.270311+00:00","phase":"sweep","session_gpu_s":7183.2,"cumulative_gpu_s":47137.7,"detail":"sweeps/perf_v2.yaml"}
+{"ts":"2026-09-23T08:08:21.698467+00:00","phase":"boot_variance","session_gpu_s":2871.0,"cumulative_gpu_s":50008.7,"detail":"boot_variance (container wall)"}
