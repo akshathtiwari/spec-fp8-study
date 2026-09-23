@@ -229,6 +229,49 @@ def t_capacity() -> None:
                  f"**{min(controlled):.3f}x – {max(controlled):.3f}x** "
                  f"(n={len(controlled)}), against a theoretical 2.000x for "
                  f"16-bit to 8-bit KV.")
+    # Cross-backend comparison at fixed precision.
+    #
+    # The interesting number is not the ratio within a backend but the
+    # spread BETWEEN backends at each precision: if FP8 merely halved the
+    # bytes per token, two backends serving the same configuration should
+    # diverge no more at FP8 than they do at BF16. They diverge far more,
+    # and that difference has to live in the derived layer rather than
+    # being computed by hand in the paper.
+    # Only backends that serve BOTH precisions may be compared. FLASH_ATTN
+    # and FLEX_ATTENTION run at BF16 and reject FP8 KV entirely (F017), so
+    # including them puts a different backend set in each column and the
+    # comparison measures which backends exist rather than how they behave.
+    # A first version of this table did exactly that and appeared to show
+    # the spread was identical at both precisions; it was comparing
+    # FLASH_ATTN's BF16 against FlashInfer's FP8.
+    by_prec: dict[tuple, dict[str, int]] = {}
+    for key in seen:
+        if key[3] == "auto":
+            continue
+        bf, fp = idx.get((*key, "auto")), idx.get((*key, "fp8_e4m3"))
+        if not (bf and fp):
+            continue
+        by_prec.setdefault((key[0], key[1], key[2], "bf16"), {})[key[3]] = bf
+        by_prec.setdefault((key[0], key[1], key[2], "fp8"), {})[key[3]] = fp
+
+    rows = []
+    for (model, mech, wt, prec), caps in sorted(by_prec.items()):
+        if len(caps) < 2:
+            continue
+        lo, hi = min(caps.values()), max(caps.values())
+        rows.append((model.split("/")[-1], mech, wt, prec, lo, hi, hi - lo, hi / lo))
+    if rows:
+        L.append("\n## Spread between backends, at fixed precision\n")
+        L.append("| model | mech | weights | KV precision | min | max | "
+                 "difference | ratio |")
+        L.append("|---|---|---|---|---|---|---|---|")
+        for r in rows:
+            L.append(f"| {r[0]} | {r[1]} | {r[2]} | {r[3]} | {r[4]:,} | "
+                     f"{r[5]:,} | **{r[6]:,}** | {r[7]:.3f}x |")
+        L.append("\nIf FP8 only halved bytes per token, the between-backend "
+                 "spread would be the same at both precisions. Where it is "
+                 "not, the FP8 path itself differs by backend.")
+
     write("kv_capacity.md", "\n".join(L) + "\n")
 
 
