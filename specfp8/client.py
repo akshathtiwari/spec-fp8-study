@@ -18,6 +18,20 @@ from dataclasses import dataclass, field
 import httpx
 
 
+#: An inter-token latency above this on a local server is not a slow token,
+#: it is a bug. F025 wrote values up to 8e+31 and +/-Infinity for months
+#: because nothing asserted a range; the fix that would have caught it is
+#: this constant, not a checker.
+MAX_PLAUSIBLE_ITL_MS = 60_000.0
+
+
+def itl_anomalies(itls: list[float]) -> int:
+    """Count inter-token latencies that cannot be real measurements."""
+    import math
+    return sum(1 for v in itls
+               if not math.isfinite(v) or v < 0 or v > MAX_PLAUSIBLE_ITL_MS)
+
+
 @dataclass
 class RequestResult:
     """Per-request timing record."""
@@ -180,10 +194,30 @@ def _compute_itl(
     raw_times: list[float],
     start: float,
 ) -> list[float]:
-    """Compute inter-token latencies. The raw_times list already contains
-    deltas in ms from the streaming loop, but they're computed incorrectly
-    there. We just return what we have since the streaming loop does a
-    best-effort measurement."""
+    """Validate the inter-token latencies produced by the streaming loop.
+
+    This used to be a no-op passthrough whose docstring said the values
+    "are computed incorrectly there" and returned them anyway. They were
+    indeed incorrect (F025): every element after the first was garbage, up
+    to +/-Infinity, and every goodput figure in the study was 0.0 as a
+    result. A function that names a defect and then propagates it is worse
+    than no function, because it makes the defect look considered.
+
+    The loop is fixed, so this now checks rather than excuses. Implausible
+    values raise: a wrong number that reaches a table is far more expensive
+    than a run that stops, and F025's whole lesson is that a confident 0.0
+    is invisible while an exception is not.
+    """
+    bad = itl_anomalies(raw_times)
+    if bad:
+        sample = [v for v in raw_times
+                  if not (0 <= v <= MAX_PLAUSIBLE_ITL_MS)][:3]
+        raise ValueError(
+            f"{bad} of {len(raw_times)} inter-token latencies are "
+            f"implausible (>{MAX_PLAUSIBLE_ITL_MS:.0f}ms, negative or "
+            f"non-finite): {sample}. This is a harness bug, not a slow "
+            f"server -- see findings/F025."
+        )
     return raw_times
 
 
