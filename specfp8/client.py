@@ -69,10 +69,14 @@ async def generate_one(
         **sampling_params,
     }
 
-    token_times: list[float] = []
+    token_times: list[float] = []      # inter-token latencies, milliseconds
     output_chunks: list[str] = []
     usage_tokens: int | None = None
     first_token_time: float | None = None
+    #: Arrival time of the previous content chunk, monotonic seconds. Kept
+    #: separate from token_times because conflating the two is what produced
+    #: the ITL corruption in F025.
+    prev_token_time: float = 0.0
     start = time.monotonic()
 
     try:
@@ -120,8 +124,26 @@ async def generate_one(
                     now = time.monotonic()
                     if first_token_time is None:
                         first_token_time = now
+                        prev_token_time = now
                     else:
-                        token_times.append((now - (token_times[-1] if token_times else first_token_time)) * 1000)
+                        # Gap since the PREVIOUS ARRIVAL, tracked separately
+                        # from the latency list.
+                        #
+                        # This previously read token_times[-1] as the previous
+                        # timestamp, but token_times holds latencies in
+                        # milliseconds, not monotonic seconds. After the first
+                        # append it subtracted a millisecond latency from a
+                        # seconds timestamp and fed the result back in, so the
+                        # values alternated sign and grew about 1000x per
+                        # token, reaching +/-Infinity within ~100 tokens.
+                        #
+                        # Every itl_ms array recorded before 2026-09-23 is
+                        # therefore unusable, and p95 ITL was Infinity, which
+                        # is why every goodput figure was 0.0. TTFT, e2e,
+                        # token counts, throughput and tau are computed
+                        # elsewhere and are unaffected. See findings/F025.
+                        token_times.append((now - prev_token_time) * 1000)
+                        prev_token_time = now
                     output_chunks.append(content)
 
     except (httpx.TimeoutException, httpx.ReadError, httpx.ConnectError) as e:
