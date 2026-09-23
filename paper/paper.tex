@@ -304,10 +304,29 @@ The reason it kept moving is that every argument about it was about the
 effect and none was about the floor. One four-boot run settled it
 permanently and cost about an hour of GPU time.
 
-\paragraph{Prescription.} Measure the noise floor of the quantity being
-compared \emph{before} comparing it. In our experience this is the single
-highest-yield methodological step, and it is routinely skipped because the
-floor feels like overhead rather than like a result.
+\paragraph{Prescription, and prior credit.} Measure the noise floor of the
+quantity being compared \emph{before} comparing it.
+
+We do not claim this principle as novel. Kaplan~\cite{kaplan2026calibrated},
+concurrently, calibrates an LLM judge by scoring ``two ordinary runs of a
+model given the same prompts'' and includes a null condition ``provably
+identical in distribution\ldots whose measured difference must be zero''.
+That is the same epistemic move. His instrument is an LLM judge and his
+quantity is output quality; ours is a serving harness and our quantities are
+acceptance and throughput. Independent concurrent arrival at the same
+principle in adjacent subfields is evidence the principle is right, and we
+cite it as such.
+
+What we add is narrower and specific: \emph{the floor for $\tau$ had not been
+measured}, and effects below it have been reported as real.
+
+\paragraph{A caveat on the floor itself.} Our 1.32\% is measured at
+$\tau \approx 4.1$, on GSM8K with a 768-token budget. In an earlier phase,
+with a 256-token budget on a different prompt set, the same configuration
+gave $\tau \approx 2.71$ --- a 55\% difference from generation length and
+prompt distribution alone. A floor measured at one operating point should not
+be transplanted to another, and $\tau$ quoted without its generation length
+and prompt distribution is close to uninterpretable.
 
 \section{Confound 4: ``inter-token latency'' is inter-chunk latency}\label{sec:c4}
 
@@ -546,6 +565,9 @@ softening them.
 \toprule
 Work & What it did & Gap this addresses\\
 \midrule
+Performance or Illusion?~\cite{liu2026illusion} & Systematic SD evaluation, vLLM on H100, CUDA graphs enabled, FP16 KV & No run-to-run variance; no FP8 KV; no SLO goodput; ITL not decomposed\\
+Interpretable latency model~\cite{kong2026latency} & Models SD latency vs request rate, vLLM on A100/H100, $R^2$ to 0.997 & Single-sweep methodology; no repeats, error bars, or CUDA-graph discussion\\
+Calibrated instrument~\cite{kaplan2026calibrated} & Calibrates an LLM judge via a null condition; measures its per-sample noise & Same principle, applied to output quality rather than throughput or acceptance\\
 Spec.\ Decoding Meets Quantization~\cite{specquant2025} & EAGLE-2 with W8A8, W4A16, W4A8; single-request & No FP8, no KV-cache quantization, not batched\\
 SpecKV~\cite{speckv2026} & Adaptive $\gamma$ under compression & Algorithmic, step-level, not serving goodput\\
 QSpec~\cite{qspec2025} & W4A4 draft + W4A16 verify, shared weights & Shared-weight special case, not FP8\\
@@ -559,6 +581,30 @@ ML-SpecQD~\cite{mlspecqd2025}, Quasar~\cite{quasar2026} & Quantized drafts, W8A8
 None reports boot-level variance, and every single-request result in this
 table is vulnerable to the confound in \S\ref{sec:c2}. None reports goodput
 under a service objective, where \S\ref{sec:c4} applies.
+
+Two relationships deserve stating precisely rather than by omission.
+
+\textbf{Liu et al.}~\cite{liu2026illusion} report that acceptance varies
+``within a request, across different requests, and across different
+datasets''. That is variation of the \emph{quantity}; \S\ref{sec:c3} measures
+the \emph{instrument} --- how much a repeated identical measurement moves.
+The two are complementary, and conflating them would be a mistake in either
+direction. They also establish that increasing batch size systematically
+reduces SD's relative speedup, which is prior art for load-dependence and we
+claim no novelty there.
+
+\textbf{Kong et al.}~\cite{kong2026latency} validate a latency model on vLLM
+SD measurements to $R^2 = 0.997$ using a single-sweep methodology with no
+repeated runs and no discussion of CUDA graphs. Our \S\ref{sec:c2} identifies
+an error term that such a protocol cannot see. We do not claim their results
+are wrong --- they measure A100/H100 where we measure L4, and
+\S\ref{sec:c2} localises the effect to draft-model speculation --- only that
+the term is unmeasured and worth checking.
+
+\textbf{On hardware.} Liu et al.\ use H100; Kong et al.\ use A100 and H100;
+both use FP16 KV. The regime where KV capacity actually binds, and where FP8
+KV therefore has something to buy, is the smaller card. That is why we
+measure on L4, and it is the gap this paper occupies.
 
 \section{Artifact}\label{sec:artifact}
 
@@ -611,6 +657,23 @@ PagedAttention.
 K.~Cobbe et al.
 \newblock Training verifiers to solve math word problems.
 \newblock arXiv:2110.14168, 2021.
+
+\bibitem{liu2026illusion}
+X.~Liu, J.~Yu, J.~Park, I.~Stoica, and A.~Cheung.
+\newblock Speculative decoding: performance or illusion?
+\newblock \emph{MLSys}, 2026. arXiv:2601.11580.
+
+\bibitem{kong2026latency}
+L.~Kong, M.~Flynn, M.~Peng, N.~Shavit, M.~Kurtz, and A.~Marques.
+\newblock An interpretable latency model for speculative decoding in LLM
+serving.
+\newblock arXiv:2605.15051, 2026.
+
+\bibitem{kaplan2026calibrated}
+J.~Kaplan.
+\newblock A calibrated instrument for measuring how inference optimizations
+affect output quality.
+\newblock arXiv:2609.18005, 2026.
 
 \bibitem{specquant2025}
 Speculative decoding meets quantization: compatibility evaluation and
