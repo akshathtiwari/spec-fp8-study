@@ -1,9 +1,9 @@
 ---
 id: F006
-title: tau is invariant to FP8 precision, to below the 1.32% boot-to-boot noise floor
+title: SUPERSEDED — the FP8 precision comparison is unreplicated and establishes neither difference nor equivalence
 kind: result
-status: established
-confidence: high
+status: superseded
+confidence: medium
 superseded_by: []
 date: 2026-09-21
 evidence:
@@ -19,6 +19,15 @@ which claimed `--attention-backend` was ignored. F018 was wrong: the flag
 controls the target model, and F018's parser had read the draft's independent
 selection. This finding stands as written. A speculative cell does involve two
 backends, so read it alongside F019.
+
+> **SUPERSEDED 2026-09-24.** Both readings below are withdrawn. The
+> precision comparison rests on **one boot per arm**, so it cannot establish
+> a difference or an equivalence. The "1.32% noise floor" it invokes was the
+> range of four boots, which is not a dispersion statistic (see the
+> correction sections below and findings/F029 for the same error in another
+> claim). The surviving measurement is that tau has CV 0.62% across 12
+> fixed-prompt boots at tau~4.1; that number is not transferable to the
+> operating point this finding measured.
 
 ## Claim
 

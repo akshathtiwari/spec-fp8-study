@@ -19,17 +19,22 @@ obscured:
    KV vLLM selects FlashAttention-2; at `fp8_e4m3` it selects FlashInfer. A
    precision A/B under default settings is a kernel A/B as well. Target and
    draft models select *independently*, so pinning one does not pin the other.
-2. **Throughput of an identical speculative configuration varies up to 2.96x
-   across boots** while acceptance does not. The variation is associated with
-   the CUDA-graph execution path and is fixed at boot. It is specific to
-   *draft-model* speculation: n-gram speculation shows 1.10x over twelve boots.
-3. **Acceptance (tau) has a boot-to-boot noise floor of 1.32%** that we could
-   not find reported anywhere. Effects smaller than that are unfalsifiable;
-   we withdrew one of our own published claims that sat at 1.7x the floor.
-4. **"Inter-token latency" is inter-chunk latency.** A speculative step emits
-   every accepted token in one stream chunk, so a p95-ITL objective ranks the
-   highest-throughput configuration in our grid as fully non-compliant. This
-   one does not add error -- it inverts the decision.
+2. **Throughput of an identical speculative configuration is
+   unreproducible across boots** while acceptance is not: CV 13.92% over 12
+   fixed-prompt boots, collapsing to 1.44% under `--enforce-eager`. The
+   dispersion is *associated with* the CUDA-graph path; the mechanism is
+   unidentified, and boot and host effects were not separated. Specific to
+   *draft-model* speculation: n-gram gives CV 2.67% at the same n.
+3. **Acceptance (tau) has a boot-to-boot CV of 0.62%** under repeated
+   identical boots, which we could not find reported. We do *not* convert
+   this into a detection threshold: our FP8 precision comparison is
+   unreplicated and establishes neither a difference nor an equivalence.
+4. **"Inter-token latency" is inter-chunk latency** when computed from
+   stream-arrival timestamps. A speculative step emits every accepted token
+   in one chunk, so at concurrency 64 a p95-ITL objective scores the
+   highest-throughput configuration at zero compliant goodput, at every
+   threshold from 20 to 75 ms. This one does not add error -- it inverts the
+   decision.
 
 The original hypothesis that motivated the study --- that FP8 KV cache plus
 non-causal drafting is silently broken on Ada (SM89) --- was **refuted**
@@ -39,7 +44,7 @@ became a measurement-methodology paper.
 ## The record
 
 ```
-findings/        27 numbered findings: results, methods, retractions, gaps.
+findings/        29 numbered findings: results, methods, retractions, gaps.
                  Each carries a mandatory "What this does NOT establish".
                  Wrong claims are superseded, never deleted.
 results/         Raw records, append-only. ~40 MB, committed on purpose:
@@ -50,7 +55,7 @@ docs/            Requirements, design, data model, paper outline.
 paper/           LaTeX source, figures, and build script.
 ```
 
-Seven of the 27 findings are retractions. They are kept deliberately. The
+8 of the 29 findings are retractions. They are kept deliberately. The
 study's argument is that benchmark numbers are routinely reported without
 their error terms, and the most honest evidence for that is the list of times
 we did it ourselves and caught it.
@@ -118,10 +123,21 @@ engine-agnostic and speaks only HTTP.
 
 ## Status
 
-The paper is a preprint draft. It has not been peer reviewed, and
-`check_provenance.py` currently reports two known defects (findings F009 and
-F014 rest on probe output that predates per-measurement recording; neither is
-cited in the paper). Both are stated in the paper rather than suppressed.
+The paper is a preprint draft. It has not been peer reviewed.
+
+Counts in this file go stale; run the tools rather than trusting them:
+
+```bash
+python analysis/check_provenance.py   # 2 disclosed defects (F009, F014)
+python analysis/check_paper.py        # must report 0 untraceable
+./paper/build.sh                      # blocks if either regresses
+```
+
+F009 and F014 rest on probe output predating per-measurement recording;
+neither is cited in the paper, and both are disclosed in its threats
+section. `paper/build.sh` fails the build on any *additional* defect --- an
+earlier version printed the failure and continued, so the audit was
+advertised and not enforced.
 
 ## License
 

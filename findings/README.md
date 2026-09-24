@@ -16,7 +16,7 @@ wrong turns and what caught them — is part of the evidence.
 | [`F002`](F002-h1-refuted.md) | H1 refuted — FlashInfer serves FP8 KV with non-causal drafting on SM89 | established | medium |
 | [`F003`](F003-backend-selection-dtype-conditioned.md) | vLLM's attention backend selection is conditioned on KV cache dtype | established | high |
 | [`F004`](F004-fp8-kv-doubles-capacity.md) | FP8 KV cache doubles measured KV capacity when backend is held fixed | established | high |
-| [`F006`](F006-tau-invariant-to-precision.md) | tau is invariant to FP8 precision, to below the 1.32% boot-to-boot noise floor | established | high |
+| [`F006`](F006-tau-invariant-to-precision.md) | SUPERSEDED — the FP8 precision comparison is unreplicated and establishes neither difference nor equivalence | superseded | medium |
 | [`F009`](F009-determinism-is-server-state-dependent.md) | Generation is exactly reproducible across boots but drifts within a server | established | high |
 | [`F016`](F016-fp8-no-measurable-quality-cost.md) | FP8 weights and FP8 KV cost no measurable task accuracy, within +/-4.7 points | established | medium |
 | [`F017`](F017-fp8-kv-is-backend-gated.md) | FP8 KV works on exactly two of four SM89 backends, and vLLM's auto-switch is why | established | high |

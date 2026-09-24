@@ -6,10 +6,21 @@ Coefficient of variation is the comparable statistic here. A max/min **range gro
 
 | series | n | median | IQR | CV | 95% CI on mean | max/min |
 |---|---|---|---|---|---|---|
-| DFlash default | 23 | 43.7 | 27.6 | **29.9%** | [39.5, 51.3] | 2.96x |
-| DFlash eager | 12 | 80.9 | 2.1 | **3.9%** | [78.9, 82.9] | 1.17x |
-| n-gram default | 12 | 34.9 | 1.2 | **2.7%** | [34.1, 35.3] | 1.10x |
-| n-gram eager | 7 | 34.2 | 0.5 | **0.9%** | [33.8, 34.3] | 1.02x |
+| DFlash default | 12 | 40.8 | 10.8 | **13.92%** | [35.7, 42.7] | 1.54x |
+| DFlash eager | 8 | 80.9 | 1.6 | **1.44%** | [79.6, 81.5] | 1.04x |
+| n-gram default | 12 | 34.9 | 1.2 | **2.67%** | [34.1, 35.3] | 1.10x |
+| n-gram eager | 7 | 34.2 | 0.5 | **0.85%** | [33.8, 34.3] | 1.02x |
+
+### For contrast: pooled across all observed runs
+
+Includes grid records, whose repeats draw different prompts, so these mix boot and prompt variation and are **not** a controlled boot-dispersion estimate. Shown because an earlier revision reported them as one.
+
+| series | n | CV (pooled) |
+|---|---|---|
+| DFlash default | 23 | 29.92% |
+| DFlash eager | 12 | 3.88% |
+| n-gram default | 12 | 2.67% |
+| n-gram eager | 7 | 0.85% |
 
 ## Acceptance ($\tau$) under repeated identical boots
 
@@ -18,7 +29,6 @@ Boot-variance probes only: one fixed prompt set replayed on every boot. Grid rec
 - n = 12, mean 4.1055, sd 0.0256
 - **CV = 0.62%**
 - 95% CI on the mean: [4.0893, 4.1218]
-- Minimum detectable effect at this n, ~80% power: **1.74%** of the mean
 - max/min range: 1.38% (was reported as a 1.32% "noise floor" at n=4; the range **grew** with n, which is what ranges do)
 
 - Distinct values observed: [4.0914, 4.1479]. Acceptance is near-deterministic given fixed prompts rather than continuously noisy, which is a further reason "noise floor" was the wrong description.

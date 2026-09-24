@@ -44,11 +44,26 @@ def tcrit(df: int) -> float:
     return 2.09 if df > 20 else 2.20
 
 
-def boots(mech: str, eager: bool, field: str = "throughput"):
-    """Every valid boot of one mechanism/arm at concurrency 1."""
+def boots(mech: str, eager: bool, field: str = "throughput",
+          probes_only: bool = False):
+    """Boots of one mechanism/arm at concurrency 1.
+
+    `probes_only` restricts to boot_variance runs, which replay one fixed
+    prompt set on every boot. That is the controlled measurement of
+    BOOT dispersion.
+
+    Pooling in grid records mixes in prompt variation, because sweep.py
+    offsets the seed by repeat index so repeats draw different prompts by
+    design. An earlier revision excluded them from the acceptance analysis
+    for exactly that reason and included them for throughput -- inconsistent,
+    and it inflated the headline DFlash CV from 13.9% to 29.9%. External
+    review caught it.
+    """
     out = []
     p = ROOT / "results" / "sweep.jsonl"
-    for line in p.read_text().splitlines():
+    if probes_only:
+        p = None
+    for line in (p.read_text().splitlines() if p else []):
         if not line.strip():
             continue
         r = json.loads(line)
@@ -119,8 +134,6 @@ def describe(v: list[float]) -> dict:
         "n": n, "mean": m, "sd": s, "cv": (s / m * 100) if m else 0.0,
         "median": st.median(v), "iqr": q[2] - q[0],
         "ci_lo": m - t * sem, "ci_hi": m + t * sem,
-        # Crude two-sample MDE at ~80% power: 2.8 sigma / sqrt(n) per arm.
-        "mde_pct": (2.8 * s / m * 100) if m else 0.0,
         "range_ratio": (max(v) / min(v)) if v and min(v) else 0.0,
     }
 
@@ -142,13 +155,24 @@ def main() -> int:
               ("n-gram default", "ngram", False),
               ("n-gram eager", "ngram", True)]
     for label, mech, eager in series:
-        v = boots(mech, eager)
+        v = boots(mech, eager, probes_only=True)
         if len(v) < 2:
             continue
         d = describe(v)
         L.append(f"| {label} | {d['n']} | {d['median']:.1f} | {d['iqr']:.1f} "
-                 f"| **{d['cv']:.1f}%** | [{d['ci_lo']:.1f}, {d['ci_hi']:.1f}] "
+                 f"| **{d['cv']:.2f}%** | [{d['ci_lo']:.1f}, {d['ci_hi']:.1f}] "
                  f"| {d['range_ratio']:.2f}x |")
+
+    L += ["", "### For contrast: pooled across all observed runs", "",
+          "Includes grid records, whose repeats draw different prompts, so "
+          "these mix boot and prompt variation and are **not** a controlled "
+          "boot-dispersion estimate. Shown because an earlier revision "
+          "reported them as one.", "",
+          "| series | n | CV (pooled) |", "|---|---|---|"]
+    for label, mech, eager in series:
+        v = boots(mech, eager)
+        if len(v) > 1:
+            L.append(f"| {label} | {len(v)} | {describe(v)['cv']:.2f}% |")
 
     # tau under REPEATED IDENTICAL MEASUREMENT.
     #
@@ -170,8 +194,6 @@ def main() -> int:
         L += [f"- n = {d['n']}, mean {d['mean']:.4f}, sd {d['sd']:.4f}",
               f"- **CV = {d['cv']:.2f}%**",
               f"- 95% CI on the mean: [{d['ci_lo']:.4f}, {d['ci_hi']:.4f}]",
-              f"- Minimum detectable effect at this n, ~80% power: "
-              f"**{d['mde_pct']:.2f}%** of the mean",
               f"- max/min range: {(max(tv)/min(tv)-1)*100:.2f}% "
               f"(was reported as a 1.32% \"noise floor\" at n=4; the range "
               f"**grew** with n, which is what ranges do)",
@@ -198,11 +220,11 @@ def main() -> int:
     (OUT / "boot_statistics.md").write_text("\n".join(L) + "\n")
     print(f"  wrote analysis/out/tables/boot_statistics.md")
     for label, mech, eager in series:
-        v = boots(mech, eager)
+        v = boots(mech, eager, probes_only=True)
         if len(v) > 1:
-            d = describe(v)
-            print(f"    {label:<16} n={d['n']:<3} CV {d['cv']:5.1f}%  "
-                  f"median {d['median']:6.1f}")
+            d = describe(boots(mech, eager, probes_only=True))
+            print(f"    {label:<16} n={d['n']:<3} CV {d['cv']:5.2f}%  "
+                  f"median {d['median']:6.1f}   (probe-only)")
     return 0
 
 
