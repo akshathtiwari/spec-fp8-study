@@ -17,7 +17,8 @@
 
 \newcommand{\tw}[1]{\texttt{\small #1}}
 
-\title{\bfseries What You Are Actually Measuring When You\\Benchmark Speculative Decoding Under FP8}
+\title{\bfseries What You Are Actually Measuring When You\\Benchmark Speculative Decoding Under FP8\\[0.3em]
+\large\normalfont A measurement case study on vLLM 0.29.0 and NVIDIA L4}
 
 \author{%
   Akshath Tiwari\\
@@ -41,15 +42,17 @@ First, attention-backend selection is \emph{conditioned on KV-cache dtype},
 so an FP8-versus-BF16 comparison under default settings silently swaps the
 attention kernel as well; target and draft models select backends
 independently, so pinning one does not pin the other. Second, speculative
-throughput varies \emph{$2.96\times$ across boots} of an identical
-configuration while acceptance does not; the variance is attributable to the
-CUDA-graph execution path, and disabling it collapses the spread to
-$1.04\times$. Third, the acceptance
-rate $\tau$ has a \emph{boot-to-boot noise floor of 1.32\%} that no prior
-work reports, below which ``precision does not affect acceptance'' claims
-are unfalsifiable and above which small effects have been reported as real.
-Fourth, the metric universally called \emph{inter-token latency is
-inter-chunk latency}: a speculative step emits every accepted token in one
+throughput is \emph{unreproducible across boots} of an identical
+configuration while acceptance is not: coefficient of variation 29.9\% over
+23 boots. The dispersion was present with CUDA graphs enabled and collapsed
+under \tw{-{}-enforce-eager} (CV 3.9\%); the responsible mechanism remains
+unidentified. Third, acceptance
+length $\tau$ has a boot-to-boot \emph{coefficient of variation of 0.62\%},
+which we could not find reported; at our sample size this bounds detectable
+precision effects at roughly 1.7\%, and smaller effects have been reported
+elsewhere as real.
+Fourth, the metric commonly called \emph{inter-token latency is, as
+computed by the load generators we examined, inter-chunk latency}: a speculative step emits every accepted token in one
 stream chunk, so the measured gap exceeds the true per-token interval by
 roughly~$\tau$.
 
@@ -58,8 +61,9 @@ p95-ITL service objective, every speculative configuration we measured
 scores \emph{zero goodput at concurrency 64 while producing the most tokens
 per second in the grid}. We report FP8~$\times$~speculative results with all
 four controlled, and release the harness, the raw records, and the full
-history of our own corrections --- seven retractions, each traceable to the
-same error shape.
+history of our own corrections --- preserved analysis revisions, including
+two that withdrew headline claims of this paper, each traceable to the same
+error shape.
 \end{abstract}
 
 \section{Introduction}
@@ -67,7 +71,10 @@ same error shape.
 Speculative decoding trades a small draft model's cheap guesses against the
 target model's expensive verification~\cite{leviathan2023,chen2023}. Its
 benefit is governed almost entirely by one quantity: $\tau$, the mean number
-of tokens accepted per verification step. FP8 quantization independently
+of tokens emitted per verification step (accepted draft tokens plus the
+bonus token). We call this \emph{acceptance length} rather than an
+acceptance \emph{rate}, since $\tau > 1$ by construction and is not a
+proportion. FP8 quantization independently
 reduces weight and KV-cache footprint, which matters because KV capacity is
 what binds under concurrency~\cite{kwon2023}. Serving stacks ship both. The
 obvious question --- does quantization degrade acceptance, and what does the
@@ -86,22 +93,26 @@ vLLM's \tw{auto} backend selection is conditioned on KV-cache dtype, and
 target and draft select independently. A precision A/B under defaults is a
 kernel A/B as well.
 \item \textbf{Unreproducible speculative throughput} (\S\ref{sec:c2}).
-Identical configurations differ by $2.96\times$ across 23 boots at constant
+Identical configurations have CV 29.9\% across 23 boots at constant
 acceptance. We localise this to \emph{draft-model} speculation: n-gram
-speculation shows $1.10\times$ across twelve boots. \tw{-{}-enforce-eager} removes the
+speculation shows CV 2.7\% across twelve boots. We do not identify the
+mechanism. \tw{-{}-enforce-eager} removes the
 variance but is not a free control --- it costs FP8-weight configurations
 a fifth to a half of their throughput and cannot boot speculative FP8-KV
 cells at all on this card.
-\item \textbf{The acceptance noise floor} (\S\ref{sec:c3}). $\tau$
-reproduces to 1.32\% across boots. We report FP8's effect on $\tau$ as
-bounded \emph{below} that floor rather than as a null result, and withdraw
-one of our own earlier claims that sat at $1.7\times$ the floor.
+\item \textbf{Acceptance dispersion} (\S\ref{sec:c3}). $\tau$ has CV
+0.62\% across 12 boots, bounding detectable effects at roughly 1.7\% at
+this $n$. We report FP8's 0.7\% effect as \emph{not detected at this sample
+size}, and withdraw an earlier claim of ours that rested on one boot per
+arm.
 \item \textbf{ITL is inter-chunk latency} (\S\ref{sec:c4}). A speculative
 step emits every accepted token in one stream chunk, so a p95-ITL objective
 ranks the highest-throughput configuration in the grid as fully
 non-compliant. This one does not add error --- it inverts the decision.
-\item \textbf{Results with all four controlled} (\S\ref{sec:results}):
-compatibility, KV capacity, task accuracy at $n{=}256$, and goodput.
+\item \textbf{Measurements after diagnosing four confounds}
+(\S\ref{sec:results}): compatibility, KV capacity, task accuracy at
+$n{=}256$, and goodput. Three of the four are controlled; draft-side
+backend selection is not, because the engine offers no way to pin it.
 \item \textbf{A fully auditable artifact} (\S\ref{sec:artifact}):
 append-only raw records, script-regenerated derived tables, provenance
 checked by a script that fails the build, and every retraction preserved
@@ -203,10 +214,16 @@ thing as a server's backend --- there are two.
 
 \section{Confound 2: speculative throughput is unreproducible across boots}\label{sec:c2}
 
-Booting an identical speculative configuration repeatedly produces
-throughput anywhere in a $2.96\times$ band. Acceptance is unchanged
-throughout, so this is the cost of producing accepted tokens rather than how
-many are accepted.
+Booting an identical speculative configuration repeatedly produces widely
+scattered throughput while acceptance stays put. Over 23 boots the
+coefficient of variation is \textbf{29.9\%} (median 43.7 tok/s, IQR 27.6).
+
+We report CV rather than the max/min range. A range grows with sample size
+by construction, so ranges from arms measured with different boot counts
+cannot be compared --- an earlier revision of this paper contrasted a
+23-boot range against an 8-boot one, and subsampling the 23 boots to $n=8$
+shows roughly a fifth of that contrast was sample size rather than
+behaviour.
 
 Pooling every valid default-arm boot at concurrency 1 (n = 23):
 \[
@@ -236,13 +253,23 @@ what refuted that.}
 \label{fig:bimodality}
 \end{figure}
 
-\paragraph{The selector is the CUDA-graph path.} vLLM emits, at every
-speculative boot, a warning that \tw{CUDAGraphMode.FULL\_AND\_PIECEWISE} is
-unsupported with spec-decode for the FlashInfer backend, and falls back.
-Pinning \tw{cudagraph\_mode: PIECEWISE} lands at the low end of the range
-(30.04 versus a 30.57 default mean), which is consistent with the fallback
-being what the default path degrades to. Disabling CUDA graphs removes the
-variance entirely.
+\paragraph{The dispersion is associated with the CUDA-graph path; we do
+not identify the mechanism.} vLLM emits, at every speculative boot, a
+warning that \tw{CUDAGraphMode.FULL\_AND\_PIECEWISE} is unsupported with
+spec-decode for the FlashInfer backend, and falls back. Pinning
+\tw{cudagraph\_mode: PIECEWISE} lands at the low end (30.04 versus a 30.57
+default mean). Disabling CUDA graphs collapses the dispersion to CV 3.9\%
+over 12 boots.
+
+That is localisation, not causation, and we are explicit about the gap.
+\tw{-{}-enforce-eager} changes the entire execution path: graph capture,
+memory reservation, boot feasibility (\S\ref{sec:results}) and FP8 kernel
+performance all move with it. We did not separate boot state from host
+state --- rented L4 instances differ in physical GPU, clock and power
+behaviour between runs, and we did not record GPU identity. The defensible
+claim is that \emph{the dispersion appeared in graph-enabled DFlash runs and
+collapsed under eager execution, and which graph, scheduler, allocator,
+kernel or host property is responsible remains unknown.}
 
 \paragraph{The sharpest instance.} One content-addressed cell
 (\tw{dflash\,|\,bf16\,|\,fp8\_e4m3\,|\,FLASHINFER}, graphs on) was measured
@@ -264,7 +291,7 @@ grid 2 & 64.89,\; 71.77 & 68.33 & 4.211\\
 \noindent
 Same \tw{cell\_id}, therefore the same configuration by construction, and a
 matching \tw{argv} fingerprint. The $\tau$ difference of 0.68\% is
-\emph{below} its own noise floor (\S\ref{sec:c3}). Every earlier
+within its measured dispersion (\S\ref{sec:c3}). Every earlier
 demonstration of this effect compared \emph{something} --- different arms,
 different cells, boots inside a test built to show it. This compares nothing.
 
@@ -275,82 +302,93 @@ low-end boot the same eager numbers give $2.19\times$. The ratio is a
 statement about where in a $2.96\times$ band the comparison arm happened to
 land, not about the flag.
 
-What is stable is the \emph{spread}, and it is stable in both directions:
-23 default boots span $2.96\times$, while 8 eager boots span $1.04\times$
-and every one of them exceeds every default boot. Turning CUDA graphs off
-does not reliably make speculative decoding faster by a stated factor --- it
-makes it \emph{reproducible}, and whatever throughput it gains is however
-far down the band the default would otherwise have fallen.
+What is stable is the \emph{dispersion}: CV 29.9\% over 23 default boots
+against 3.9\% over 12 eager boots, and every eager boot exceeds every
+default boot. Turning CUDA graphs off does not reliably make speculative
+decoding faster by a stated factor --- it makes it \emph{reproducible}, and
+whatever throughput it gains is however far down the distribution the
+default would otherwise have fallen.
 
 Our first write-up of this section led with $2.38\times$, obtained by
 comparing against an arm we assumed representative, which was one draw from
 the wide distribution this same section describes.
 
 \paragraph{It is specific to draft-model speculation.} Running the identical
-protocol with n-gram (prompt-lookup) speculation finds no such variance
-across twelve boots --- spread $1.10\times$ against DFlash's $2.96\times$ ---
-and no benefit from \tw{-{}-enforce-eager} ($1.00\times$). These are the same
+protocol with n-gram (prompt-lookup) speculation finds no such dispersion
+across twelve boots --- CV 2.7\% against DFlash's 29.9\% --- and no benefit
+from \tw{-{}-enforce-eager}. These are the same
 fact arriving twice: if throughput is already reproducible, there is nothing
 for the flag to stabilise. As a measurement sanity check, n-gram's acceptance is deterministic
 ($\tau = 1.732$ on every boot, spread $1.000\times$) where DFlash's moves
 4.09--4.43, which is what a prompt-matching mechanism should do.
 
-Twelve boots cannot prove absence; they bound it. DFlash's 23 boots span
-$2.96\times$ and n-gram's twelve span $1.10\times$, so if n-gram shared
-DFlash's distribution, drawing twelve boots that tight would be
-extraordinarily unlikely. We report this as a localisation, not an
+Twelve boots cannot prove absence; they bound it. DFlash's 23 boots give
+CV 29.9\% and n-gram's twelve give 2.7\%, an order of magnitude apart, so
+if n-gram shared DFlash's dispersion, drawing twelve boots that tight would
+be extraordinarily unlikely. We report this as a localisation, not an
 exclusion. The
 consequence is that a claim like ours has to name the mechanism:
 ``speculative throughput is unreproducible'' would be refuted by the first
 reader who tries prompt-lookup.
 
-\section{Confound 3: acceptance has a noise floor nobody had measured}\label{sec:c3}
+\section{Confound 3: acceptance dispersion is small, and had not been
+measured}\label{sec:c3}
 
-$\tau$ reproduces to \textbf{1.32\%} across boots of an identical
-configuration with identical prompts (4.0913--4.1452 over four boots). This
-number did not exist before we measured it, and its absence had consequences
-in both directions.
+Across 12 boots of an identical configuration with identical prompts,
+acceptance has a coefficient of variation of \textbf{0.62\%} (mean $\tau$
+4.1055, sd 0.0256, 95\% CI on the mean [4.0893, 4.1218]).
 
-\paragraph{Permissive direction.} We had reported that $\tau$ is invariant to
-FP8 precision, measuring a 0.7\% difference. With the floor known, the
-correct statement is stronger and more precise: \emph{no effect larger than
-1.3\% is detectable}, and the observed 0.7\% sits below it. A null result
-becomes a bounded one.
+\paragraph{We previously called this a ``noise floor'' and withdraw that.}
+An earlier revision reported the \emph{range} of four boots, 1.32\%, and
+described it as a floor below which effects were ``unfalsifiable''. That was
+wrong in three ways, and we state them because the error is instructive.
 
-\paragraph{Restrictive direction.} We had also reported that backend choice
-perturbs $\tau$ more than precision does, citing a 2.25\% spread across four
-backends. That is $1.7\times$ the noise floor, from single boots. It is not
-separable from noise, and we withdraw it.
+A range is not a dispersion statistic that can be compared or reused: it
+grows with sample size by construction. Measured again at $n = 12$, the same
+quantity's range is \textbf{1.38\%} --- it increased, which is what ranges
+do and what floors do not. Second, a detection threshold depends on
+variance, sample size, power and the chosen test, none of which a range
+encodes; effects below it are not unfalsifiable, they are undetected at that
+$n$. Third, we transplanted a figure measured at $\tau \approx 4.1$ on
+GSM8K at 768 tokens onto an earlier result measured at $\tau \approx 2.71$
+on a different prompt set at 256 tokens.
 
-That claim moved three times before anyone measured the floor: asserted,
-withdrawn for a wrong reason, restored, and now withdrawn for a sound one.
-The reason it kept moving is that every argument about it was about the
-effect and none was about the floor. One four-boot run settled it
-permanently and cost about an hour of GPU time.
+\paragraph{What the data supports.} At $n = 12$, a crude two-sample
+minimum detectable effect at roughly 80\% power is \textbf{1.74\%} of the
+mean. The FP8 precision effect we measure is 0.7\%. The defensible statement
+is therefore that \emph{a precision effect of 0.7\% is not detected at this
+sample size}, and that detecting an effect that small would need
+substantially more boots --- not that it is unfalsifiable or absent.
 
-\paragraph{Prescription, and prior credit.} Measure the noise floor of the
-quantity being compared \emph{before} comparing it.
+\paragraph{Acceptance is not continuously noisy.} Across those 12 boots
+$\tau$ takes exactly \textbf{two distinct values}, 4.0914 (nine boots) and
+4.1479 (three). Given fixed prompts, acceptance is near-deterministic with
+occasional discrete shifts, so modelling it as Gaussian measurement noise
+was the wrong frame independently of the sample-size error.
 
-We do not claim this principle as novel. Kaplan~\cite{kaplan2026calibrated},
-concurrently, calibrates an LLM judge by scoring ``two ordinary runs of a
-model given the same prompts'' and includes a null condition ``provably
-identical in distribution\ldots whose measured difference must be zero''.
-That is the same epistemic move. His instrument is an LLM judge and his
-quantity is output quality; ours is a serving harness and our quantities are
-acceptance and throughput. Independent concurrent arrival at the same
-principle in adjacent subfields is evidence the principle is right, and we
-cite it as such.
+\paragraph{What survives.} We withdraw a previously-published claim of ours
+that backend choice perturbs $\tau$ by 2.25\%. That figure came from
+\emph{one boot per backend}, and a single boot is not a basis for a timing
+claim on this stack (\S\ref{sec:c2}). It is withdrawn because it is
+unreplicated, which needs no appeal to a floor.
 
-What we add is narrower and specific: \emph{the floor for $\tau$ had not been
-measured}, and effects below it have been reported as real.
+\paragraph{What we would claim, narrowly.} We could not find a published
+dispersion estimate for $\tau$ under repeated identical boots, and effects
+smaller than the one we measure here have been reported as real elsewhere.
+Kaplan~\cite{kaplan2026calibrated}, concurrently, calibrates an LLM judge by
+scoring ``two ordinary runs of a model given the same prompts'' and adds a
+null condition ``provably identical in distribution\ldots whose measured
+difference must be zero''. That is the same epistemic move, applied to
+output quality; independent concurrent arrival at it is evidence the
+practice is right. Our contribution is to apply it to acceptance, and to
+report that the dispersion is small rather than to assert a threshold.
 
-\paragraph{A caveat on the floor itself.} Our 1.32\% is measured at
-$\tau \approx 4.1$, on GSM8K with a 768-token budget. In an earlier phase,
-with a 256-token budget on a different prompt set, the same configuration
-gave $\tau \approx 2.71$ --- a 55\% difference from generation length and
-prompt distribution alone. A floor measured at one operating point should not
-be transplanted to another, and $\tau$ quoted without its generation length
-and prompt distribution is close to uninterpretable.
+\paragraph{Operating point matters.} Our 0.62\% is measured at
+$\tau \approx 4.1$, GSM8K, 768-token budget. The same configuration at a
+256-token budget on a different prompt set gave $\tau \approx 2.71$ --- a
+55\% difference from generation length and prompt distribution alone. A
+$\tau$ quoted without both is close to uninterpretable, and the literature
+quotes $\tau$ freely.
 
 \section{Confound 4: ``inter-token latency'' is inter-chunk latency}\label{sec:c4}
 
@@ -358,16 +396,17 @@ The first three confounds add error. This one reverses the ranking.
 
 A streaming client measures the gap between \emph{arrivals}. vLLM emits one
 SSE chunk per decoding step, and a speculative verification step emits every
-accepted draft token at once. So the quantity universally called inter-token
-latency is \emph{inter-chunk} latency, and on a speculative server it
-exceeds the true per-token interval by roughly $\tau$.
+accepted draft token at once. So the quantity commonly called inter-token
+latency is, as computed by the load generators we examined, \emph{inter-chunk}
+latency, and on a speculative server it exceeds the amortised per-token
+interval by roughly $\tau$.
 
 \begin{table}[h]\centering\small
 \caption{Concurrency 64, CUDA graphs on, FP8 weights, auto KV, identical
 prompts and SLO.}
 \begin{tabular}{lrrrr}
 \toprule
-& measured gap & tokens/chunk & implied per-token & throughput\\
+& measured gap & tokens/chunk & amortised per token & throughput\\
 \midrule
 speculative (DFlash) & \textbf{93.8\,ms} & \textbf{4.122} & \textbf{22.8\,ms} & \textbf{2219 tok/s}\\
 non-speculative & 33.8\,ms & 1.007 & 33.6\,ms & 1281 tok/s\\
@@ -376,9 +415,12 @@ non-speculative & 33.8\,ms & 1.007 & 33.6\,ms & 1281 tok/s\\
 \end{table}
 
 \noindent
-Speculation is $1.5\times$ faster per token and appears $2.8\times$ slower on
-the metric. The \tw{tokens\_per\_chunk} of 4.122 tracks the measured $\tau$
-of ${\approx}4.2$, as it must.
+The 22.8\,ms figure is \textbf{amortised production time per emitted token},
+not a per-token latency: those four tokens become visible to the client
+together, at one instant, 93.8\,ms apart. Speculation produces tokens
+$1.5\times$ faster on that amortised basis and appears $2.8\times$ slower on
+the recorded metric. The \tw{tokens\_per\_chunk} of 4.122 tracks the
+measured $\tau$ of ${\approx}4.2$, as it must.
 
 \begin{table}[h]\centering\small
 \caption{Goodput at p95 ITL $\le$ 50\,ms, TTFT $\le$ 1000\,ms, concurrency 64.}
@@ -395,27 +437,70 @@ none\,|\,bf16\,|\,auto & 3.37 & 6\% & 0.209\\
 \end{table}
 
 \noindent
-Every speculative configuration scores zero goodput while producing the most
-tokens in the grid. The fastest system is ranked last.
+Under this objective every speculative configuration receives zero compliant
+goodput while producing the most tokens per second in the grid.
+
+\paragraph{This is not an artifact of the 50\,ms threshold.} Sweeping the
+ITL target at TTFT $\le$ 1000\,ms:
+
+\begin{table}[h]\centering\small
+\begin{tabular}{llrrrr}
+\toprule
+conc & mech & 20\,ms & 35\,ms & 50\,ms & 75\,ms\\
+\midrule
+1 & dflash & 0\% & 64\% & 100\% & 100\%\\
+1 & none & 0\% & 89\% & 99\% & 100\%\\
+16 & dflash & 0\% & 0\% & 74\% & 99\%\\
+16 & none & 0\% & 89\% & 98\% & 100\%\\
+64 & \textbf{dflash} & \textbf{0\%} & \textbf{0\%} & \textbf{0\%} & \textbf{0\%}\\
+64 & none & 0\% & 3\% & 99\% & 100\%\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\noindent
+At concurrency 64 the speculative configuration scores zero at every
+threshold we tested, while the non-speculative one reaches 99\% at 50\,ms.
+The mechanism is not a coincidence of threshold choice: the chunk cadence at
+that concurrency is 93.8\,ms, so \emph{any} inter-arrival target below the
+cadence fails by construction, and any target above it would pass
+trivially. At concurrency 1 and 16 the effect does not bite.
+
+\paragraph{What this does and does not show.} It shows that an SLO computed
+from stream-arrival gaps --- which is how load generators compute ITL ---
+inverts the ranking under speculation at the concurrency we tested. It does
+\emph{not} show that all reasonable service objectives do so. We measured
+one workload, one arrival pattern (closed-loop fixed concurrency rather than
+open-loop arrival rates), and four thresholds. An objective defined over
+token-delivery curves, or over TTFT and end-to-end latency, would behave
+differently, and we did not measure chunk-size distributions.
 
 This is not an engine defect or a bug in our harness: a server cannot deliver
-four tokens at four separate times when it produced them at one time. Any
-client measuring arrival gaps, on any engine, sees this. At concurrency 1 the
+four tokens at four separate times when it produced them at one time. A
+client measuring arrival gaps will see this wherever a decoding step emits
+more than one token. At concurrency 1 the
 effect is present but does not bite --- gaps are small in absolute terms and
 speculative cells meet the same target 100\% of the time. It appears exactly
 where serving operates.
 
 We do not claim the quotient is the right metric. Dividing by
-\tw{tokens\_per\_chunk} recovers a sensible average and discards the
-burstiness an ITL target exists to capture; whether a reader perceives four
-tokens every 94\,ms as smoother than one every 34\,ms is a question we did
-not study. Our claim is narrower and sufficient: the metric as universally
-computed does not measure what its name says under speculation, and using it
-to gate a speculative deployment inverts the decision. Prior work
+\tw{tokens\_per\_chunk} recovers an average and discards the burstiness an
+ITL target exists to capture; whether a reader perceives four tokens every
+94\,ms as smoother than one every 34\,ms is a question we did not study. Our
+claim is narrower: \emph{ITL computed from stream arrivals does not measure
+what its name says under speculation}, and on this stack, at this
+concurrency, using it to gate a deployment inverts the decision. Prior work
 (\S\ref{sec:related}) reports single-request latency, where the effect does
 not bite --- consistent with it going unreported.
 
-\section{Results with all four controlled}\label{sec:results}
+\section{Measurements after diagnosing four confounds}\label{sec:results}
+
+\noindent
+We say \emph{after diagnosing} rather than \emph{with all four controlled}.
+Three are controlled: the attention backend is pinned, the execution path is
+carried as an axis rather than fixed, and timing is reported as chunk
+cadence. The fourth is not --- draft-side backend selection remains
+uncontrolled (\S\ref{sec:c1}), because vLLM offers no way to pin it.
 
 \subsection{The execution-path flag is not a free control}
 
@@ -595,8 +680,23 @@ detected.
 \section{Threats to validity}\label{sec:threats}
 
 \begin{itemize}\itemsep2pt
-\item \textbf{One GPU, one model, one engine version.} Every result is
-SM89 / Qwen3-4B / vLLM 0.29.0. We make no claim about SM90 or other engines.
+\item \textbf{This is a single-configuration case study.} Every result is
+one NVIDIA L4 (SM89), one target model (Qwen3-4B), one learned draft
+checkpoint, one engine release (vLLM 0.29.0), one principal workload
+(GSM8K), and one decoding configuration. Backend selection and CUDA-graph
+behaviour all depend on engine version, kernels, GPU architecture and model,
+so none of these findings should be assumed to transfer. What transfers is
+the \emph{class} of measurement error, not the magnitudes.
+\item \textbf{Boot and host effects are not separated.} Runs used rented
+instances; we did not record GPU serial, clocks or power state, so a
+host-to-host component cannot be distinguished from a boot-to-boot one in
+\S\ref{sec:c2}.
+\item \textbf{Configuration identity is not byte identity.} Our
+\tw{cell\_id} hashes the declared configuration; model revisions are
+declared as \tw{main}, a mutable ref, and dependencies as open ranges. We
+resolved the commits post hoc and their upstream modification dates precede
+every run, but the harness did not record them at launch. See
+\tw{docs/reproducibility.md}.
 \item \textbf{The mode selector is unidentified.} We show \emph{that} the
 CUDA-graph path selects the mode and that it is fixed at boot; we do not show
 why a given boot lands where it does.
@@ -628,6 +728,7 @@ Work & What it did & Gap this addresses\\
 Performance or Illusion?~\cite{liu2026illusion} & Systematic SD evaluation, vLLM on H100, CUDA graphs enabled, FP16 KV & No run-to-run variance; no FP8 KV; no SLO goodput; ITL not decomposed\\
 Interpretable latency model~\cite{kong2026latency} & Models SD latency vs request rate, vLLM on A100/H100, $R^2$ to 0.997 & Single-sweep methodology; no repeats, error bars, or CUDA-graph discussion\\
 Calibrated instrument~\cite{kaplan2026calibrated} & Calibrates an LLM judge via a null condition; measures its per-sample noise & Same principle, applied to output quality rather than throughput or acceptance\\
+TurboSpec~\cite{liu2024turbospec} & Closed-loop speculation control in vLLM, optimising ``goodput'' & Goodput there is accepted-token rate, not SLO attainment; no latency objective\\
 Spec.\ Decoding Meets Quantization~\cite{specquant2025} & EAGLE-2 with W8A8, W4A16, W4A8; single-request & No FP8, no KV-cache quantization, not batched\\
 SpecKV~\cite{speckv2026} & Adaptive $\gamma$ under compression & Algorithmic, step-level, not serving goodput\\
 QSpec~\cite{qspec2025} & W4A4 draft + W4A16 verify, shared weights & Shared-weight special case, not FP8\\
@@ -638,9 +739,15 @@ ML-SpecQD~\cite{mlspecqd2025}, Quasar~\cite{quasar2026} & Quantized drafts, W8A8
 \end{table}
 
 \noindent
-None reports boot-level variance, and every single-request result in this
-table is vulnerable to the confound in \S\ref{sec:c2}. None reports goodput
-under a service objective, where \S\ref{sec:c4} applies.
+None reports boot-level dispersion, and the single-request results in this
+table are vulnerable to the confound in \S\ref{sec:c2}.
+
+\textbf{On ``goodput''.} TurboSpec~\cite{liu2024turbospec} optimises a
+quantity of that name in vLLM, so the word needs care. Theirs is the rate of
+\emph{successfully generated (accepted) tokens}, used as a control signal;
+it involves no latency target. Ours is the rate of requests \emph{meeting a
+latency service objective}. The two are different measurements sharing a
+name, and \S\ref{sec:c4} concerns only the latter.
 
 Two relationships deserve stating precisely rather than by omission.
 
@@ -688,6 +795,14 @@ numbers are not independently checkable from the repository. Neither is
 cited in this paper. The remaining twenty-five findings resolve to stored
 records.
 
+\paragraph{What content-addressing does and does not prove.} A
+\tw{cell\_id} guarantees two records came from the same \emph{declared}
+configuration. It does not guarantee the same model bytes, engine build, or
+dependency versions. \tw{argv\_fingerprint} and the per-record \tw{env}
+block close part of the gap; \tw{docs/reproducibility.md} states the rest,
+including the resolved model commits and the five changes that would make
+the artifact airtight.
+
 The entire study was run on rented per-second L4 time at a cost in the tens
 of dollars. The error analysis in \S\ref{sec:c1}--\S\ref{sec:c4} is what that
 budget can establish, and on the evidence of \S\ref{sec:related} it is what
@@ -717,6 +832,13 @@ PagedAttention.
 K.~Cobbe et al.
 \newblock Training verifiers to solve math word problems.
 \newblock arXiv:2110.14168, 2021.
+
+\bibitem{liu2024turbospec}
+X.~Liu, J.~Park, L.~Hu, W.~Kwon, Z.~Li, C.~Zhang, K.~Du, X.~Mo, K.~You,
+A.~Cheung, Z.~Deng, I.~Stoica, and H.~Zhang.
+\newblock TurboSpec: closed-loop speculation control system for optimizing
+LLM serving goodput.
+\newblock arXiv:2406.14066, 2024--2025.
 
 \bibitem{liu2026illusion}
 X.~Liu, J.~Yu, J.~Park, I.~Stoica, and A.~Cheung.

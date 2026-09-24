@@ -4,10 +4,14 @@ version = "0.1.0"
 description = "Speculative Decoding × FP8 Compatibility Study — measurement harness"
 requires-python = ">=3.10"
 dependencies = [
-    "httpx>=0.27",
-    "pydantic>=2.0",
-    "pyyaml>=6.0",
-    "pandas>=2.0",
+    # Pinned rather than ranged. These affect orchestration and analysis,
+    # not the measurements (the harness speaks HTTP and never imports the
+    # engine) -- but "the analysis is reproducible" is a claim about them.
+    # See docs/reproducibility.md for what is still unpinned.
+    "httpx==0.28.1",
+    "pydantic==2.13.5",
+    "pyyaml==6.0.3",
+    "pandas==3.0.6",
 ]
 
 [project.optional-dependencies]
