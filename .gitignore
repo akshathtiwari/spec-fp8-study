@@ -18,3 +18,6 @@ paper/build/*.pdf
 paper/*.aux
 paper/*.out
 paper/*.log
+
+# docx review copy is derived; rebuild with paper/build-docx.sh
+paper/build/paper-docx.tex
