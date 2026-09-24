@@ -1,4 +1,8 @@
-"""Verify every measured number in the paper traces to a finding or a table.
+"""Verify every measured NUMBER in the paper traces to a finding or a table.
+
+"Numeric claim" throughout, never "figure" -- the paper has one figure in the
+ordinary sense and 199 numbers, and conflating the two made the tool's own
+output misleading.
 
 The paper's argument is that benchmark numbers are routinely reported
 without their error terms. It would be embarrassing, and fatal to the
@@ -56,8 +60,20 @@ _SKIP_CONTEXT = re.compile(
     r"|arXiv:\d{4}\.\d{4,5}|\\bibitem\{[^}]*\}|\bp\{[^}]*\}"
     r"|\\includegraphics.*|\\usepackage.*|\\documentclass.*)", re.I)
 
-#: A measurement: has a decimal point, or is a long integer.
-_NUMBER = re.compile(r"(?<![\w.])(\d+\.\d+|\d{3,})(?![\w.])")
+#: A measurement: a decimal, or a long integer, optionally written with
+#: comma or LaTeX-escaped thousands separators.
+#:
+#: The separator matters. "115{,}920" previously tokenised as "115" and
+#: "920" -- two short numbers findable almost anywhere -- so a typo to
+#: 115{,}921 would have passed on the strength of an unrelated "921".
+#: Joining them restores the check to the full value.
+_NUMBER = re.compile(
+    r"(?<![\w.])(\d{1,3}(?:(?:\{,\}|,)\d{3})+|\d+\.\d+|\d{3,})(?![\w.])")
+
+
+def _canon(tok: str) -> str:
+    """Strip thousands separators so 115{,}920 compares as 115920."""
+    return tok.replace("{,}", "").replace(",", "")
 
 
 def corpus() -> set[str]:
@@ -88,8 +104,8 @@ def corpus() -> set[str]:
             # tokenised differently and the mismatch looked like 21 errors.
             # Reject only a following digit or dot, which is what actually
             # signals a longer number.
-            for m in re.finditer(r"(?<![\w.])(\d+(?:\.\d+)?)(?![\d.])", text):
-                tok = m.group(1)
+            for m in re.finditer(r"(?<![\w.])(\d{1,3}(?:(?:\{,\}|,)\d{3})+|\d+(?:\.\d+)?)(?![\d.])", text):
+                tok = _canon(m.group(1))
                 tokens.add(tok)
                 # Stored as 2.380 but written 2.38, or vice versa.
                 if "." in tok:
@@ -106,21 +122,31 @@ def main() -> int:
     missing: list[tuple[str, int, str, str]] = []
     checked = 0
 
-    for doc in sorted(list(PAPER.rglob("*.tex")) + list(PAPER.rglob("*.md"))):
+    # paper/build/ holds generated variants (the docx review source); they
+    # are copies, and auditing them double-reports every defect.
+    docs = [d for d in sorted(list(PAPER.rglob("*.tex")) + list(PAPER.rglob("*.md")))
+            if "build" not in d.parts]
+    for doc in docs:
         for lineno, line in enumerate(doc.read_text().splitlines(), 1):
+            # Normalise the LaTeX thousands separator first. The macro
+            # stripper below matches \cmd{...} with a non-greedy [^}]*,
+            # which stops at the inner brace of \textbf{13{,}664} and
+            # leaves a bare "664" behind -- a short token that matches
+            # almost anything.
+            line = line.replace("{,}", ",")
             # Blank out structural tokens so their digits are not harvested.
             scrubbed = _SKIP_CONTEXT.sub(" ", line)
             for m in _NUMBER.finditer(scrubbed):
-                tok = m.group(1)
+                tok = _canon(m.group(1))
                 checked += 1
                 stem = tok.rstrip("0").rstrip(".") if "." in tok else tok
                 if tok in haystack or stem in haystack:
                     continue
                 missing.append((doc.name, lineno, tok, line.strip()[:72]))
 
-    print(f"paper files : {len(list(PAPER.rglob('*.tex'))) + len(list(PAPER.rglob('*.md')))}")
-    print(f"figures     : {checked}")
-    print(f"untraceable : {len(missing)}")
+    print(f"paper files   : {len(docs)}")
+    print(f"numeric claims: {checked}")
+    print(f"untraceable   : {len(missing)}")
     for name, lineno, tok, ctx in missing:
         print(f"  - {name}:{lineno}  {tok!r}  in: {ctx}")
     if missing:

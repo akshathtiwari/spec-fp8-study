@@ -46,11 +46,21 @@ The abstract must be pasted as **plain text**. Strip the LaTeX: `\emph{}`,
 is archival and cannot be removed." Read the PDF end to end before this
 step, not after.
 
-## Known state at time of packaging
+## State to confirm before uploading
 
-- `check_paper.py`: 199 figures, 0 untraceable.
-- `check_provenance.py`: 2 defects (F009, F014 rest on probe output predating
-  per-measurement recording). Both are stated in the paper's §10; neither is
-  cited in it.
-- The paper carries one retraction of its own headline (F029, bimodality),
-  made four days before packaging.
+Run both checkers rather than trusting a number written here; a hardcoded
+count goes stale the moment the paper changes, and one in this file already
+did.
+
+```bash
+python analysis/check_paper.py        # expect: untraceable 0
+python analysis/check_provenance.py   # expect: 2 known defects, below
+```
+
+- **`check_paper.py` must report 0 untraceable.** Every numeric claim in the
+  paper has to appear in `findings/` or `analysis/out/`.
+- **`check_provenance.py` reports 2 known defects**: F009 and F014 rest on
+  probe output predating per-measurement recording. Both are stated in the
+  paper's §10 and neither is cited in it. Any *other* defect is a blocker.
+- The paper carries a retraction of its own headline claim (F029,
+  bimodality), made shortly before packaging.
