@@ -1,0 +1,33 @@
+Speculative decoding and FP8 quantization are both standard in production
+LLM serving, and their interaction is almost always reported from single
+runs. We set out to measure that interaction on Ada-class hardware and
+could not, four times, until the measurement apparatus itself was fixed.
+
+We identify and quantify four confounds on vLLM 0.29.0 / NVIDIA L4 (SM89).
+First, attention-backend selection is conditioned on KV-cache dtype,
+so an FP8-versus-BF16 comparison under default settings silently swaps the
+attention kernel as well; target and draft models select backends
+independently, so pinning one does not pin the other. Second, speculative
+throughput is unreproducible across boots of an identical
+configuration while acceptance is not: coefficient of variation 13.92%
+over 12 fixed-prompt boots. The dispersion was present with CUDA graphs
+enabled and collapsed under --enforce-eager (CV 1.44%); the
+responsible mechanism remains unidentified. Third, acceptance
+length tau has a boot-to-boot coefficient of variation of 0.62%
+under repeated identical boots, which we could not find reported; our own
+FP8-precision comparison is unreplicated and we withdraw the equivalence
+reading we previously gave it.
+Fourth, the metric commonly called inter-token latency is, when
+computed from stream-arrival timestamps, inter-chunk latency: a speculative step emits every accepted token in one
+stream chunk, so the measured gap exceeds the amortised production time
+per emitted token by roughly tau.
+
+The first three add error; the fourth reverses the ranking. Under a standard
+p95-ITL service objective, every speculative configuration we measured
+scores zero goodput at concurrency 64 while producing the most tokens
+per second in the grid. We report FP8 speculative results with three
+of the four controlled -- draft-side backend selection is not, because the
+engine offers no way to pin it -- and release the harness, the raw records, and the full
+history of our own corrections -- preserved analysis revisions, including
+two that withdrew headline claims of this paper, each traceable to the same
+error shape.
