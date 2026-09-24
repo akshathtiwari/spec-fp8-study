@@ -146,9 +146,11 @@ upstream reports that motivated the study, and at 22\,GiB the KV-capacity
 constraint actually binds, which it does not on an 80\,GB card.
 
 \paragraph{The harness never imports the engine.} It launches vLLM as a
-subprocess and speaks HTTP. This costs some convenience and buys the
-guarantee that what we measure is what a serving deployment runs, not an
-in-process configuration no server would produce.
+separate server process and communicates with it over HTTP. This prevents
+the experiment from using an in-process path unavailable to deployments, and
+it includes server-side request handling, scheduling, batching and
+streaming. It does \emph{not} reproduce every production environment, and it
+does not eliminate client or network overhead.
 
 \paragraph{Every measurement is content-addressed.} A configuration hashes
 to a \tw{cell\_id}; identical configuration yields an identical id on any
@@ -757,6 +759,7 @@ Work & What it did & Gap this addresses\\
 Performance or Illusion?~\cite{liu2026illusion} & Systematic SD evaluation, vLLM on H100, CUDA graphs enabled, FP16 KV & No run-to-run variance; no FP8 KV; no SLO goodput; ITL not decomposed\\
 Interpretable latency model~\cite{kong2026latency} & Models SD latency vs request rate, vLLM on A100/H100, $R^2$ to 0.997 & Single-sweep methodology; no repeats, error bars, or CUDA-graph discussion\\
 Calibrated instrument~\cite{kaplan2026calibrated} & Calibrates an LLM judge via a null condition; measures its per-sample noise & Same principle, applied to output quality rather than throughput or acceptance\\
+SPEED-Bench~\cite{abramovich2026speedbench} & Benchmark standardising SD evaluation, vLLM and TensorRT-LLM, throughput split across concurrencies & No run-to-run dispersion; no ITL/chunk distinction; no SLO goodput\\
 TurboSpec~\cite{liu2024turbospec} & Closed-loop speculation control in vLLM, optimising ``goodput'' & Goodput there is accepted-token rate, not SLO attainment; no latency objective\\
 Spec.\ Decoding Meets Quantization~\cite{specquant2025} & EAGLE-2 with W8A8, W4A16, W4A8; single-request & No FP8, no KV-cache quantization, not batched\\
 SpecKV~\cite{speckv2026} & Adaptive $\gamma$ under compression & Algorithmic, step-level, not serving goodput\\
@@ -770,6 +773,15 @@ ML-SpecQD~\cite{mlspecqd2025}, Quasar~\cite{quasar2026} & Quantized drafts, W8A8
 \noindent
 None reports boot-level dispersion, and the single-request results in this
 table are vulnerable to the confound in \S\ref{sec:c2}.
+
+\textbf{On benchmarks for this exact question.}
+SPEED-Bench~\cite{abramovich2026speedbench} is the closest thing to a
+standard for evaluating speculative decoding, integrates with vLLM, and
+sweeps concurrency. It reports that synthetic inputs overestimate real-world
+throughput and that optimal draft length depends on batch size. It does not
+report dispersion across repeated identical runs, which is the axis
+\S\ref{sec:c2} concerns, and a benchmark that does not is one more place the
+error term in \S\ref{sec:c2} would go unnoticed.
 
 \textbf{On ``goodput''.} TurboSpec~\cite{liu2024turbospec} optimises a
 quantity of that name in vLLM, so the word needs care. Theirs is the rate of
@@ -863,6 +875,13 @@ PagedAttention.
 K.~Cobbe et al.
 \newblock Training verifiers to solve math word problems.
 \newblock arXiv:2110.14168, 2021.
+
+\bibitem{abramovich2026speedbench}
+T.~Abramovich, M.~Ashkenazi, I.~Putterman, B.~Chislett, T.~Mitra,
+B.~Darvish Rouhani, R.~Zilberstein, and Y.~Geifman.
+\newblock SPEED-Bench: a unified and diverse benchmark for speculative
+decoding.
+\newblock arXiv:2604.09557, 2026.
 
 \bibitem{liu2024turbospec}
 X.~Liu, J.~Park, L.~Hu, W.~Kwon, Z.~Li, C.~Zhang, K.~Du, X.~Mo, K.~You,

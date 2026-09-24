@@ -104,6 +104,41 @@ adjacent subfields is evidence it is right.
 
 ---
 
+## SPEED-Bench: A Unified and Diverse Benchmark for Speculative Decoding (arXiv:2604.09557)
+
+Abramovich, Ashkenazi, Putterman, Chislett, Mitra, Darvish Rouhani,
+Zilberstein, Geifman. Submitted 2026-02-10, revised 2026-05-28. Primary
+cs.DC, cross-list cs.AI.
+
+**What it is.** A benchmark suite for standardising speculative-decoding
+evaluation, integrating with production engines including vLLM and
+TensorRT-LLM. Two data splits: a curated qualitative split emphasising
+semantic diversity, and a throughput split supporting evaluation across
+varying concurrencies.
+
+**Findings of note.** Synthetic inputs overestimate real-world throughput.
+Optimal draft length depends on batch size.
+
+**Checked against our four confounds.**
+
+| Our confound | Present? |
+|---|---|
+| Backend selection conditioned on KV dtype | No |
+| Run-to-run dispersion for identical configurations | No |
+| Acceptance dispersion under repeated identical boots | No |
+| ITL as inter-chunk latency | No |
+| SLO-attainment goodput | No |
+
+**Why it matters to us.** This is the closest thing to a community standard
+for the question we are measuring, and it was missing from our related work
+until 2026-09-24. Its absence was the same shape as the TurboSpec omission:
+a paper doing adjacent work in the same engine, not found because the
+literature search was not systematic. That a standard benchmark does not
+report run-to-run dispersion is itself support for §4 -- it is one more
+place the error term would go unnoticed.
+
+---
+
 ## Method note
 
 These notes were taken from the papers' full text where available, not from
