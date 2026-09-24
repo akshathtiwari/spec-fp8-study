@@ -59,8 +59,9 @@ per emitted token by roughly~$\tau$.
 The first three add error; the fourth reverses the ranking. Under a standard
 p95-ITL service objective, every speculative configuration we measured
 scores \emph{zero goodput at concurrency 64 while producing the most tokens
-per second in the grid}. We report FP8~$\times$~speculative results with all
-four controlled, and release the harness, the raw records, and the full
+per second in the grid}. We report FP8~$\times$~speculative results with three
+of the four controlled --- draft-side backend selection is not, because the
+engine offers no way to pin it --- and release the harness, the raw records, and the full
 history of our own corrections --- preserved analysis revisions, including
 two that withdrew headline claims of this paper, each traceable to the same
 error shape.
@@ -246,12 +247,14 @@ our own headline.
 
 \begin{figure}[h]\centering
 \includegraphics[width=0.86\textwidth]{figures/bimodality.pdf}
-\caption{One dot per boot of an identical configuration at concurrency 1.
-DFlash's default arm is a wide, continuously filled distribution; its eager
-arm and both n-gram arms are tight. Note that every eager boot exceeds every
-one of the 23 default boots. An earlier version of this figure showed five
-default boots and was captioned as two clusters; plotting all of them is
-what refuted that.}
+\caption{One dot per boot at concurrency 1, \emph{fixed-prompt boots only}
+so that only the boot varies. DFlash's default arm is a wide, continuously
+filled distribution (CV 13.92\%, $n=12$); its eager arm and both n-gram arms
+are tight (1.44\%, 2.67\%, 0.85\%). Every eager boot exceeds every default
+boot. Two earlier versions of this figure were wrong in opposite
+directions: one showed five boots and was captioned as two clusters, the
+other pooled grid runs whose prompts differ and so plotted prompt variation
+alongside boot variation.}
 \label{fig:bimodality}
 \end{figure}
 
@@ -321,8 +324,10 @@ across twelve boots --- CV 2.67\% against DFlash's 13.92\% --- and no
 benefit from \tw{-{}-enforce-eager}. These are the same
 fact arriving twice: if throughput is already reproducible, there is nothing
 for the flag to stabilise. As a measurement sanity check, n-gram's acceptance is deterministic
-($\tau = 1.732$ on every boot, spread $1.000\times$) where DFlash's moves
-4.09--4.43, which is what a prompt-matching mechanism should do.
+($\tau = 1.732$ on every boot, spread $1.000\times$) where DFlash's spans
+4.0914--4.1479 over the same fixed-prompt boots, which is what a
+prompt-matching mechanism should do. (The wider 4.09--4.43 seen elsewhere in
+our records spans different prompt sets and is not comparable.)
 
 Twelve boots cannot prove absence; they bound it. At matched $n=12$,
 DFlash gives CV 13.92\% and n-gram 2.67\%, a factor of five apart, so if
@@ -812,12 +817,14 @@ that fails its own audit is not typeset, and both have found real defects in
 this document --- including two tables that had silently diverged from the
 findings they summarise.
 
-At the time of writing \tw{check\_provenance.py} reports two defects, and we
-state them rather than suppress them: findings F009 and F014 rest on probe
-output that predates the harness's per-measurement recording, so their
-numbers are not independently checkable from the repository. Neither is
-cited in this paper. The remaining twenty-five findings resolve to stored
-records.
+\tw{check\_provenance.py} reports two defects, and we state them rather
+than suppress them: findings F009 and F014 rest on probe output predating
+the harness's per-measurement recording, so their numbers are not
+independently checkable from the repository. Neither is cited in this paper.
+The remaining twenty-seven findings resolve to stored records.
+\tw{paper/build.sh} stops the build on any \emph{additional, undisclosed}
+defect; the two above are an explicit allowance, so the gate is against
+regression rather than against a nonzero count.
 
 \paragraph{What content-addressing does and does not prove.} A
 \tw{cell\_id} guarantees two records came from the same \emph{declared}

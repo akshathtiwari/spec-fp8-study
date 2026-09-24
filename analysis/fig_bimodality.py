@@ -89,8 +89,12 @@ def probe_boots(mechanism: str, arm: str) -> list[float]:
 
 def main() -> int:
     series = [
-        ("DFlash\ndefault", dflash_boots() + probe_boots("dflash", "default"),
-         "#c0392b"),
+        # Probe-only. The grid runs pooled in here previously vary prompts
+        # between repeats by design, so including them plotted prompt
+        # variation alongside boot variation in a figure whose whole subject
+        # is boot variation. External review caught it after the same error
+        # had already been fixed in the statistics but not the figure.
+        ("DFlash\ndefault", probe_boots("dflash", "default"), "#c0392b"),
         ("DFlash\neager", probe_boots("dflash", "enforce_eager"), "#e67e22"),
         ("n-gram\ndefault", probe_boots("ngram", "default"), "#2c6fbb"),
         ("n-gram\neager", probe_boots("ngram", "enforce_eager"), "#5a9bd5"),

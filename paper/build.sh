@@ -43,6 +43,9 @@ cd paper
 echo "== built paper/paper.pdf =="
 ls -la paper.pdf
 
+echo "== is the PDF current against its sources? =="
+.venv/bin/python analysis/check_pdf_fresh.py
+
 echo "== packaging arXiv source =="
 # Built fresh from the canonical files every time, never kept as a checked-in
 # copy. A previous revision kept paper/arxiv-submission/paper.tex on disk; it
