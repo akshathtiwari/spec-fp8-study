@@ -110,8 +110,11 @@ engine-agnostic and speaks only HTTP.
 ## Design principles that earned their keep
 
 - **HTTP-only boundary.** The harness never imports vLLM. Engines run as
-  subprocesses and are addressed over the OpenAI-compatible API, so what is
-  measured is what a serving deployment runs.
+  subprocesses and are addressed over the OpenAI-compatible API, so the
+  experiment cannot use an in-process path unavailable to deployments, and
+  server-side request handling, scheduling, batching and streaming are
+  included in what is measured. It does *not* reproduce every production
+  environment, and it does not eliminate client or network overhead.
 - **Content-addressed cells.** A configuration hashes to a `cell_id`;
   identical configuration yields an identical id on any machine. The id
   schema is versioned so new axes do not orphan old results.
