@@ -15,10 +15,12 @@ submitted between 3 months and 5 years ago. Checked with
 
 | Person | Email | Paper | Can endorse | Why them | Status |
 |---|---|---|---|---|---|
-| **Linghao Kong** | `linghao@mit.edu` | [2605.15051](https://arxiv.org/abs/2605.15051) | cs.AI, **cs.LG**, cs.PF | First author of the latency model our confound 2 bears on directly | sent 2026-09-24 |
-| **Xiaoxuan Liu** | `xiaoxuan_liu@berkeley.edu` | [2601.11580](https://arxiv.org/abs/2601.11580), [2406.14066](https://arxiv.org/abs/2406.14066) | cs.DB, cs.PL, **cs.LG**, cs.PF, cs.AI, cs.CL | First author of *Performance or Illusion?* (MLSys 2026) and TurboSpec; we cite both | drafted |
-| **Maor Ashkenazi** | `mashkenazi@nvidia.com` | [2604.09557](https://arxiv.org/abs/2604.09557) | cs.CV, **cs.LG**, cs.CR, cs.CL, cs.AI, cs.DC | SPEED-Bench author; we cite it, and §4 is an axis it does not cover | drafted |
-| **Alexandre Marques** | `almarque@redhat.com` | [2605.15051](https://arxiv.org/abs/2605.15051) | **cs.LG**, cs.CE, cs.AI, cs.CL, cs.PF | Senior author, same paper; Red Hat ships vLLM, so F023/F024 are operational for him | drafted |
+| **Linghao Kong** | `linghao@mit.edu` | [2605.15051](https://arxiv.org/abs/2605.15051) | cs.AI, **cs.LG**, cs.PF | First author of the latency model our confound 2 bears on directly | **sent 2026-09-24** |
+| **Maor Ashkenazi** | `mashkenazi@nvidia.com` | [2604.09557](https://arxiv.org/abs/2604.09557) | cs.CV, **cs.LG**, cs.CR, cs.CL, cs.AI, cs.DC | SPEED-Bench author; we cite it, and §4 is an axis it does not cover | **sent 2026-09-25** |
+| **Xiaoxuan Liu** | `xiaoxuan_liu@berkeley.edu` | [2601.11580](https://arxiv.org/abs/2601.11580), [2406.14066](https://arxiv.org/abs/2406.14066) | cs.DB, cs.PL, **cs.LG**, cs.PF, cs.AI, cs.CL | First author of *Performance or Illusion?* (MLSys 2026) and TurboSpec; we cite both | **sent 2026-09-25** |
+| **Lea Schönherr** | `schoenherr@cispa.de` | [2605.19537](https://arxiv.org/abs/2605.19537) | cs.LG primary *(unverified)* | Her CUDA-graph null is the accuracy axis of our §4; same model, same SM89 architecture | drafted 2026-09-26 |
+| David Pape | `david.pape@cispa.de` | [2605.19537](https://arxiv.org/abs/2605.19537) | cs.LG primary *(unverified)* | First author, same paper — fallback if Schönherr is silent | held |
+| ~~Alexandre Marques~~ | ~~`almarque@redhat.com`~~ | [2605.15051](https://arxiv.org/abs/2605.15051) | **cs.LG**, cs.CE, cs.AI, cs.CL, cs.PF | **Dropped: address bounced.** It is the address his own paper's author block prints, so it was correct at publication; likely corporate filtering or a departure. Kong covers that paper. | dropped |
 | **Jongseok Park** | *(not published)* | [2601.11580](https://arxiv.org/abs/2601.11580), [2406.14066](https://arxiv.org/abs/2406.14066) | cs.AI, cs.PF, **cs.LG** | Coauthor on **both** papers we cite | need address |
 | **Lanxiang Hu** | *(not published)* | [2406.14066](https://arxiv.org/abs/2406.14066) | cs.AI, cs.CL, **cs.LG**, cs.PF, cs.CV | TurboSpec coauthor | need address |
 | **Xin Cheng** | *(not published)* | DSpark | cs.AI, cs.CL, cs.IR, **cs.LG** | DSpark benchmarks against DFlash — the exact drafter our §4 localises to | need address |
@@ -248,6 +250,85 @@ out.
 > Thanks either way,
 > Akshath Tiwari
 > github.com/akshathtiwari
+
+## Draft: to Lea Schönherr
+
+The strongest hook of the six, and the only one where the paper cites the
+recipient *and* has something to say about their own result. Written after
+reading [2605.19537](https://arxiv.org/abs/2605.19537) in full: they disable
+CUDA graphs and report +0.15% on accuracy, on Qwen3-4B, on L40 (SM89). We
+measure 13.92% throughput CV across the same flag. Two axes of one switch,
+and only one had been looked at.
+
+Primary target is Schönherr rather than Pape because endorsement requires 3+
+cs.LG papers in the 3-month-to-5-year window; faculty clear that bar for
+certain where a PhD student may not.
+
+> **Subject:** arXiv endorsement request (cs.LG) — the throughput axis of your CUDA-graph null
+>
+> Hi Lea,
+>
+> I am an independent researcher working on LLM inference measurement. I need
+> a cs.LG endorsement to post my first arXiv preprint; arXiv's lookup lists
+> you as qualified.
+>
+> I am writing to you because I cite The Silent Hyperparameter, and because
+> one sentence in it lines up with my main result in a way I thought you would
+> want to know about.
+>
+> You report that disabling CUDA graphs shifted accuracy by up to +0.15%. You
+> run Qwen3-4B, which is also my target model, and you test on L40, which is
+> the same SM89 architecture as the L4 I measure on. Twelve seeds per
+> configuration.
+>
+> I measure the other axis of that same flag. On vLLM 0.29 with a DFlash
+> drafter on an L4, repeated boots of a byte-identical speculative
+> configuration give a coefficient of variation of 13.92% in output
+> throughput, while acceptance length does not move. Under --enforce-eager it
+> falls to 1.44%. n-gram speculation shows 2.67%, so it localises to
+> draft-model speculation.
+>
+> I do not read that as any tension with your result. They are two different
+> quantities and a switch can easily leave one alone while moving the other.
+> The reason I think it is worth telling you: yours is the most careful study
+> I have found of exactly this flag, with multi-seed repeats on my architecture
+> and my model, and it reports a null — because the quantity it measures is
+> output agreement and not throughput. That is the clearest evidence I have
+> that the throughput axis here has not been looked at, and my related work
+> section now says so.
+>
+> One other thing. Your recommendation that researchers should avoid relying
+> on single evaluation runs and average across seeds is independently the same
+> prescription my section 5 arrives at, from serving throughput rather than
+> cross-engine reproducibility. Jerry Kaplan gets there from LLM-judge
+> calibration. Three papers reaching one principle from three directions is
+> better evidence it is right than any one of them, and I would rather say
+> that than look like I am claiming the idea.
+>
+> The paper is a measurement case study on one card and one engine release,
+> and says so. It reports four confounds, two retractions of its own headline
+> claims, and ships the raw records with the scripts that audit them.
+>
+> Paper: [attach paper.pdf]
+> Code and data: github.com/akshathtiwari/spec-fp8-study
+>
+> If you are willing, approval is at https://arxiv.org/auth/endorse?x=IGNP9M
+> and takes about two minutes. As I understand it, endorsement means only that
+> the work belongs in the archive, not that you are reviewing or vouching for
+> it.
+>
+> I am asking a few people in parallel since only one endorsement is needed,
+> so apologies if this reaches you after someone else has helped.
+>
+> Thanks either way, and the Top-K tie-breaking race condition was a genuinely
+> good catch.
+>
+> Akshath Tiwari
+> github.com/akshathtiwari
+
+**Pape fallback**, roughly a week later if no reply: same email, change the
+opening to "because I cite your paper", drop the Top-K line, and add "I wrote
+to Lea last week as well, since you are coauthors." Never both at once.
 
 ---
 
