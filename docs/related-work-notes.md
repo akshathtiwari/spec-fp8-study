@@ -1,6 +1,6 @@
 # Related work — reading notes
 
-**rev 1 · 2026-09-24**
+**rev 2 · 2026-09-26**
 
 Notes from reading the closest prior work, recorded because the paper cites
 figures from these papers and `analysis/check_paper.py` requires every figure
@@ -136,6 +136,118 @@ a paper doing adjacent work in the same engine, not found because the
 literature search was not systematic. That a standard benchmark does not
 report run-to-run dispersion is itself support for §4 -- it is one more
 place the error term would go unnoticed.
+
+---
+
+## The Silent Hyperparameter (arXiv:2605.19537)
+
+Pape, Evertz, Schönherr. CISPA Helmholtz Center. Submitted 2026-05-19,
+revised 2026-05-20. **Primary cs.LG.**
+
+**Setup.** Five engines — vLLM, SGLang, llama.cpp, LMDeploy, Ollama — plus
+HuggingFace transformers as reference. Models include **Qwen3-4B**, our own
+target, plus Llama-3.1-8B, Qwen3-30B, DeepSeek-R1-Distill-Qwen-7B. **H100
+primary, also NVIDIA L40 — Ada Lovelace, SM89, our architecture.** FP16
+throughout; no quantization, no speculative decoding. **Twelve seeds per
+configuration.**
+
+**Findings.** Backend choice alone shifts GSM8K accuracy by 16.60 percentage
+points between best and worst engine. Divergence attributed to custom kernels
+and engine defaults in logit processing — LMDeploy's multi-threaded Top-K
+kernel has a race condition that breaks ties arbitrarily — and to FP32
+accumulation differences in llama.cpp/Ollama.
+
+**The number that matters to us.** *"disabling CUDA graphs shifted
+performance across engines by up to +0.15%."* On accuracy. They measure no
+throughput and no latency anywhere in the paper.
+
+**Relationship.** This is the strongest external support for §4 in the
+literature we have found, and it arrives by reporting a null. A careful
+multi-seed cross-engine reproducibility study, on our model and our GPU
+architecture, toggled the exact switch our §4 concerns and found 0.15% —
+because the quantity it measured was output agreement and not throughput. We
+measure 13.92% CV across the same switch. Two quantities, one switch, and
+only one of them had been looked at.
+
+Their recommendation — avoid single evaluation runs, average across seeds —
+is **the same prescription as our §5**, reached from a third direction. With
+Kaplan that makes three independent concurrent arrivals, and §5 now says so.
+
+---
+
+## The Integer Alibi (arXiv:2608.13756)
+
+Teng-Ruei Chen, Krixvon (Taipei). Submitted 2026-08-13, revised 2026-08-18.
+Primary cs.LG.
+
+**Setup.** **NVIDIA RTX 4090, SM89 — same architecture as our L4.** vLLM
+0.27.1 pinned by container digest, driver 580.173.02. Compares vLLM's
+`CutlassInt8ScaledMMLinearKernel` against `TritonInt8ScaledMMLinearKernel`.
+GEMM only; attention backends are not examined.
+
+**Findings.** The two nominally interchangeable INT8 kernels agree on no
+sequence in 64 end-to-end comparisons. Divergence localised to scale
+application and output rounding after the INT32 accumulator, proved exact;
+validated by bit-identical results under power-of-two scales. INT8
+differences stay at 1.9–7.6 ppm across K=512–32768; **FP8 differences rise
+from 8.2% to 52.7% across the same range.** No throughput, accuracy or
+calibration consequences measured.
+
+**Their limitations, in their words.** Single GPU generation, model family and
+engine version. 2.9% residual variance unexplained outside the INT8 epilogue.
+Prefill regime M=512 only — **decode (M=1) untested**, which is where all of
+our work lives. No positive controls.
+
+**Relationship.** Two things. First, their FP8 result is *element-level
+disagreement between implementations*, and our accuracy table is an
+*end-to-end task null at n=256*. These do not contradict; they do not even
+address each other, and the accuracy section now says so explicitly rather
+than letting a reader assume our null covers numerics. Second, and more
+useful: each of their arms reproduces **bit-for-bit across two cold
+restarts**. Byte-identical output across boots, on SM89, in vLLM. Our
+throughput does not reproduce across boots on the same architecture. Both
+facts are true of this stack and neither implies the other, which is a
+cleaner framing of §4 than we had.
+
+---
+
+## Identifying and Mitigating Systemic Measurement Bias in Production LLM Inference Benchmarks (arXiv:2605.24217)
+
+Chandrasekar, Kramberger. Google. v1 2026-05-22, v2 2026-05-26. Primary
+cs.AI, cross-list cs.DC.
+
+**Setup.** Eight client tools including vLLM Bench, GuideLLM, Inference Perf,
+NVIDIA AI Perf, k6, Locust, MLPerf. Driven against `llm-d-inference-sim`, a
+**zero-latency simulator**, so any degradation is provably a client artifact.
+Client hosts c4-standard-144 and e2-medium.
+
+**Findings.** Modelling the client as an M/G/1 queue, wait time diverges as
+utilisation approaches 1. **Onset around 1000 QPS**, where single-process
+clients saturate at 146–443 QPS; TTFT overhead from 8 ms to 58 s; vLLM Bench
+processed 75,574 tokens where a multi-process client processed 545,733, a
+7.2× discrepancy. Define NTPOT = end-to-end latency / output tokens, to
+amortise prefill and queueing. **Concurrency 64 is never discussed as a
+distortion threshold.** No speculative decoding, no chunked streaming.
+
+**Relationship, and a correction.** On an abstract-level read this looked
+like a threat to §6: our goodput result is computed at concurrency 64 from a
+Python async client, and if the client were queuing, the ITL distribution
+would carry client delay. The full text does not support that. Their onset is
+1000 QPS; at concurrency 64 with generations of hundreds of milliseconds we
+are one to two orders of magnitude below it, and SPEED-Bench independently
+places GIL effects at BS>256.
+
+So this is related work rather than a defect — but it is the same *class* of
+error as §6, where the client's view of the stream rather than the server
+produces the misleading number, and it is now cited as such. We have added a
+threats bullet conceding that we argued this from load regime and never ran a
+client-saturation control against a mock server, which is the measurement
+that would settle it.
+
+This entry also records a process failure: the abstract-level read produced a
+confident "this threatens §6" that the full text refuted. That is the third
+time in this study that reading an abstract produced a wrong answer, in a
+study about quick checks producing wrong answers.
 
 ---
 

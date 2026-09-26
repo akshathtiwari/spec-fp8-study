@@ -395,13 +395,20 @@ unreplicated, which needs no appeal to a floor.
 \paragraph{What we would claim, narrowly.} We could not find a published
 dispersion estimate for $\tau$ under repeated identical boots, and effects
 smaller than the one we measure here have been reported as real elsewhere.
-Kaplan~\cite{kaplan2026calibrated}, concurrently, calibrates an LLM judge by
-scoring ``two ordinary runs of a model given the same prompts'' and adds a
-null condition ``provably identical in distribution\ldots whose measured
-difference must be zero''. That is the same epistemic move, applied to
-output quality; independent concurrent arrival at it is evidence the
-practice is right. Our contribution is to apply it to acceptance, and to
-report that the dispersion is small rather than to assert a threshold.
+The underlying practice, however, is not ours and we do not claim it. Two
+concurrent papers arrive at it independently, from two further directions.
+Kaplan~\cite{kaplan2026calibrated} calibrates an LLM judge by scoring ``two
+ordinary runs of a model given the same prompts'' and adds a null condition
+``provably identical in distribution\ldots whose measured difference must be
+zero''. Pape et al.~\cite{pape2026silent} reach the same prescription from
+cross-engine reproducibility, recommending that ``researchers should avoid
+relying on single evaluation runs'' and that results be averaged across
+multiple seeds. Three independent arrivals at one principle --- from output
+quality, from backend reproducibility, and from serving throughput --- is
+better evidence that the principle is right than any one of them alone, and
+we would rather say so than be found to have cited whichever we happened to
+read first. Our contribution is to apply it to acceptance, and to report
+that the dispersion is small rather than to assert a threshold.
 
 \paragraph{Operating point matters.} Our 0.62\% is measured at
 $\tau \approx 4.1$, GSM8K, 768-token budget. The same configuration at a
@@ -706,6 +713,18 @@ $\pm4.7$ percentage points. This bounds the effect rather than demonstrating
 its absence: at $n=256$ a degradation of two or three points would not be
 detected.
 
+\paragraph{This is a task-level null, not a numerical one.} Low-precision
+kernels in vLLM are known to disagree with each other numerically: Chen
+\cite{chen2026integer} finds two interchangeable INT8 GEMM implementations
+producing different outputs on every one of 64 sequences on SM89, with FP8
+divergence growing with reduction depth where INT8 remains at
+parts-per-million. Nothing above contradicts that, and nothing above tests
+it. We compare task accuracy end to end at $n=256$; a difference in logits
+large enough to flip tokens can still leave a GSM8K score untouched, and our
+intervals are wide enough to hide several points. Read this table as ``no
+accuracy cost we could detect at this sample size'', not as evidence that
+FP8 arithmetic is numerically equivalent.
+
 \section{Threats to validity}\label{sec:threats}
 
 \begin{itemize}\itemsep2pt
@@ -734,6 +753,15 @@ is not excluded.
 \item \textbf{Mechanisms are not established} for the FP8-KV boot failure or
 the FP8-weight eager penalty. Both are observed and reproduced; neither was
 profiled. We state the readings we find plausible and mark them as readings.
+\item \textbf{Client-side saturation is argued, not measured.} A
+single-process benchmarking client can itself queue under load and have the
+delay attributed to the server~\cite{chandrasekar2026bias}. Our concurrency
+is 64 and our generations are hundreds of milliseconds long, which places us
+one to two orders of magnitude below the $\sim$1000\,QPS onset those authors
+report, and \S\ref{sec:c4}'s argument is structural rather than
+timing-precision dependent. We did not, however, run a client-saturation
+control --- for instance against a zero-latency mock server --- so this rests
+on a load-regime argument rather than on a measurement of our own harness.
 \item \textbf{The draft-side backend confound is acknowledged, not removed.}
 \item \textbf{Our retraction list covers errors we caught.} The same
 blindness that produced them applies to finding them. We assume undiscovered
@@ -760,6 +788,9 @@ Performance or Illusion?~\cite{liu2026illusion} & Systematic SD evaluation, vLLM
 Interpretable latency model~\cite{kong2026latency} & Models SD latency vs request rate, vLLM on A100/H100, $R^2$ to 0.997 & Single-sweep methodology; no repeats, error bars, or CUDA-graph discussion\\
 Calibrated instrument~\cite{kaplan2026calibrated} & Calibrates an LLM judge via a null condition; measures its per-sample noise & Same principle, applied to output quality rather than throughput or acceptance\\
 SPEED-Bench~\cite{abramovich2026speedbench} & Benchmark standardising SD evaluation, vLLM and TensorRT-LLM, throughput split across concurrencies & No run-to-run dispersion; no ITL/chunk distinction; no SLO goodput\\
+Silent hyperparameter~\cite{pape2026silent} & Backend choice shifts GSM8K accuracy by 16.6\,pp across 5 engines; Qwen3-4B on H100 and L40 (SM89); 12 seeds per configuration & Measures output agreement only; no throughput or latency, so the CUDA-graph axis is probed for accuracy and not for dispersion\\
+Integer alibi~\cite{chen2026integer} & Two nominally interchangeable INT8 GEMM kernels in vLLM agree on no sequence; RTX 4090 (SM89) & Kernel-level output divergence, not serving throughput; prefill regime only\\
+Measurement bias~\cite{chandrasekar2026bias} & Client-side GIL queuing distorts latency metrics; onset at $\sim$1000\,QPS & Client saturation, not engine behaviour; no speculative decoding or chunked streaming\\
 TurboSpec~\cite{liu2024turbospec} & Closed-loop speculation control in vLLM, optimising ``goodput'' & Goodput there is accepted-token rate, not SLO attainment; no latency objective\\
 Spec.\ Decoding Meets Quantization~\cite{specquant2025} & EAGLE-2 with W8A8, W4A16, W4A8; single-request & No FP8, no KV-cache quantization, not batched\\
 SpecKV~\cite{speckv2026} & Adaptive $\gamma$ under compression & Algorithmic, step-level, not serving goodput\\
@@ -782,6 +813,50 @@ throughput and that optimal draft length depends on batch size. It does not
 report dispersion across repeated identical runs, which is the axis
 \S\ref{sec:c2} concerns, and a benchmark that does not is one more place the
 error term in \S\ref{sec:c2} would go unnoticed.
+
+\textbf{On the accuracy axis of the same switch.}
+Pape et al.~\cite{pape2026silent} run Qwen3-4B --- our target model --- across
+five inference engines on H100 and L40, the latter sharing our SM89
+architecture, with twelve seeds per configuration. They report that backend
+choice shifts GSM8K accuracy by up to 16.6 percentage points, and that
+\emph{disabling CUDA graphs} shifts accuracy ``by up to $+0.15\%$''. They
+measure no throughput or latency at all.
+
+That pairing is worth stating plainly. The execution-path switch that moves
+output agreement by 0.15\% is the same switch across which we measure a
+13.92\% throughput CV (\S\ref{sec:c2}), on the same model family and the same
+GPU architecture. We do not read this as a contradiction: they are two
+different quantities, and a switch may reasonably leave one alone while
+moving the other. We read it as the clearest available evidence that the
+throughput axis of this switch has not been examined --- a careful,
+multi-seed, cross-engine reproducibility study probed CUDA graphs and
+reported a null, because the quantity it measured was not the one that moves.
+
+Chen~\cite{chen2026integer} supplies the complementary observation at the
+kernel level, also on SM89: two nominally interchangeable INT8 GEMM kernels
+in vLLM agree on no sequence in 64, while each arm reproduces itself
+\emph{bit-for-bit across cold restarts}. Byte-identical output across boots
+and unreproducible throughput across boots are therefore both properties of
+this stack, and a study that establishes the first says nothing about the
+second. We note that Chen reports FP8 GEMM divergence growing with reduction
+depth where INT8 stays at parts-per-million; that is element-level
+disagreement between implementations, and our \S\ref{sec:results} accuracy
+null is an end-to-end task measurement, so the two do not speak to each
+other directly.
+
+\textbf{On client-side measurement artifacts.}
+Chandrasekar and Kramberger~\cite{chandrasekar2026bias} show that a
+single-process benchmarking client becomes the bottleneck under load, adding
+client-side queuing delay that is then attributed to the server; they
+validate this against a zero-latency simulator, so the artifact is provably
+in the client. Their distortion sets in around 1000\,QPS, where the clients
+they test saturate at 146--443\,QPS. Our measurements run at concurrency 64
+with generation latencies in the hundreds of milliseconds, one to two orders
+of magnitude below that onset, so we do not believe this mechanism affects
+our numbers --- but it is the same \emph{kind} of error as \S\ref{sec:c4}, in
+which the client's view of the token stream, rather than the server, produces
+the misleading metric. They do not discuss speculative decoding or
+multi-token chunk arrival, which is the specific case \S\ref{sec:c4} concerns.
 
 \textbf{On ``goodput''.} TurboSpec~\cite{liu2024turbospec} optimises a
 quantity of that name in vLLM, so the word needs care. Theirs is the rate of
@@ -906,6 +981,24 @@ J.~Kaplan.
 \newblock A calibrated instrument for measuring how inference optimizations
 affect output quality.
 \newblock arXiv:2609.18005, 2026.
+
+\bibitem{pape2026silent}
+D.~Pape, J.~Evertz, and L.~Sch\"onherr.
+\newblock The silent hyperparameter: quantifying the impact of inference
+backends on LLM reproducibility.
+\newblock arXiv:2605.19537, 2026.
+
+\bibitem{chen2026integer}
+T.-R.~Chen.
+\newblock The integer alibi: localizing cross-kernel divergence in
+INT8-quantized LLM inference.
+\newblock arXiv:2608.13756, 2026.
+
+\bibitem{chandrasekar2026bias}
+A.~Chandrasekar and J.~Kramberger.
+\newblock Identifying and mitigating systemic measurement bias in production
+LLM inference benchmarks.
+\newblock arXiv:2605.24217, 2026.
 
 \bibitem{specquant2025}
 Speculative decoding meets quantization: compatibility evaluation and

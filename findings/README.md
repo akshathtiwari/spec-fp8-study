@@ -58,6 +58,8 @@ wrong turns and what caught them — is part of the evidence.
 | [`F025`](F025-inter-token-latency-was-corrupt.md) | Every inter-token latency recorded before 2026-09-23 is corrupt, so every goodput figure in the study is 0.0 and the SLO axis was never measured | retracted | high |
 | [`F029`](F029-bimodality-retracted.md) | RETRACTED — speculative throughput is not bimodal; it is one wide continuous distribution, and the two modes were a five-sample illusion | retracted | high |
 
+| [`F030`](F030-submission-tarball-was-stale.md) | The arXiv submission tarball froze two commits behind the paper because a `cd` in build.sh killed the freshness check before packaging ran; the uploadable file still carried a withdrawn overclaim | method | high |
+
 ---
 
-29 findings: 14 result, 6 method, 1 gap, 8 retraction.
+30 findings: 14 result, 7 method, 1 gap, 8 retraction.

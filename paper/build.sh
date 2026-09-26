@@ -38,10 +38,16 @@ echo "== every numeric claim in the paper traces to a record =="
 .venv/bin/python analysis/check_paper.py
 
 echo "== typesetting =="
-cd paper
-./build/tectonic paper.tex
+# Subshell, so the working directory stays at the repo root for everything
+# after this. An earlier revision ran a bare `cd paper` here, which made the
+# two steps below resolve `.venv/bin/python` to `paper/.venv/bin/python`. That
+# does not exist, so under `set -e` the freshness check died with 127 and the
+# arXiv packaging never ran at all -- while the build had already printed
+# "built paper/paper.pdf" and looked successful. Same failure as the
+# provenance check that printed and continued: advertised, not enforced.
+( cd paper && ./build/tectonic paper.tex )
 echo "== built paper/paper.pdf =="
-ls -la paper.pdf
+ls -la paper/paper.pdf
 
 echo "== is the PDF current against its sources? =="
 .venv/bin/python analysis/check_pdf_fresh.py
@@ -51,8 +57,8 @@ echo "== packaging arXiv source =="
 # copy. A previous revision kept paper/arxiv-submission/paper.tex on disk; it
 # drifted behind paper.tex and then failed the numeric audit as though the
 # paper itself were stale. A copy that can go stale will.
-rm -rf build/arxiv && mkdir -p build/arxiv/figures
-cp paper.tex build/arxiv/
-cp figures/bimodality.pdf build/arxiv/figures/
-tar czf arxiv-submission.tar.gz -C build/arxiv paper.tex figures
-ls -la arxiv-submission.tar.gz
+rm -rf paper/build/arxiv && mkdir -p paper/build/arxiv/figures
+cp paper/paper.tex paper/build/arxiv/
+cp paper/figures/bimodality.pdf paper/build/arxiv/figures/
+tar czf paper/arxiv-submission.tar.gz -C paper/build/arxiv paper.tex figures
+ls -la paper/arxiv-submission.tar.gz
