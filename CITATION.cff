@@ -1,0 +1,41 @@
+cff-version: 1.2.0
+message: >-
+  If you use this harness, these measurements, or this paper, please cite it
+  using the metadata below. If you cite a specific number, please cite the
+  finding it comes from as well: every figure in the paper traces to a record
+  in results/, and findings/ records what each one does and does not establish.
+title: >-
+  What You Are Actually Measuring When You Benchmark Speculative Decoding
+  Under FP8: A measurement case study on vLLM 0.29.0 and NVIDIA L4
+abstract: >-
+  An independent measurement study of speculative decoding and FP8
+  quantization on vLLM 0.29.0 / NVIDIA L4 (SM89). Four confounds are
+  identified and quantified: attention-backend selection is conditioned on
+  KV-cache dtype, so a precision A/B is also a kernel A/B; speculative
+  throughput is unreproducible across boots of an identical configuration
+  (CV 13.92%) while acceptance is not; acceptance length has a boot-to-boot
+  CV of 0.62%, which we could not find reported; and "inter-token latency"
+  computed from stream-arrival timestamps is inter-chunk latency under
+  speculation, which inverts a p95-ITL goodput ranking rather than merely
+  adding error to it. Released with the harness, the raw append-only records,
+  the analysis scripts, and 30 findings of which 8 are retractions.
+type: software
+authors:
+  - family-names: Tiwari
+    given-names: Akshath
+    email: tiwariakshath@gmail.com
+    affiliation: Independent
+repository-code: https://github.com/akshathtiwari/spec-fp8-study
+license: MIT
+license-url: https://github.com/akshathtiwari/spec-fp8-study/blob/main/LICENSE
+keywords:
+  - speculative decoding
+  - FP8 quantization
+  - LLM inference
+  - vLLM
+  - measurement methodology
+  - reproducibility
+  - GPU serving
+  - acceptance length
+  - benchmarking confounds
+  - CUDA graphs
