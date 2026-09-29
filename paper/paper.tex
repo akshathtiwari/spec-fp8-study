@@ -45,11 +45,13 @@ independently, so pinning one does not pin the other. Second, speculative
 throughput is \emph{unreproducible across boots} of an identical
 configuration while acceptance is not --- and the dispersion is itself
 unreproducible. Two 12-boot measurements of the same configuration on the
-same engine release give CV 13.92\% and 3.73\%, against an eager control
-that reads 1.44\% and 1.69\%. Normalised by that control, the CUDA-graph
-path costs 23--51\% of eager throughput on 0.29.0 and reaches parity on
-0.30.0. The mechanism remains unidentified, and the two checkable
-candidates --- graph mode and backend selection --- are ruled out. Third, acceptance
+same engine release give CV 13.92\% and 3.73\%. What does replicate is the
+ratio to an \tw{-{}-enforce-eager} control measured in the same container:
+the CUDA-graph path delivers 0.487 and 0.768 of eager throughput on 0.29.0,
+and 1.014 and 1.017 on 0.30.0 --- two sessions on different cards agreeing
+to within 0.3\%. The mechanism remains unidentified, and the two checkable
+candidates, graph mode and backend selection, are ruled out by the engine
+log. Third, acceptance
 length $\tau$ has a boot-to-boot \emph{coefficient of variation of 0.62\%}
 under repeated identical boots, which we could not find reported; our own
 FP8-precision comparison is unreplicated and we withdraw the equivalence
@@ -98,8 +100,10 @@ target and draft select independently. A precision A/B under defaults is a
 kernel A/B as well.
 \item \textbf{Unreproducible speculative throughput} (\S\ref{sec:c2}).
 Identical configurations disperse across boots at constant acceptance, by
-CV 13.92\% in one session and 3.73\% in another. The dispersion is real in
-both and its magnitude is not a property of the configuration. We do not
+CV 13.92\% in one session and 3.73\% in another: the dispersion is real in
+both and its magnitude is not a property of the configuration. The
+reproducible quantity is the ratio to a same-container eager control ---
+0.487 and 0.768 on 0.29.0 against 1.014 and 1.017 on 0.30.0. We do not
 identify the mechanism, and we report a draft-model localisation as
 suggestive rather than established. \tw{-{}-enforce-eager} removes the
 variance but is not a free control --- it costs FP8-weight configurations
@@ -231,20 +235,28 @@ days apart, and report both because they disagree:
 \toprule
 Engine & Arm & Session & Mean tok/s & CV\\
 \midrule
-0.29.0 & default & 2026-09-23 & 39.2 & \textbf{13.92\%}\\
-0.29.0 & default & 2026-09-29 & 61.2 & \textbf{3.73\%}\\
-0.29.0 & eager & 2026-09-23 & 80.5 & 1.44\%\\
-0.29.0 & eager & 2026-09-29 & 79.7 & 1.69\%\\
-0.30.0 & default & 2026-09-29 & 82.8 & 0.99\%\\
-0.30.0 & eager & 2026-09-29 & 81.6 & 1.28\%\\
+0.29.0 & default & 09-23 & 39.2 & \textbf{13.92\%}\\
+0.29.0 & default & 09-29 a & 61.2 & \textbf{3.73\%}\\
+0.30.0 & default & 09-29 b & 82.8 & 0.99\%\\
+0.30.0 & default & 09-29 c & 78.2 & 1.61\%\\
+\addlinespace
+0.29.0 & eager & 09-23 & 80.5 & 1.44\%\\
+0.29.0 & eager & 09-29 a & 79.7 & 1.69\%\\
+0.30.0 & eager & 09-29 b & 81.6 & 1.28\%\\
+0.30.0 & eager & 09-29 c & 77.0 & 2.79\%\\
 \bottomrule
 \end{tabular}
 \end{center}
 
-Each row is 12 fixed-prompt boots inside a single container (the first eager
-row is 8). Both 0.29.0 default rows measure the same declared configuration
-on the same engine release. They differ by a factor of 3.7 in dispersion and
-1.6 in level.
+Each row is 12 fixed-prompt boots inside a single container (the 09-23 eager
+row is 8 and the 09-29\,c eager row is 11, truncated by a runner timeout).
+Sessions 09-29\,a, b and c ran on three distinct physical cards, recorded by
+UUID; 09-23 predates that recording.
+
+Both 0.29.0 default rows measure the same declared configuration on the same
+engine release and differ by a factor of 3.7 in dispersion and 1.6 in level.
+\textbf{The 0.30.0 rows do not:} 0.99\% and 1.61\%, on different cards. The
+low dispersion replicates where the high dispersion did not.
 
 \paragraph{The eager arm is the control, and it does not move.} 80.5, 79.7
 and 81.6 tok/s across three sessions, two engine releases and at least two
@@ -253,13 +265,14 @@ default measurement by the eager measurement taken beside it therefore
 removes session and card effects:
 
 \begin{center}\small
-\begin{tabular}{lr}
+\begin{tabular}{llr}
 \toprule
-Session & default / eager\\
+Engine & Session & default / eager\\
 \midrule
-0.29.0, 2026-09-23 & 0.49\\
-0.29.0, 2026-09-29 & 0.77\\
-0.30.0, 2026-09-29 & \textbf{1.01}\\
+0.29.0 & 09-23 & 0.487\\
+0.29.0 & 09-29 a & 0.768\\
+0.30.0 & 09-29 b & \textbf{1.014}\\
+0.30.0 & 09-29 c & \textbf{1.017}\\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -267,7 +280,15 @@ Session & default / eager\\
 \noindent
 On 0.29.0 the CUDA-graph path costs between 23\% and 51\% of the eager path's
 throughput, and how much it costs does not reproduce. On 0.30.0 it reaches
-parity.
+parity, and \emph{that} reproduces: two sessions on different cards agree to
+within 0.3\%, against 58\% disagreement between the two 0.29.0 sessions.
+
+The ratio is the quantity to report. Session 09-29\,c ran 5.6\% slower than
+09-29\,b on \emph{both} arms (default 82.8 to 78.2, eager 81.6 to 77.0).
+Because both moved together, the eager arm identifies that as a property of
+the card rather than of the execution path, and the ratio absorbs it. Without
+a control measured in the same container it would have read as a 5.6\%
+replication failure.
 
 \paragraph{An earlier revision of this paper reported only the first row.}
 It gave 13.92\% as \emph{the} boot dispersion of this configuration. A second
@@ -276,12 +297,12 @@ measurement puts the same quantity at 3.73\%. The effect is present in both
 session we have run --- but the magnitude is a property of the session, not
 of the configuration, and quoting one number for it was wrong.
 
-We draw the obvious conclusion about our own remaining figures. The 0.99\%
-on 0.30.0 is a single session. By the argument of this very section it should
-not be quoted as that release's dispersion until it has been measured twice,
-and we do not so quote it. A dispersion measured once is a draw, not a
-property; this is the same error as reporting a mean from one run, applied
-one level up, and it survived four revisions of this paper because a clean
+We applied that standard to our own new figures rather than only to the old
+one. An earlier version of this section reported the 0.30.0 result from a
+single session; by the argument above that is a draw, so we measured it again
+on another card before quoting it. A dispersion measured once is a draw, not
+a property --- the same error as reporting a mean from one run, applied one
+level up --- and it survived four revisions of this paper because a clean
 number with $n=12$ does not look like it needs replicating.
 
 Two measurement choices matter here, and we got both wrong in earlier

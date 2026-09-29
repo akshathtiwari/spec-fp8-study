@@ -46,9 +46,11 @@ One row per `probe_run`, which is one container. A CV quoted from a single row i
 | vllm-0.29.0 | dflash | default | 2026-09-23T19-28 | not recorded | 12 | 39.2 | **13.92%** |
 | vllm-0.29.0 | dflash | default | 2026-09-29T06-29 | GPU-7ad44181-5da... | 12 | 61.2 | **3.73%** |
 | vllm-0.30.0 | dflash | default | 2026-09-29T04-48 | GPU-e08becdf-f67... | 12 | 82.8 | **0.99%** |
+| vllm-0.30.0 | dflash | default | 2026-09-29T17-16 | GPU-15116537-156... | 12 | 78.2 | **1.61%** |
 | vllm-0.29.0 | dflash | enforce_eager | 2026-09-23T19-28 | not recorded | 8 | 80.5 | **1.44%** |
 | vllm-0.29.0 | dflash | enforce_eager | 2026-09-29T06-29 | GPU-7ad44181-5da... | 12 | 79.7 | **1.69%** |
 | vllm-0.30.0 | dflash | enforce_eager | 2026-09-29T04-48 | GPU-e08becdf-f67... | 12 | 81.6 | **1.28%** |
+| vllm-0.30.0 | dflash | enforce_eager | 2026-09-29T17-16 | GPU-15116537-156... | 11 | 77.0 | **2.79%** |
 | vllm-0.29.0 | ngram | default | 2026-09-23T07-20 | not recorded | 4 | 33.9 | **3.19%** |
 | vllm-0.29.0 | ngram | default | 2026-09-23T11-08 | not recorded | 8 | 35.1 | **1.55%** |
 | vllm-0.29.0 | ngram | enforce_eager | 2026-09-23T07-20 | not recorded | 4 | 33.9 | **0.88%** |
@@ -61,5 +63,6 @@ One row per `probe_run`, which is one container. A CV quoted from a single row i
 | vllm-0.29.0 | 2026-09-23T19-28 | 12 | 4.1055 | **0.62%** |
 | vllm-0.29.0 | 2026-09-29T06-29 | 12 | 4.1255 | **0.30%** |
 | vllm-0.30.0 | 2026-09-29T04-48 | 12 | 4.1498 | **0.61%** |
+| vllm-0.30.0 | 2026-09-29T17-16 | 12 | 4.0702 | **0.00%** |
 
 Acceptance dispersion reproduces across sessions and engine releases where throughput dispersion does not. That contrast is the point: the quantity that moves is throughput.

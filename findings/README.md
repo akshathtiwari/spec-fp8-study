@@ -66,6 +66,8 @@ wrong turns and what caught them — is part of the evidence.
 
 | [`F033`](F033-the-dispersion-is-real-but-its-magnitude-is-not-reproducible.md) | Boot dispersion on 0.29.0 measured twice gives 13.92% and 3.73% against an eager control at 1.44% and 1.69%; the dispersion is real, its magnitude is not reproducible, and a dispersion measured once is a draw rather than a property | result | high |
 
+| [`F034`](F034-the-version-difference-replicates-as-a-ratio.md) | Measured twice on different cards, 0.30.0 puts the CUDA-graph path at parity with eager (1.014, 1.017) where 0.29.0 gives 0.487 and 0.768; the eager-normalised ratio replicates where neither raw throughput nor raw dispersion does | result | high |
+
 ---
 
-33 findings: 16 result, 8 method, 1 gap, 8 retraction.
+34 findings: 17 result, 8 method, 1 gap, 8 retraction.

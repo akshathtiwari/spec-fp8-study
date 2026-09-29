@@ -11,11 +11,13 @@ independently, so pinning one does not pin the other. Second, speculative
 throughput is unreproducible across boots of an identical
 configuration while acceptance is not -- and the dispersion is itself
 unreproducible. Two 12-boot measurements of the same configuration on the
-same engine release give CV 13.92% and 3.73%, against an eager control
-that reads 1.44% and 1.69%. Normalised by that control, the CUDA-graph
-path costs 23--51% of eager throughput on 0.29.0 and reaches parity on
-0.30.0. The mechanism remains unidentified, and the two checkable
-candidates -- graph mode and backend selection -- are ruled out. Third, acceptance
+same engine release give CV 13.92% and 3.73%. What does replicate is the
+ratio to an -{-enforce-eager} control measured in the same container:
+the CUDA-graph path delivers 0.487 and 0.768 of eager throughput on 0.29.0,
+and 1.014 and 1.017 on 0.30.0 -- two sessions on different cards agreeing
+to within 0.3%. The mechanism remains unidentified, and the two checkable
+candidates, graph mode and backend selection, are ruled out by the engine
+log. Third, acceptance
 length tau has a boot-to-boot coefficient of variation of 0.62%
 under repeated identical boots, which we could not find reported; our own
 FP8-precision comparison is unreplicated and we withdraw the equivalence
