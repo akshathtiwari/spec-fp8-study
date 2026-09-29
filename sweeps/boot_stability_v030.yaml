@@ -1,0 +1,97 @@
+# Replication of boot_stability.yaml on vLLM 0.30.0.
+#
+# IDENTICAL to boot_stability.yaml in every axis except engine_ref. That is
+# the point: engine_ref is part of cell_id, so these cells hash differently
+# from the 0.29.0 cells and the two versions coexist in the append-only store
+# instead of one superseding the other. Changing anything else here would
+# make the comparison confounded rather than a version A/B.
+#
+# Why this sweep exists. Section 4 of the paper reports a 13.92% CV in
+# speculative throughput across boots on vLLM 0.29.0, associated with the
+# CUDA-graph path, mechanism unidentified. vLLM 0.30.0 landed changes on
+# exactly that surface -- decode-only FULL CUDA graphs (#53867), FULL graphs
+# for microbatched steps (#51700), gc frozen during graph capture (#54646),
+# and an online acceptance estimator driving adaptive verification (#52228).
+# So the dispersion may persist, may have moved, or may be gone. All three
+# outcomes are publishable and the paper is stronger for reporting any of
+# them than for reporting a single version and hoping.
+#
+# Run this with a matching image or the runner will abort:
+#
+#   SPECFP8_VLLM_VERSION=0.30.0 modal run cloud/modal_probe.py \
+#       --engine bootvar --repeats 12 \
+#       --sweep-file sweeps/boot_stability_v030.yaml
+#
+# Pair it with a second GPU (SPECFP8_GPU) to address the other open question:
+# boot and host effects are not separated in section 4, because nothing
+# recorded which physical card served a boot. specfp8/env.py now records
+# gpu_uuid, so a repeat here can finally answer it -- two boots sharing a uuid
+# that still differ by 14% is a boot effect, dispersion that tracks uuid
+# changes is a host effect.
+
+# Is speculative throughput stable across BOOTS within one container?
+#
+# An identical dflash config with identical prompts decoded 2x faster in one
+# container run than another (3505ms vs 7316-7923ms mean e2e, same output
+# lengths). The non-speculative cell reproduced exactly across the same two
+# containers, so it is not the GPU or thermal state.
+#
+# The suspected cause is CUDA-graph capture: the engine logs
+#   "CUDAGraphMode.FULL_AND_PIECEWISE is not supported with spec-decode for
+#    attention backend FlashInfer"
+# and falls back to PIECEWISE. If what gets captured varies between boots, a
+# 2x swing follows.
+#
+# Design: two ServerCells, one speculative and one not, measured at c=1, with
+# the whole sweep repeated across several BOOTS inside a single container.
+# `none` is the control: if it is stable across boots while dflash is not,
+# the instability is speculation-specific rather than environmental.
+#
+# Outcome decides how throughput may be reported:
+#   stable within container  -> never compare throughput across containers;
+#                               the existing grid stands with that caveat
+#   unstable within container -> speculative throughput needs boot-level
+#                               repeats and the sweep needs redesigning
+
+model: Qwen/Qwen3-4B
+model_revision: main
+spec_tokens: 5
+
+axes:
+  engine: [vllm]
+  engine_ref: [vllm-0.30.0]
+  # ngram added 2026-09-23 to test whether the bimodality of F020/F021 is
+  # a property of DFlash drafting or of speculative decoding on this engine.
+  # It needs no draft checkpoint (prompt-lookup), so it isolates the
+  # speculative verification path from anything the draft model contributes.
+  mechanism: [none, dflash, ngram]
+  weight_precision: [bf16]
+  kv_cache_dtype: [auto]
+  attn_backend: [FLASHINFER]
+
+defaults:
+  draft_model: null
+  draft_revision: null
+  block_size: null
+  guided_decoding: false
+
+per_mechanism:
+  # block_size carries prompt_lookup_max for ngram (see vllm.py argv).
+  ngram:
+    draft_model: null
+    draft_revision: null
+    block_size: 4
+  dflash:
+    draft_model: z-lab/Qwen3-4B-DFlash-b16
+    draft_revision: main
+    block_size: 16
+
+run_axes:
+  workload: [gsm8k]
+  concurrency: [1]
+  seed: [1234]
+  repeat: [0]
+
+correctness:
+  floor_correct: 0.10
+  floor_degraded: 0.05

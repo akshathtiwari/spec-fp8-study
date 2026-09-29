@@ -60,6 +60,8 @@ wrong turns and what caught them — is part of the evidence.
 
 | [`F030`](F030-submission-tarball-was-stale.md) | The arXiv submission tarball froze two commits behind the paper because a `cd` in build.sh killed the freshness check before packaging ran; the uploadable file still carried a withdrawn overclaim | method | high |
 
+| [`F031`](F031-engine-version-was-never-recorded.md) | The engine version was read, printed and never stored, so every version claim rested on a declaration; and engine_ref feeds cell_id, so a version replication would have superseded its own baseline | method | high |
+
 ---
 
-30 findings: 14 result, 7 method, 1 gap, 8 retraction.
+31 findings: 14 result, 8 method, 1 gap, 8 retraction.

@@ -55,9 +55,30 @@ GPU            NVIDIA L4, compute capability 8.9, 22.5 GB
 driver         580.95.05
 CUDA           13.0
 torch          2.13.0+cu130
-engine         vLLM 0.29.0, read from the running server over HTTP
+engine         vLLM 0.29.0  (see the correction below)
 base image     nvidia/cuda:13.0.3-devel-ubuntu24.04
 ```
+
+**Correction, 2026-09-29.** This table previously read "vLLM 0.29.0, read from
+the running server over HTTP". That was wrong, and the error is the kind this
+document exists to prevent. The harness does query the server's `/version`
+endpoint and print the result, but **the value was never stored**:
+`engine_version` is absent from all 394 records in `results/`. The engine
+version therefore rested on two *declarations* — the `VLLM_VERSION` pin in
+`cloud/modal_probe.py`, which controls the installed wheel, and
+`engine_ref: vllm-0.29.0` in each sweep file.
+
+The version itself is almost certainly right, because the image pins
+`vllm==0.29.0` and that is what gets installed. What was wrong was the stated
+basis for it: a number read and printed to a terminal is exactly what
+`analysis/check_provenance.py` rule 4 forbids a finding from resting on, and
+this document asserted the stronger claim anyway. See `findings/F031`.
+
+Fixed going forward. The measured version and an `engine_check` field
+(`honoured` / `mismatch` / `unverified`) are now persisted on every record,
+and because `engine_ref` is part of `cell_id`, a declared/measured mismatch
+now **aborts the run** rather than writing records that would supersede
+another version's measurements.
 
 Harness dependencies were declared as open ranges (`pandas>=2.0` and
 similar). Versions present in the environment that produced the analysis:

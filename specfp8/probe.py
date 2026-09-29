@@ -212,6 +212,36 @@ def probe_one_cell(
         engine_version = launcher.engine_version(handle)
         print(f"  Engine version: {engine_version}")
 
+        # Now actually verify it, which nothing did until 2026-09-29 (F031).
+        #
+        # `engine_ref` is in _ID_SCHEMA_V1, so it is part of cell_id. That
+        # makes an unverified declaration dangerous rather than untidy: run a
+        # 0.30.0 image against a sweep declaring vllm-0.29.0 and every record
+        # gets the cell_id of the 0.29.0 measurement, and the append-only
+        # store treats it as a re-run and supersedes the real 0.29.0 data.
+        # A version comparison would destroy the baseline it was comparing
+        # against, and nothing would report an error.
+        #
+        # Three outcomes, mirroring the backend check below, because
+        # "could not determine" is not "matches". The difference is the
+        # response: a backend mismatch is recorded and the cell continues,
+        # a version mismatch aborts, since continuing corrupts the corpus.
+        if engine_version is None:
+            engine_check = "unverified"
+            print("  WARNING: engine version not readable from the server; "
+                  "engine_ref is declared but unverified for this cell")
+        elif f"{cell.engine}-{engine_version}" == cell.engine_ref:
+            engine_check = "honoured"
+        else:
+            engine_check = "mismatch"
+            raise RuntimeError(
+                f"engine_ref mismatch: sweep declares {cell.engine_ref!r} but "
+                f"the running server reports {engine_version!r}. Refusing to "
+                f"write records, because engine_ref is part of cell_id and "
+                f"these would supersede the {cell.engine_ref} measurements. "
+                f"Use a sweep file whose engine_ref matches the image."
+            )
+
         # Verify the engine honoured the backend request.
         #
         # Three outcomes, kept distinct on purpose. An earlier version
@@ -370,6 +400,7 @@ def probe_one_cell(
             quality=quality,
             selected_backend=selected,
             backend_check=backend_check,
+            engine_check=engine_check,
         )
 
     finally:
@@ -403,6 +434,7 @@ def _make_record(
     quality: dict | None = None,
     selected_backend: str | None = None,
     backend_check: str | None = None,
+    engine_check: str | None = None,
 ) -> dict:
     """Build a result record for cells.jsonl."""
     argv = get_launcher(cell.engine).argv(cell, 0)
@@ -421,6 +453,10 @@ def _make_record(
         "sampling_params": SAMPLING_PARAMS,
         "prompt_set_fingerprint": prompt_set_fingerprint(),
         "engine_version": engine_version,
+        # honoured | mismatch | unverified -- whether the measured engine
+        # version matched the engine_ref the sweep declared. "unverified"
+        # is not a pass (F031).
+        "engine_check": engine_check,
         # Requested is not selected: both are recorded so no analysis has to
         # trust the flag (findings/F018).
         "selected_backend": selected_backend,

@@ -11,6 +11,8 @@ capability the study is about. A payment method is required for any GPU.
 Results are persisted to a Modal Volume so they survive across invocations.
 """
 
+import os
+
 import modal
 
 # Modal app definition
@@ -30,7 +32,22 @@ model_vol = modal.Volume.from_name("specfp8-models", create_if_missing=True)
 # against (torch 2.13.0+cu130 -> CUDA 13). Base image and engine version are
 # both pinned so a third party gets the same stack.
 CUDA_BASE = "nvidia/cuda:13.0.3-devel-ubuntu24.04"
-VLLM_VERSION = "0.29.0"
+
+# Engine version and GPU are read from the environment so a replication can
+# vary either without editing this file, while the defaults keep every
+# existing command identical in behaviour.
+#
+#   SPECFP8_VLLM_VERSION=0.30.0 SPECFP8_GPU=A10G modal run cloud/modal_probe.py ...
+#
+# Changing SPECFP8_VLLM_VERSION builds a different Modal image, so the first
+# run after a change pays an image build. That is CPU time, not GPU time.
+#
+# A version change REQUIRES a sweep whose engine_ref matches: engine_ref is
+# part of cell_id, and the runner now aborts on a declared/measured mismatch
+# rather than writing records that would supersede another version's data
+# (findings/F031).
+VLLM_VERSION = os.environ.get("SPECFP8_VLLM_VERSION", "0.29.0")
+GPU_TYPE = os.environ.get("SPECFP8_GPU", "L4")
 SGLANG_VERSION = "0.5.20"
 
 HARNESS_DEPS = ["httpx", "pydantic>=2.0", "pyyaml", "pandas"]
@@ -204,7 +221,7 @@ def _print_results(results_path="/results/cells.jsonl"):
 
 @app.function(
     image=vllm_image,
-    gpu="L4",
+    gpu=GPU_TYPE,
     # perf_v2 is 16 boots x 6 measurements, roughly 4 hours. 150 minutes
     # would kill it mid-grid. Resume plus per-60s volume commits cap the
     # cost of hitting this at the in-flight cell, so a re-invocation
@@ -261,7 +278,7 @@ def run_vllm_sweep(sweep_file: str = "perf", force: bool = False,
 
 @app.function(
     image=vllm_image,
-    gpu="L4",
+    gpu=GPU_TYPE,
     # 120 min: the quality stage adds several minutes per cell on top of boot
     # and gate. Resume plus per-60s volume commits cap the cost of hitting
     # this at one re-run cell, so headroom is cheaper than a clipped sweep.
@@ -360,7 +377,7 @@ def run_vllm_probe(sweep_file: str = "compat", retry_failed: bool = False,
 
 @app.function(
     image=sglang_image,
-    gpu="L4",
+    gpu=GPU_TYPE,
     timeout=90 * 60,
     **GPU_GUARDRAILS,
     volumes={
@@ -417,7 +434,7 @@ def run_sglang_probe(retry_failed: bool = False):
 
 @app.function(
     image=vllm_image,
-    gpu="L4",
+    gpu=GPU_TYPE,
     timeout=30 * 60,
     **GPU_GUARDRAILS,
     volumes={"/models": model_vol},
@@ -554,7 +571,7 @@ def prefetch_models(sweep_file: str = "h1") -> str:
 
 @app.function(
     image=vllm_image,
-    gpu="L4",
+    gpu=GPU_TYPE,
     timeout=45 * 60,
     **GPU_GUARDRAILS,
     # /results so `billed` can record GPU seconds; without the mount the
@@ -684,14 +701,15 @@ def backend_report() -> str:
 
 
 @app.function(
-    image=vllm_image, gpu="L4", timeout=90 * 60, **GPU_GUARDRAILS,
+    image=vllm_image, gpu=GPU_TYPE, timeout=90 * 60, **GPU_GUARDRAILS,
     # /results is mounted because this probe now writes records and logs.
     # Without it the writes land in the container filesystem and vanish on
     # exit, which is the same failure as not recording at all.
     volumes={"/models": model_vol, "/results": results_vol},
 )
 @billed('boot_variance')
-def boot_variance(boots: int = 2, mechanism: str = "dflash") -> str:
+def boot_variance(boots: int = 2, mechanism: str = "dflash",
+                  sweep_file: str = "sweeps/boot_stability.yaml") -> str:
     """Does --enforce-eager still win under load, or does it invert?
 
     `mechanism` exists because the first run of this test answered the
@@ -736,7 +754,7 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash") -> str:
     from specfp8.store import append_record, argv_fingerprint, persist_log
     from specfp8.workloads import get_workload
 
-    cell = next(c for c in expand("sweeps/boot_stability.yaml")
+    cell = next(c for c in expand(sweep_file)
                 if c.mechanism == mechanism)
     workload = get_workload("gsm8k")
     scraper = VllmMetricsScraper()
@@ -787,6 +805,26 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash") -> str:
                     }, "/results", "probes.jsonl")
                     results_vol.commit()
                     continue
+                # Verify the engine that answered is the one the sweep
+                # declares, BEFORE taking any measurement. engine_ref is part
+                # of cell_id, so a 0.30.0 image run against a sweep declaring
+                # 0.29.0 would write records carrying the 0.29.0 cell_id and
+                # supersede the real 0.29.0 data in an append-only store.
+                # Nothing checked this until F031.
+                engine_version = launcher.engine_version(handle)
+                if engine_version is None:
+                    engine_check = "unverified"
+                    out.append(f"  {arm} boot {i+1}: WARNING engine version "
+                               f"not readable; engine_ref unverified")
+                elif f"{cell.engine}-{engine_version}" == cell.engine_ref:
+                    engine_check = "honoured"
+                else:
+                    raise RuntimeError(
+                        f"engine_ref mismatch: {sweep_file} declares "
+                        f"{cell.engine_ref!r} but the server reports "
+                        f"{engine_version!r}. Refusing to write records that "
+                        f"would supersede the {cell.engine_ref} measurements.")
+
                 for c in CONC:
                     prompts = workload.prompts(nreq(c), seed=1234)
                     before = scrape_spec_stats(handle.base_url, scraper)
@@ -809,6 +847,9 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash") -> str:
                         # records collapse into indistinguishable duplicates.
                         "arm": arm, "boot": i,
                         "enforce_eager": arm == "enforce_eager",
+                        # Measured, not declared (F031).
+                        "engine_version": engine_version,
+                        "engine_check": engine_check,
                         "cell_id": compute_cell_id(cell),
                         "config": cell.model_dump(), "env": env.model_dump(),
                         "argv": argv, "argv_fingerprint": argv_fingerprint(argv),
@@ -1006,7 +1047,7 @@ def check_results():
     _print_results()
 
 
-@app.function(image=vllm_image, gpu="L4", timeout=900,
+@app.function(image=vllm_image, gpu=GPU_TYPE, timeout=900,
               volumes={"/results": results_vol})
 @billed('vllm_help')
 def dump_vllm_help() -> str:
@@ -1057,6 +1098,7 @@ def main(
     repeats: int = 1,
     force: bool = False,
     since: str = "",
+    sweep_file: str = "",
 ):
     """Entry point: modal run cloud/modal_probe.py [--engine vllm|sglang|status|help] [--sweep mini|compat]"""
     if engine == "help":
@@ -1066,8 +1108,17 @@ def main(
         print(backend_report.remote())
         return
     if engine == "bootvar":
-        print(boot_variance.remote(boots=repeats if repeats > 1 else 2,
-                                   mechanism=sweep if sweep != "compat" else "dflash"))
+        # --sweep-file selects which boot_stability variant to expand, which
+        # is how a version replication is requested. It must match the image:
+        # SPECFP8_VLLM_VERSION sets the engine, engine_ref in the sweep
+        # declares it, and boot_variance aborts if they disagree (F031).
+        bv_kwargs = dict(boots=repeats if repeats > 1 else 2,
+                         mechanism=sweep if sweep != "compat" else "dflash")
+        if sweep_file:
+            bv_kwargs["sweep_file"] = sweep_file
+        print(f"engine image: vllm=={VLLM_VERSION} on {GPU_TYPE}")
+        print(f"sweep: {sweep_file or 'sweeps/boot_stability.yaml'}")
+        print(boot_variance.remote(**bv_kwargs))
         return
     if engine == "backends":
         print(list_attention_backends.remote())

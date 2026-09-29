@@ -20,6 +20,36 @@ class EnvInfo(BaseModel):
     cuda: str                   # CUDA runtime version
     torch: str                  # PyTorch version (from the harness env)
 
+    # Physical-device identity and host power/clock configuration.
+    #
+    # Added 2026-09-29 to close item 5 of docs/reproducibility.md, which is
+    # the paper's largest open question. Section 4 reports a 13.92% CV in
+    # speculative throughput across boots of an identical configuration and
+    # has to concede that boot-to-boot and host-to-host components cannot be
+    # separated, because runs used rented instances and nothing recorded
+    # WHICH physical GPU served them.
+    #
+    # gpu_uuid is the field that settles it. Two boots sharing a uuid that
+    # still differ by 14% is a boot effect. Dispersion that tracks uuid
+    # changes is a host effect. Without it the question is unanswerable no
+    # matter how many boots are collected, which is why 12 boots did not
+    # settle it.
+    #
+    # All optional with None defaults: the store is append-only and every
+    # record written before this date lacks these keys. Making them required
+    # would break parsing of the existing corpus and fail
+    # check_provenance.py's id-recomputation rule. None means "not recorded",
+    # never "not applicable".
+    #
+    # These are env fields, not ServerCell fields, so they are outside
+    # _ID_SCHEMA_V1 and cell_id is unaffected. That is deliberate: a cell is
+    # a declared configuration, and which physical card served it is a
+    # property of the measurement rather than of the configuration.
+    gpu_uuid: str | None = None          # per-device, e.g. "GPU-1a2b3c4d-..."
+    gpu_serial: str | None = None        # often unavailable on cloud cards
+    sm_clock_max_mhz: float | None = None
+    power_limit_w: float | None = None
+
 
 def capture() -> EnvInfo:
     """Capture the current environment.
@@ -55,7 +85,34 @@ def capture() -> EnvInfo:
         driver=gpu_info["driver"],
         cuda=gpu_info["cuda"],
         torch=torch_version,
+        gpu_uuid=gpu_info.get("uuid"),
+        gpu_serial=gpu_info.get("serial"),
+        sm_clock_max_mhz=gpu_info.get("sm_clock_max_mhz"),
+        power_limit_w=gpu_info.get("power_limit_w"),
     )
+
+
+def _na(value: str) -> str | None:
+    """Normalise nvidia-smi's unavailable markers to None.
+
+    nvidia-smi prints "[N/A]" or "N/A" for fields a card does not expose --
+    serial is commonly unavailable on cloud instances. Storing the literal
+    string would make a missing reading look like a recorded one.
+    """
+    v = value.strip()
+    if not v or v.upper().strip("[]") in ("N/A", "NOT SUPPORTED", "UNKNOWN"):
+        return None
+    return v
+
+
+def _float_or_none(value: str) -> float | None:
+    v = _na(value)
+    if v is None:
+        return None
+    try:
+        return float(v.split()[0])
+    except (ValueError, IndexError):
+        return None
 
 
 def _query_nvidia_smi() -> dict:
@@ -65,7 +122,38 @@ def _query_nvidia_smi() -> dict:
     nvidia-smi; if that also fails (Colab exit 12), returns defaults
     that capture() fills from torch.cuda.
     """
-    # Attempt 1: structured query
+    # Attempt 1: structured query including physical-device identity.
+    #
+    # Tried before the three-field query below because uuid is what separates
+    # boot effects from host effects (see EnvInfo). If this form fails on an
+    # older nvidia-smi that does not know one of these keys, the next attempt
+    # asks only for the original three, so a new field can never cost us the
+    # fields we already had.
+    try:
+        cmd = [
+            "nvidia-smi",
+            "--query-gpu=name,memory.total,driver_version,uuid,serial,"
+            "clocks.max.sm,power.limit",
+            "--format=csv,noheader,nounits",
+        ]
+        result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        line = result.stdout.strip().split("\n")[0]
+        parts = [p.strip() for p in line.split(",")]
+        if len(parts) >= 7:
+            return {
+                "name": parts[0],
+                "vram_mb": float(parts[1]),
+                "driver": parts[2],
+                "cuda": _get_cuda_version(),
+                "uuid": _na(parts[3]),
+                "serial": _na(parts[4]),
+                "sm_clock_max_mhz": _float_or_none(parts[5]),
+                "power_limit_w": _float_or_none(parts[6]),
+            }
+    except (subprocess.CalledProcessError, FileNotFoundError, ValueError, IndexError):
+        pass
+
+    # Attempt 1b: the original three-field query, unchanged.
     try:
         cmd = [
             "nvidia-smi",
