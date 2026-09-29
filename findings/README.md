@@ -62,6 +62,8 @@ wrong turns and what caught them — is part of the evidence.
 
 | [`F031`](F031-engine-version-was-never-recorded.md) | The engine version was read, printed and never stored, so every version claim rested on a declaration; and engine_ref feeds cell_id, so a version replication would have superseded its own baseline | method | high |
 
+| [`F032`](F032-dispersion-absent-on-vllm-030.md) | On vLLM 0.30.0 the boot dispersion is absent (CV 0.99% vs 13.92%) and default-path throughput doubles to match the eager arm; but the 0.29.0 baseline pools three container sessions and this is one, so the comparison is not host-controlled | result | medium |
+
 ---
 
-31 findings: 14 result, 8 method, 1 gap, 8 retraction.
+32 findings: 15 result, 8 method, 1 gap, 8 retraction.

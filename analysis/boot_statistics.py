@@ -54,7 +54,8 @@ BASELINE_GPU = "NVIDIA L4"
 def boots(mech: str, eager: bool, field: str = "throughput",
           probes_only: bool = False,
           engine_ref: str = BASELINE_ENGINE_REF,
-          gpu: str = BASELINE_GPU):
+          gpu: str = BASELINE_GPU,
+          has_uuid: bool | None = None):
     """Boots of one mechanism/arm at concurrency 1.
 
     `probes_only` restricts to boot_variance runs, which replay one fixed
@@ -74,6 +75,15 @@ def boots(mech: str, eager: bool, field: str = "throughput",
     model is not part of cell_id at all, by design, since a cell is a
     declared configuration rather than a machine. Hardware can only be
     separated via `env`.
+
+    `has_uuid` separates measurements taken before GPU identity was recorded
+    from those taken after. It is not cosmetic. The published 13.92% pools 12
+    boots drawn from THREE separate container sessions on unknown physical
+    cards, so it contains an unknown amount of host-to-host variation; a
+    single-session run on one known card is a different quantity and must not
+    be averaged with it. Without this filter, re-running 0.29.0 would append
+    to the same series -- same engine_ref, same GPU model, same cell_id -- and
+    silently turn n=12 into n=24, moving a number the paper reports.
     
     Pooling in grid records mixes in prompt variation, because sweep.py
     offsets the seed by repeat index so repeats draw different prompts by
@@ -92,6 +102,9 @@ def boots(mech: str, eager: bool, field: str = "throughput",
         r = json.loads(line)
         c = r["config"]
         if c.get("engine_ref") != engine_ref:
+            continue
+        if has_uuid is not None and \
+                (((r.get("env") or {}).get("gpu_uuid") is not None) != has_uuid):
             continue
         if (r.get("env") or {}).get("gpu") != gpu:
             continue
@@ -117,6 +130,9 @@ def boots(mech: str, eager: bool, field: str = "throughput",
             if r.get("phase") != "boot_variance":
                 continue
             if (r.get("config") or {}).get("engine_ref") != engine_ref:
+                continue
+            if has_uuid is not None and \
+                    (((r.get("env") or {}).get("gpu_uuid") is not None) != has_uuid):
                 continue
             if (r.get("env") or {}).get("gpu") != gpu:
                 continue
