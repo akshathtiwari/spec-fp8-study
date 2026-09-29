@@ -4,6 +4,7 @@ title: On vLLM 0.30.0 the speculative boot dispersion is absent and default-path
 kind: result
 status: established
 confidence: medium
+# see F033: the 0.99% here is a single draw of a non-reproducing quantity
 date: 2026-09-29
 evidence:
   runs: [2026-09-29T04-48Z_boot_variance]
@@ -12,6 +13,7 @@ evidence:
   code_sha: pending
 supersedes: []
 superseded_by: []
+# refined by F033
 ---
 
 ## Claim
@@ -97,36 +99,36 @@ So the two most plausible explanations are both refuted by stored evidence.
 The mechanism is unidentified, and now unidentified in a stronger sense: it is
 not merely uninvestigated, it is not the graph mode and not the backend.
 
-## The confound, stated before the conclusion
+## The confound, corrected 2026-09-29 (see F033)
 
-**This comparison is not host-controlled, and the direction of the bias is
-against the 0.29.0 arm.**
+**This section originally claimed the 0.29.0 baseline pooled three container
+sessions and therefore mixed host variation into boot variation. That was
+wrong**, and it is left here rather than deleted because the correction is
+the point. A one-way decomposition of the 12 published boots shows 100% of
+their variance is within a single session, `2026-09-23T19-28Z`. The three
+probe_runs in `results/probes.jsonl` span all mechanisms and arms; the
+headline series is one container.
 
-The 13.92% baseline pools 12 boots drawn from *three separate container
-sessions* (`2026-09-23T07-20Z`, `11-08Z`, `19-28Z`) on rented instances whose
-physical identity was never recorded. It therefore contains an unknown amount
-of host-to-host variation.
+So both measurements compared here are single-session. They ran on different
+physical cards, which the eager arm largely absorbs: eager reads 80.5 on the
+0.29.0 baseline session, 79.7 on the 0.29.0 control, and 81.6 here, within
+2.4% across all three.
 
-This 0.30.0 measurement is 12 boots in *one session on one known card*. It
-structurally cannot contain cross-host variation.
+The real problem is worse and is recorded in **F033**: a second 12-boot
+measurement of 0.29.0 gives CV 3.73% and mean 61.2, against this baseline's
+13.92% and 39.2. The dispersion does not reproduce in magnitude. Therefore the
+0.99% reported above is **one draw of a quantity now known not to reproduce
+from one draw**, and it must not be quoted the way 13.92% was quoted until
+0.30.0 has been measured in a second session.
 
-So part of the fourteenfold difference may be experimental structure rather
-than engine version. The CV comparison is suggestive, not clean.
+What survives the correction is the eager-normalised deficit, which is a
+within-session ratio and so immune to card differences:
 
-Two things are not explained by that confound:
-
-- **The median doubled.** Cross-host scatter moves dispersion; it does not
-  move a central tendency from 40.8 to 82.9. A host that is uniformly half
-  speed is not a plausible reading of the 0.29.0 grid, where the eager arm on
-  the same sessions reached 80.9.
-- **The eager arm is unchanged across versions.** If 0.30.0 or a faster class
-  of host were responsible, eager should have moved too. It did not.
-
-The clean experiment is 12 boots of **0.29.0 in one session with `gpu_uuid`
-recorded**, structurally matched to this one. That run is in flight. If
-single-session 0.29.0 still shows ~14%, this is a boot effect and the version
-difference is real. If it shows ~1%, then the published 13.92% was largely
-cross-session variation and \S4's headline needs restating.
+| session | default / eager |
+|---|---|
+| 0.29.0, 2026-09-23 | 0.49 |
+| 0.29.0, 2026-09-29 | 0.77 |
+| 0.30.0, 2026-09-29 | **1.01** |
 
 ## What this does NOT establish
 

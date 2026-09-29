@@ -43,10 +43,13 @@ so an FP8-versus-BF16 comparison under default settings silently swaps the
 attention kernel as well; target and draft models select backends
 independently, so pinning one does not pin the other. Second, speculative
 throughput is \emph{unreproducible across boots} of an identical
-configuration while acceptance is not: coefficient of variation 13.92\%
-over 12 fixed-prompt boots. The dispersion was present with CUDA graphs
-enabled and collapsed under \tw{-{}-enforce-eager} (CV 1.44\%); the
-responsible mechanism remains unidentified. Third, acceptance
+configuration while acceptance is not --- and the dispersion is itself
+unreproducible. Two 12-boot measurements of the same configuration on the
+same engine release give CV 13.92\% and 3.73\%, against an eager control
+that reads 1.44\% and 1.69\%. Normalised by that control, the CUDA-graph
+path costs 23--51\% of eager throughput on 0.29.0 and reaches parity on
+0.30.0. The mechanism remains unidentified, and the two checkable
+candidates --- graph mode and backend selection --- are ruled out. Third, acceptance
 length $\tau$ has a boot-to-boot \emph{coefficient of variation of 0.62\%}
 under repeated identical boots, which we could not find reported; our own
 FP8-precision comparison is unreplicated and we withdraw the equivalence
@@ -94,9 +97,11 @@ vLLM's \tw{auto} backend selection is conditioned on KV-cache dtype, and
 target and draft select independently. A precision A/B under defaults is a
 kernel A/B as well.
 \item \textbf{Unreproducible speculative throughput} (\S\ref{sec:c2}).
-Identical configurations have CV 13.92\% across 12 fixed-prompt boots at
-constant acceptance. We localise this to \emph{draft-model} speculation:
-n-gram shows CV 2.67\%. We do not identify the mechanism. \tw{-{}-enforce-eager} removes the
+Identical configurations disperse across boots at constant acceptance, by
+CV 13.92\% in one session and 3.73\% in another. The dispersion is real in
+both and its magnitude is not a property of the configuration. We do not
+identify the mechanism, and we report a draft-model localisation as
+suggestive rather than established. \tw{-{}-enforce-eager} removes the
 variance but is not a free control --- it costs FP8-weight configurations
 a fifth to a half of their throughput and cannot boot speculative FP8-KV
 cells at all on this card.
@@ -129,7 +134,7 @@ time.
 \begin{table}[h]\centering\small
 \begin{tabular}{ll}
 \toprule
-Engine & vLLM 0.29.0, pinned; version read from the running server over HTTP\\
+Engine & vLLM 0.29.0, pinned by image; \S\ref{sec:c2} adds a 0.30.0 replication\\
 GPU & NVIDIA L4 (SM89, Ada, 24\,GB nominal / 22.03\,GiB usable), rented per second\\
 Target & Qwen3-4B\\
 Draft & \tw{z-lab/Qwen3-4B-DFlash-b16}, block size 16, 5 speculative tokens\\
@@ -214,12 +219,70 @@ corrected the report. The mistake is instructive because we compared
 requested-versus-selected backend for \emph{a server} when there is no such
 thing as a server's backend --- there are two.
 
-\section{Confound 2: speculative throughput is unreproducible across boots}\label{sec:c2}
+\section{Confound 2: speculative throughput is unreproducible across boots,
+and so is the dispersion itself}\label{sec:c2}
 
 Booting an identical speculative configuration repeatedly produces widely
-scattered throughput while acceptance stays put. Over 12 boots that replay
-one fixed prompt set, the coefficient of variation is \textbf{13.92\%}
-(median 40.8 tok/s).
+scattered throughput while acceptance stays put. We measured this twice, six
+days apart, and report both because they disagree:
+
+\begin{center}\small
+\begin{tabular}{llrrr}
+\toprule
+Engine & Arm & Session & Mean tok/s & CV\\
+\midrule
+0.29.0 & default & 2026-09-23 & 39.2 & \textbf{13.92\%}\\
+0.29.0 & default & 2026-09-29 & 61.2 & \textbf{3.73\%}\\
+0.29.0 & eager & 2026-09-23 & 80.5 & 1.44\%\\
+0.29.0 & eager & 2026-09-29 & 79.7 & 1.69\%\\
+0.30.0 & default & 2026-09-29 & 82.8 & 0.99\%\\
+0.30.0 & eager & 2026-09-29 & 81.6 & 1.28\%\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+Each row is 12 fixed-prompt boots inside a single container (the first eager
+row is 8). Both 0.29.0 default rows measure the same declared configuration
+on the same engine release. They differ by a factor of 3.7 in dispersion and
+1.6 in level.
+
+\paragraph{The eager arm is the control, and it does not move.} 80.5, 79.7
+and 81.6 tok/s across three sessions, two engine releases and at least two
+distinct physical cards, with CV between 1.28\% and 1.69\%. Normalising each
+default measurement by the eager measurement taken beside it therefore
+removes session and card effects:
+
+\begin{center}\small
+\begin{tabular}{lr}
+\toprule
+Session & default / eager\\
+\midrule
+0.29.0, 2026-09-23 & 0.49\\
+0.29.0, 2026-09-29 & 0.77\\
+0.30.0, 2026-09-29 & \textbf{1.01}\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+On 0.29.0 the CUDA-graph path costs between 23\% and 51\% of the eager path's
+throughput, and how much it costs does not reproduce. On 0.30.0 it reaches
+parity.
+
+\paragraph{An earlier revision of this paper reported only the first row.}
+It gave 13.92\% as \emph{the} boot dispersion of this configuration. A second
+measurement puts the same quantity at 3.73\%. The effect is present in both
+--- the default arm disperses more than the eager arm beside it in every
+session we have run --- but the magnitude is a property of the session, not
+of the configuration, and quoting one number for it was wrong.
+
+We draw the obvious conclusion about our own remaining figures. The 0.99\%
+on 0.30.0 is a single session. By the argument of this very section it should
+not be quoted as that release's dispersion until it has been measured twice,
+and we do not so quote it. A dispersion measured once is a draw, not a
+property; this is the same error as reporting a mean from one run, applied
+one level up, and it survived four revisions of this paper because a clean
+number with $n=12$ does not look like it needs replicating.
 
 Two measurement choices matter here, and we got both wrong in earlier
 revisions. First, we report CV rather than a max/min range: a range grows
@@ -253,7 +316,9 @@ our own headline.
 so that only the boot varies. DFlash's default arm is a wide, continuously
 filled distribution (CV 13.92\%, $n=12$); its eager arm and both n-gram arms
 are tight (1.44\%, 2.67\%, 0.85\%). Every eager boot exceeds every default
-boot. Two earlier versions of this figure were wrong in opposite
+boot. \emph{This figure plots the 2026-09-23 session only.} A second session
+of the identical configuration gives CV 3.73\% with mean 61.2 tok/s, so this
+distribution's width is not reproducible; see \S\ref{sec:c2}. Two earlier versions of this figure were wrong in opposite
 directions: one showed five boots and was captioned as two clusters, the
 other pooled grid runs whose prompts differ and so plotted prompt variation
 alongside boot variation.}
@@ -309,9 +374,12 @@ low-end boot the same eager numbers give $2.19\times$. The ratio is a
 statement about where in the default arm's distribution the comparison boot
 happened to land, not about the flag.
 
-What is stable is the \emph{dispersion}: CV 13.92\% over 12 default boots
-against 1.44\% over 8 eager boots, and every eager boot exceeds every
-default boot. Turning CUDA graphs off does not reliably make speculative
+What is stable, within a session, is the \emph{ordering}: CV 13.92\% over 12
+default boots against 1.44\% over 8 eager boots, and every eager boot exceeds
+every default boot. The default arm disperses more than the eager arm beside
+it in every session we have run (13.92 vs 1.44; 3.73 vs 1.69; 0.99 vs 1.28 on
+0.30.0, where the ordering finally inverts). The dispersion \emph{magnitude}
+is not stable and we no longer describe it as such. Turning CUDA graphs off does not reliably make speculative
 decoding faster by a stated factor --- it makes it \emph{reproducible}, and
 whatever throughput it gains is however far down the distribution the
 default would otherwise have fallen.
@@ -320,10 +388,16 @@ Our first write-up of this section led with $2.38\times$, obtained by
 comparing against an arm we assumed representative, which was one draw from
 the wide distribution this same section describes.
 
-\paragraph{It is specific to draft-model speculation.} Running the identical
-protocol with n-gram (prompt-lookup) speculation finds no such dispersion
-across twelve boots --- CV 2.67\% against DFlash's 13.92\% --- and no
-benefit from \tw{-{}-enforce-eager}. These are the same
+\paragraph{It may be specific to draft-model speculation; our evidence is
+weaker than we first reported.} Running the identical protocol with n-gram
+(prompt-lookup) speculation gives CV 2.67\% across twelve boots against
+DFlash's 13.92\%, and no benefit from \tw{-{}-enforce-eager}. But those
+twelve n-gram boots pool two container sessions (CV 3.19\% at $n=4$ and
+1.55\% at $n=8$), and neither is the session that produced DFlash's 13.92\%.
+Since DFlash's own dispersion ranges from 3.73\% to 13.92\% across sessions,
+n-gram's 3.19\% is not distinguishable from DFlash's quieter session. The
+comparison is cross-session and the localisation is suggestive, not
+established. These are the same
 fact arriving twice: if throughput is already reproducible, there is nothing
 for the flag to stabilise. As a measurement sanity check, n-gram's acceptance is deterministic
 ($\tau = 1.732$ on every boot, spread $1.000\times$) where DFlash's spans
@@ -331,11 +405,12 @@ for the flag to stabilise. As a measurement sanity check, n-gram's acceptance is
 prompt-matching mechanism should do. (The wider 4.09--4.43 seen elsewhere in
 our records spans different prompt sets and is not comparable.)
 
-Twelve boots cannot prove absence; they bound it. At matched $n=12$,
-DFlash gives CV 13.92\% and n-gram 2.67\%, a factor of five apart, so if
-n-gram shared DFlash's dispersion, drawing twelve boots that tight would be
-unlikely. We report this as a localisation, not an
-exclusion. The
+Twelve boots cannot prove absence; they bound it. At matched $n=12$, DFlash
+gives CV 13.92\% and n-gram 2.67\%, a factor of five apart. That argument
+holds only against DFlash's noisiest session: matched against its quieter one
+the two are 3.73\% and 2.67\%, and the factor of five disappears. We report
+this as a weak localisation and note that settling it requires n-gram and
+DFlash measured in the \emph{same} session, which we have not done. The
 consequence is that a claim like ours has to name the mechanism:
 ``speculative throughput is unreproducible'' would be refuted by the first
 reader who tries prompt-lookup.
@@ -346,6 +421,30 @@ measured}\label{sec:c3}
 Across 12 boots of an identical configuration with identical prompts,
 acceptance has a coefficient of variation of \textbf{0.62\%} (mean $\tau$
 4.1055, sd 0.0256, 95\% CI on the mean [4.0893, 4.1218]).
+
+\paragraph{Unlike the throughput dispersion, this one replicates.} We later
+measured the same quantity in two further sessions, one on the same engine
+release and one on 0.30.0:
+
+\begin{center}\small
+\begin{tabular}{llrrr}
+\toprule
+Engine & Session & $n$ & Mean $\tau$ & CV\\
+\midrule
+0.29.0 & 2026-09-23 & 12 & 4.1055 & 0.62\%\\
+0.29.0 & 2026-09-29 & 12 & 4.1255 & 0.30\%\\
+0.30.0 & 2026-09-29 & 12 & 4.1498 & 0.61\%\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+Three sessions, two engine releases, at least two physical cards: mean
+$\tau$ within 1\% and dispersion below 0.7\% throughout. This is the contrast
+that makes \S\ref{sec:c2} worth reporting. On the same boots, acceptance is
+reproducible and reproducibly quiet, while throughput dispersion ranges over
+a factor of fourteen. Whatever varies between boots is not changing which
+tokens the drafter gets accepted; it is changing how fast they are produced.
 
 \paragraph{We previously called this a ``noise floor'' and withdraw that.}
 An earlier revision reported the \emph{range} of four boots, 1.32\%, and
@@ -823,9 +922,9 @@ choice shifts GSM8K accuracy by up to 16.6 percentage points, and that
 measure no throughput or latency at all.
 
 That pairing is worth stating plainly. The execution-path switch that moves
-output agreement by 0.15\% is the same switch across which we measure a
-13.92\% throughput CV (\S\ref{sec:c2}), on the same model family and the same
-GPU architecture. We do not read this as a contradiction: they are two
+output agreement by 0.15\% is the same switch across which we measure
+throughput dispersion of 3.73--13.92\% depending on the session
+(\S\ref{sec:c2}), on the same model family and the same GPU architecture. We do not read this as a contradiction: they are two
 different quantities, and a switch may reasonably leave one alone while
 moving the other. We read it as the clearest available evidence that the
 throughput axis of this switch has not been examined --- a careful,

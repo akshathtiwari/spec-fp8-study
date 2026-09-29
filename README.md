@@ -20,11 +20,13 @@ obscured:
    precision A/B under default settings is a kernel A/B as well. Target and
    draft models select *independently*, so pinning one does not pin the other.
 2. **Throughput of an identical speculative configuration is
-   unreproducible across boots** while acceptance is not: CV 13.92% over 12
-   fixed-prompt boots, collapsing to 1.44% under `--enforce-eager`. The
-   dispersion is *associated with* the CUDA-graph path; the mechanism is
-   unidentified, and boot and host effects were not separated. Specific to
-   *draft-model* speculation: n-gram gives CV 2.67% at the same n.
+   unreproducible across boots, and so is the dispersion.** Two 12-boot
+   measurements of the same configuration on the same engine release give
+   CV 13.92% and 3.73%, against an eager control reading 1.44% and 1.69%.
+   Normalised by that control the CUDA-graph path costs 23-51% of eager
+   throughput on 0.29.0 and reaches parity on 0.30.0. The mechanism is
+   unidentified and the two checkable candidates are ruled out (F032). A
+   dispersion measured once is a draw, not a property (F033).
 3. **Acceptance (tau) has a boot-to-boot CV of 0.62%** under repeated
    identical boots, which we could not find reported. We do *not* convert
    this into a detection threshold: our FP8 precision comparison is
@@ -44,7 +46,7 @@ became a measurement-methodology paper.
 ## The record
 
 ```
-findings/        32 numbered findings: results, methods, retractions, gaps.
+findings/        33 numbered findings: results, methods, retractions, gaps.
                  Each carries a mandatory "What this does NOT establish".
                  Wrong claims are superseded, never deleted.
 results/         Raw records, append-only. ~40 MB, committed on purpose:
@@ -55,7 +57,7 @@ docs/            Requirements, design, data model, paper outline.
 paper/           LaTeX source, figures, and build script.
 ```
 
-8 of the 32 findings are retractions. They are kept deliberately. The
+8 of the 33 findings are retractions. They are kept deliberately. The
 study's argument is that benchmark numbers are routinely reported without
 their error terms, and the most honest evidence for that is the list of times
 we did it ourselves and caught it.

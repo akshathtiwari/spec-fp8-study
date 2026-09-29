@@ -149,8 +149,15 @@ def boots(mech: str, eager: bool, field: str = "throughput",
     return out
 
 
-def _probe_taus() -> list[float]:
-    """tau from boot_variance probes only, where prompts are held fixed."""
+def _probe_taus(has_uuid: bool | None = False) -> list[float]:
+    """tau from boot_variance probes only, where prompts are held fixed.
+
+    `has_uuid` defaults to False, i.e. the published 2026-09-23 session. Once
+    a second session exists these pool, and pooling moved the reported figure
+    from CV 0.62% at n=12 to 0.54% at n=24 without anything flagging it --
+    the same contamination F033 describes for throughput, in the function
+    next door. Sessions are reported separately by `_taus_by_session`.
+    """
     out = []
     p = ROOT / "results" / "probes.jsonl"
     if not p.exists():
@@ -165,6 +172,9 @@ def _probe_taus() -> list[float]:
             continue
         if (r.get("env") or {}).get("gpu") != BASELINE_GPU:
             continue
+        if has_uuid is not None and \
+                (((r.get("env") or {}).get("gpu_uuid") is not None) != has_uuid):
+            continue
         if (r.get("config") or {}).get("mechanism") != "dflash":
             continue
         if (r.get("load") or {}).get("concurrency") != 1:
@@ -173,6 +183,71 @@ def _probe_taus() -> list[float]:
         if t:
             out.append(t)
     return out
+
+
+
+def by_session(mech: str, arm: str) -> list[tuple]:
+    """Per-container-session dispersion, one row per probe_run.
+
+    Exists because F033: the study reported one 12-boot CV per arm and treated
+    it as the dispersion, and a second measurement of the same configuration
+    on the same engine release gave a figure 3.7x smaller. Any CV quoted from
+    a single session is a draw, so the sessions have to be visible rather than
+    pooled away. It also shows that the n-gram comparison underpinning the
+    draft-model localisation is cross-session.
+    """
+    rows: dict[tuple, list[float]] = {}
+    p = ROOT / "results" / "probes.jsonl"
+    if not p.exists():
+        return []
+    for line in p.read_text().splitlines():
+        if not line.strip():
+            continue
+        r = json.loads(line)
+        c = r.get("config") or {}
+        if r.get("phase") != "boot_variance" or c.get("mechanism") != mech:
+            continue
+        if r.get("arm") != arm:
+            continue
+        if (r.get("load") or {}).get("concurrency") != 1:
+            continue
+        v = (r.get("throughput") or {}).get("output_tokens_per_s")
+        if not v:
+            continue
+        key = (c.get("engine_ref"), r.get("probe_run"),
+               (r.get("env") or {}).get("gpu_uuid"))
+        rows.setdefault(key, []).append(v)
+    out = []
+    for (er, pr, uu), v in sorted(rows.items()):
+        if len(v) < 2:
+            continue
+        out.append((er, pr, uu, len(v), st.mean(v), st.stdev(v) / st.mean(v) * 100))
+    return out
+
+
+
+def _taus_by_session() -> list[tuple]:
+    """Acceptance per container session, so its replication is checkable."""
+    rows: dict[tuple, list[float]] = {}
+    p = ROOT / "results" / "probes.jsonl"
+    if not p.exists():
+        return []
+    for line in p.read_text().splitlines():
+        if not line.strip():
+            continue
+        r = json.loads(line)
+        c = r.get("config") or {}
+        if r.get("phase") != "boot_variance" or c.get("mechanism") != "dflash":
+            continue
+        if r.get("arm") != "default":
+            continue
+        if (r.get("load") or {}).get("concurrency") != 1:
+            continue
+        t = (r.get("spec") or {}).get("tau")
+        if t:
+            rows.setdefault((c.get("engine_ref"), r.get("probe_run")), []).append(t)
+    return [(er, pr, len(v), st.mean(v), st.stdev(v) / st.mean(v) * 100)
+            for (er, pr), v in sorted(rows.items()) if len(v) > 1]
 
 
 def describe(v: list[float]) -> dict:
@@ -206,7 +281,12 @@ def main() -> int:
               ("n-gram default", "ngram", False),
               ("n-gram eager", "ngram", True)]
     for label, mech, eager in series:
-        v = boots(mech, eager, probes_only=True)
+        # has_uuid=False pins this to the published 2026-09-23 measurements.
+        # Without it the two 0.29.0 sessions pool, and because their means
+        # differ (39.2 vs 61.2) the pooled CV is 23.85% -- HIGHER than either
+        # session's 13.92% or 3.73%. A pooled dispersion is not an average of
+        # the dispersions (F033).
+        v = boots(mech, eager, probes_only=True, has_uuid=False)
         if len(v) < 2:
             continue
         d = describe(v)
@@ -221,7 +301,12 @@ def main() -> int:
           "reported them as one.", "",
           "| series | n | CV (pooled) |", "|---|---|---|"]
     for label, mech, eager in series:
-        v = boots(mech, eager)
+        # Pinned to the published measurements for the same reason the table
+        # above is: this section exists to show what pooling PROMPT variation
+        # into boot variation did to the 2026-09-23 figure (29.92%). Letting
+        # later sessions in would silently restate a historical number that
+        # the paper quotes as history.
+        v = boots(mech, eager, has_uuid=False)
         if len(v) > 1:
             L.append(f"| {label} | {len(v)} | {describe(v)['cv']:.2f}% |")
 
@@ -268,12 +353,38 @@ def main() -> int:
               f"was reported at n=8. Roughly a fifth of the headline "
               f"contrast was sample size, not behaviour."]
 
+    # Per-session breakdown. F033: a CV from one session is a draw.
+    L += ["", "## Dispersion per container session", "",
+          "One row per `probe_run`, which is one container. A CV quoted from "
+          "a single row is a single draw of a quantity whose session-to-"
+          "session spread is larger than most effects this study reports "
+          "(F033).", "",
+          "| engine | mechanism | arm | session | gpu_uuid | n | mean | CV |",
+          "|---|---|---|---|---|---|---|---|"]
+    for mech in ("dflash", "ngram"):
+        for arm in ("default", "enforce_eager"):
+            for er, pr, uu, n_, m, cv in by_session(mech, arm):
+                sid = (pr or "?")[:16]
+                uus = (uu[:16] + "...") if uu else "not recorded"
+                L.append(f"| {er} | {mech} | {arm} | {sid} | {uus} | {n_} "
+                         f"| {m:.1f} | **{cv:.2f}%** |")
+
+    ts = _taus_by_session()
+    if ts:
+        L += ["", "### Acceptance per session: does it replicate?", "",
+              "| engine | session | n | mean tau | CV |", "|---|---|---|---|---|"]
+        for er, pr, n_, m, cv in ts:
+            L.append(f"| {er} | {pr[:16]} | {n_} | {m:.4f} | **{cv:.2f}%** |")
+        L += ["", "Acceptance dispersion reproduces across sessions and engine "
+              "releases where throughput dispersion does not. That contrast is "
+              "the point: the quantity that moves is throughput."]
+
     (OUT / "boot_statistics.md").write_text("\n".join(L) + "\n")
     print(f"  wrote analysis/out/tables/boot_statistics.md")
     for label, mech, eager in series:
-        v = boots(mech, eager, probes_only=True)
+        v = boots(mech, eager, probes_only=True, has_uuid=False)
         if len(v) > 1:
-            d = describe(boots(mech, eager, probes_only=True))
+            d = describe(v)
             print(f"    {label:<16} n={d['n']:<3} CV {d['cv']:5.2f}%  "
                   f"median {d['median']:6.1f}   (probe-only)")
     return 0

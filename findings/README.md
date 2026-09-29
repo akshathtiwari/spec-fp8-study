@@ -64,6 +64,8 @@ wrong turns and what caught them — is part of the evidence.
 
 | [`F032`](F032-dispersion-absent-on-vllm-030.md) | On vLLM 0.30.0 the boot dispersion is absent (CV 0.99% vs 13.92%) and default-path throughput doubles to match the eager arm; but the 0.29.0 baseline pools three container sessions and this is one, so the comparison is not host-controlled | result | medium |
 
+| [`F033`](F033-the-dispersion-is-real-but-its-magnitude-is-not-reproducible.md) | Boot dispersion on 0.29.0 measured twice gives 13.92% and 3.73% against an eager control at 1.44% and 1.69%; the dispersion is real, its magnitude is not reproducible, and a dispersion measured once is a draw rather than a property | result | high |
+
 ---
 
-32 findings: 15 result, 8 method, 1 gap, 8 retraction.
+33 findings: 16 result, 8 method, 1 gap, 8 retraction.
