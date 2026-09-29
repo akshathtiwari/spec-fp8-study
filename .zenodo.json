@@ -28,12 +28,5 @@
     "Ada Lovelace",
     "SM89"
   ],
-  "related_identifiers": [
-    {
-      "identifier": "https://github.com/akshathtiwari/spec-fp8-study",
-      "relation": "isSupplementTo",
-      "scheme": "url"
-    }
-  ],
-  "notes": "Measurements were taken on rented NVIDIA L4 instances. GPU serial, clocks and power state were not recorded, so boot-to-boot and host-to-host components of the dispersion reported in section 4 cannot be separated. This limitation is stated in the paper's threats section and in docs/reproducibility.md."
+  "notes": "Measurements were taken on rented NVIDIA L4 instances. GPU serial, clocks and power state were not recorded, so boot-to-boot and host-to-host components of the dispersion reported in section 4 cannot be separated. This limitation is stated in the paper's threats section and in docs/reproducibility.md. Zenodo's GitHub integration adds its own isSupplementTo relation to the release, so this file deliberately declares none: two relations of the same type is a plausible validation conflict, and the repository link is supplied by the integration anyway."
 }
