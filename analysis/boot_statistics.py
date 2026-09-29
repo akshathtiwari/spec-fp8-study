@@ -44,14 +44,37 @@ def tcrit(df: int) -> float:
     return 2.09 if df > 20 else 2.20
 
 
+#: The baseline the paper reports: one engine release, one card. Every
+#: record on disk as of 2026-09-29 is exactly this, so these defaults leave
+#: published numbers unchanged.
+BASELINE_ENGINE_REF = "vllm-0.29.0"
+BASELINE_GPU = "NVIDIA L4"
+
+
 def boots(mech: str, eager: bool, field: str = "throughput",
-          probes_only: bool = False):
+          probes_only: bool = False,
+          engine_ref: str = BASELINE_ENGINE_REF,
+          gpu: str = BASELINE_GPU):
     """Boots of one mechanism/arm at concurrency 1.
 
     `probes_only` restricts to boot_variance runs, which replay one fixed
     prompt set on every boot. That is the controlled measurement of
     BOOT dispersion.
 
+    `engine_ref` and `gpu` exist because this function had no way to tell
+    engine versions or GPU models apart, and the study only ever ran one of
+    each -- so the gap was invisible and would have stayed invisible until
+    exactly the run that exploited it. A vLLM 0.30.0 replication, or a run on
+    a second card, writes records that match every filter here (same
+    mechanism, same arm, same precision, same concurrency) and would have
+    been pooled straight into the headline 13.92% CV, silently changing it.
+
+    Note that a GPU filter cannot be replaced by a cell_id filter. engine_ref
+    is part of cell_id, so a version change is at least *visible* there; GPU
+    model is not part of cell_id at all, by design, since a cell is a
+    declared configuration rather than a machine. Hardware can only be
+    separated via `env`.
+    
     Pooling in grid records mixes in prompt variation, because sweep.py
     offsets the seed by repeat index so repeats draw different prompts by
     design. An earlier revision excluded them from the acceptance analysis
@@ -68,6 +91,10 @@ def boots(mech: str, eager: bool, field: str = "throughput",
             continue
         r = json.loads(line)
         c = r["config"]
+        if c.get("engine_ref") != engine_ref:
+            continue
+        if (r.get("env") or {}).get("gpu") != gpu:
+            continue
         if c["mechanism"] != mech or bool(c.get("enforce_eager")) != eager:
             continue
         if c.get("weight_precision") != "bf16" or c.get("kv_cache_dtype") != "auto":
@@ -88,6 +115,10 @@ def boots(mech: str, eager: bool, field: str = "throughput",
                 continue
             r = json.loads(line)
             if r.get("phase") != "boot_variance":
+                continue
+            if (r.get("config") or {}).get("engine_ref") != engine_ref:
+                continue
+            if (r.get("env") or {}).get("gpu") != gpu:
                 continue
             if (r.get("config") or {}).get("mechanism") != mech:
                 continue
@@ -113,6 +144,10 @@ def _probe_taus() -> list[float]:
             continue
         r = json.loads(line)
         if r.get("phase") != "boot_variance" or r.get("arm") != "default":
+            continue
+        if (r.get("config") or {}).get("engine_ref") != BASELINE_ENGINE_REF:
+            continue
+        if (r.get("env") or {}).get("gpu") != BASELINE_GPU:
             continue
         if (r.get("config") or {}).get("mechanism") != "dflash":
             continue
