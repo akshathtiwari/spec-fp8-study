@@ -6,6 +6,11 @@ status: established
 confidence: high
 date: 2026-09-23
 evidence:
+  # One tag, two grids. The second end-to-end grid is in the "Replicated,
+  # with the magnitude not reproducing" section below, but sweep.jsonl
+  # records no session label, so its run cannot be cited here. The two-grid
+  # comparison lives in the analysis output instead. This is the gap the
+  # paper's threats section now names.
   runs: [2026-09-22T19-4xZ_perf_v2]
   analysis: [analysis/out/tables/cudagraph_arms.md]
   code_sha: pending

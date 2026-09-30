@@ -902,6 +902,24 @@ report, and \S\ref{sec:c4}'s argument is structural rather than
 timing-precision dependent. We did not, however, run a client-saturation
 control --- for instance against a zero-latency mock server --- so this rests
 on a load-regime argument rather than on a measurement of our own harness.
+\item \textbf{Which claims are replicated, and which are single-session.}
+\S\ref{sec:c2} argues that a quantity measured once is a draw, so we state
+where this paper meets that standard. \emph{Replicated:} the throughput
+dispersion and the default/eager ratio (five sessions, three cards, two
+engine releases); acceptance dispersion (three sessions); the eager penalty
+on FP8 weights, whose direction reproduces across two independent grids
+while its coefficient does not, which is why we report a range.
+\emph{Structural rather than statistical, and so not subject to this:}
+backend selection under dtype change and the ITL/chunk identity, both
+categorical facts read from engine logs. \emph{Single-session, and to be
+read as draws:} the A10 dispersion, the 0.30.0 dispersion at each individual
+card, and the goodput figures at concurrency 64.
+\item \textbf{Grid records carry no session identity.} \tw{probes.jsonl}
+records a \tw{probe\_run} per container; \tw{sweep.jsonl} records nothing
+equivalent. So for any result derived from the grid --- capacity, accuracy,
+goodput --- the question \S\ref{sec:c2} shows to matter, \emph{how many
+sessions is this}, cannot be answered from the records. We found this by
+trying to ask it. The fix is one field and it is not retrospective.
 \item \textbf{The draft-side backend confound is acknowledged, not removed.}
 \item \textbf{Our retraction list covers errors we caught.} The same
 blindness that produced them applies to finding them. We assume undiscovered
