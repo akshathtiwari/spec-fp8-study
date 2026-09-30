@@ -231,19 +231,21 @@ scattered throughput while acceptance stays put. We measured this twice, six
 days apart, and report both because they disagree:
 
 \begin{center}\small
-\begin{tabular}{llrrr}
+\begin{tabular}{lllrrr}
 \toprule
-Engine & Arm & Session & Mean tok/s & CV\\
+Engine & Card & Arm & Session & Mean tok/s & CV\\
 \midrule
-0.29.0 & default & 09-23 & 39.2 & \textbf{13.92\%}\\
-0.29.0 & default & 09-29 a & 61.2 & \textbf{3.73\%}\\
-0.30.0 & default & 09-29 b & 82.8 & 0.99\%\\
-0.30.0 & default & 09-29 c & 78.2 & 1.61\%\\
+0.29.0 & L4 & default & 09-23 & 39.2 & \textbf{13.92\%}\\
+0.29.0 & L4 & default & 09-29 a & 61.2 & \textbf{3.73\%}\\
+0.30.0 & L4 & default & 09-29 b & 82.8 & 0.99\%\\
+0.30.0 & L4 & default & 09-29 c & 78.2 & 1.61\%\\
+0.29.0 & \textbf{A10} & default & 09-30 & \textbf{132.6} & \textbf{2.08\%}\\
 \addlinespace
-0.29.0 & eager & 09-23 & 80.5 & 1.44\%\\
-0.29.0 & eager & 09-29 a & 79.7 & 1.69\%\\
-0.30.0 & eager & 09-29 b & 81.6 & 1.28\%\\
-0.30.0 & eager & 09-29 c & 77.0 & 2.79\%\\
+0.29.0 & L4 & eager & 09-23 & 80.5 & 1.44\%\\
+0.29.0 & L4 & eager & 09-29 a & 79.7 & 1.69\%\\
+0.30.0 & L4 & eager & 09-29 b & 81.6 & 1.28\%\\
+0.30.0 & L4 & eager & 09-29 c & 77.0 & 2.79\%\\
+0.29.0 & \textbf{A10} & eager & 09-30 & \textbf{138.3} & 1.28\%\\
 \bottomrule
 \end{tabular}
 \end{center}
@@ -265,23 +267,41 @@ default measurement by the eager measurement taken beside it therefore
 removes session and card effects:
 
 \begin{center}\small
-\begin{tabular}{llr}
+\begin{tabular}{lllr}
 \toprule
-Engine & Session & default / eager\\
+Engine & Card & Session & default / eager\\
 \midrule
-0.29.0 & 09-23 & 0.487\\
-0.29.0 & 09-29 a & 0.768\\
-0.30.0 & 09-29 b & \textbf{1.014}\\
-0.30.0 & 09-29 c & \textbf{1.017}\\
+0.29.0 & L4 & 09-23 & 0.487\\
+0.29.0 & L4 & 09-29 a & 0.768\\
+0.30.0 & L4 & 09-29 b & \textbf{1.014}\\
+0.30.0 & L4 & 09-29 c & \textbf{1.017}\\
+0.29.0 & \textbf{A10} & 09-30 & \textbf{0.959}\\
 \bottomrule
 \end{tabular}
 \end{center}
 
 \noindent
 On 0.29.0 the CUDA-graph path costs between 23\% and 51\% of the eager path's
-throughput, and how much it costs does not reproduce. On 0.30.0 it reaches
-parity, and \emph{that} reproduces: two sessions on different cards agree to
-within 0.3\%, against 58\% disagreement between the two 0.29.0 sessions.
+throughput on the L4, and how much it costs does not reproduce. On 0.30.0 it
+reaches parity, and \emph{that} reproduces: two sessions on different cards
+agree to within 0.3\%, against 58\% disagreement between the two 0.29.0
+sessions.
+
+\paragraph{The deficit is largely specific to the L4.} Running the identical
+0.29.0 sweep on an NVIDIA A10 (SM86, Ampere) gives a ratio of 0.959 and a
+dispersion of 2.08\%. Same engine release, different card, and a 23--51\%
+deficit becomes 4\%. So \S\ref{sec:c2} is not a general property of
+speculative decoding under CUDA graphs, and the \textbf{L4} in this paper's
+title is load-bearing rather than merely descriptive.
+
+Two readings survive and we distinguish neither. The effect may be conditioned
+on architecture (Ada versus Ampere), or on memory capacity: the A10 has 24\,GiB
+against the L4's 22.03\,GiB usable, and \S\ref{sec:results} shows this
+configuration sits close enough to the ceiling that disabling CUDA graphs
+changes whether it boots at all. The capacity reading is the more mundane and
+therefore the more likely. Separating them needs a capacity sweep on one card,
+or a third card chosen to vary one and not the other. We report the A10 as one
+session; by the argument above its 2.08\% is a draw, not a property.
 
 The ratio is the quantity to report. Session 09-29\,c ran 5.6\% slower than
 09-29\,b on \emph{both} arms (default 82.8 to 78.2, eager 81.6 to 77.0).

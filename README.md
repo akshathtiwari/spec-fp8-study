@@ -52,7 +52,7 @@ became a measurement-methodology paper.
 ## The record
 
 ```
-findings/        34 numbered findings: results, methods, retractions, gaps.
+findings/        36 numbered findings: results, methods, retractions, gaps.
                  Each carries a mandatory "What this does NOT establish".
                  Wrong claims are superseded, never deleted.
 results/         Raw records, append-only. ~40 MB, committed on purpose:
@@ -63,7 +63,7 @@ docs/            Requirements, design, data model, paper outline.
 paper/           LaTeX source, figures, and build script.
 ```
 
-8 of the 34 findings are retractions. They are kept deliberately. The
+8 of the 36 findings are retractions. They are kept deliberately. The
 study's argument is that benchmark numbers are routinely reported without
 their error terms, and the most honest evidence for that is the list of times
 we did it ourselves and caught it.

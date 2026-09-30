@@ -117,9 +117,22 @@ def billed(phase: str):
                     if "/root/spec-fp8-study" not in sys.path:
                         sys.path.insert(0, "/root/spec-fp8-study")
                     from specfp8.store import append_budget_log
+                    # Ask the card, do not trust GPU_TYPE. SPECFP8_GPU is
+                    # read at import time and selects the card in the
+                    # decorator, but it is a LOCAL variable: the remote
+                    # container never sees it, so GPU_TYPE is "L4" in here
+                    # regardless of what actually ran. The 2026-09-30T04:12
+                    # entry records L4 for a run on an A10 for exactly that
+                    # reason. F036.
+                    from specfp8.env import capture as _capture_env
+                    _gpu = None
+                    try:
+                        _gpu = _capture_env().gpu
+                    except Exception:
+                        pass
                     append_budget_log(phase, elapsed, "/results",
                                       detail=f"{fn.__name__} (container wall)",
-                                      gpu_type=GPU_TYPE)
+                                      gpu_type=_gpu)
                     results_vol.commit()
                 except Exception as e:
                     # Never let accounting take down a run that produced data.

@@ -27,3 +27,4 @@
 {"ts":"2026-09-29T06:11:30.887476+00:00","phase":"boot_variance","session_gpu_s":4990.4,"cumulative_gpu_s":64859.1,"detail":"boot_variance (container wall)"}
 {"ts":"2026-09-29T07:58:01.058087+00:00","phase":"boot_variance","session_gpu_s":5323.3,"cumulative_gpu_s":70182.4,"detail":"boot_variance (container wall)"}
 {"ts":"2026-09-29T18:46:24.843473+00:00","phase":"boot_variance","session_gpu_s":5405.9,"cumulative_gpu_s":75588.3,"detail":"boot_variance (container wall)"}
+{"ts":"2026-09-30T04:12:21.552133+00:00","phase":"boot_variance","session_gpu_s":3390.8,"cumulative_gpu_s":78979.1,"gpu_type":"L4","detail":"boot_variance (container wall)"}

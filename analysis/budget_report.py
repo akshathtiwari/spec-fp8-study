@@ -37,6 +37,43 @@ GPU_USD_PER_HOUR = {
     "H100": 3.95, "H200": 4.54, "B200": 6.25, "B300": 7.10,
 }
 DEFAULT_GPU = "L4"
+
+#: budget.log now stores the name the driver reports ("NVIDIA A10"), while the
+#: rate table is keyed by Modal's flag ("A10G"). Mapping one to the other here
+#: keeps the log machine-truthful and the pricing correct. Unknown cards fall
+#: back to L4 and are counted, so a new card shows up as an undercount rather
+#: than vanishing.
+DRIVER_TO_RATE_KEY = {
+    "NVIDIA A10": "A10G", "NVIDIA A10G": "A10G", "NVIDIA L4": "L4",
+    "NVIDIA L40S": "L40S", "NVIDIA T4": "T4", "NVIDIA H100": "H100",
+    "NVIDIA H200": "H200", "NVIDIA A100-SXM4-40GB": "A100-40GB",
+    "NVIDIA A100-SXM4-80GB": "A100-80GB",
+}
+
+
+#: Cards seen in budget.log that no rate could be found for. Collected rather
+#: than silently defaulted: falling back to the L4 rate undercounts a B300 run
+#: by 9x, and an accounting error that reports itself as a clean total is the
+#: failure this whole file exists to avoid.
+UNPRICED: set[str] = set()
+
+
+def _rate_key(recorded: str | None) -> str:
+    """Rate-table key for whatever budget.log recorded.
+
+    Entries before 2026-09-30 carry no gpu_type and ran on an L4. Entries
+    after it carry the name the driver reports, which is not Modal's flag
+    name -- "NVIDIA A10" against "A10G" -- hence the mapping.
+    """
+    if not recorded:
+        return DEFAULT_GPU
+    if recorded in GPU_USD_PER_HOUR:
+        return recorded
+    key = DRIVER_TO_RATE_KEY.get(recorded)
+    if key is None:
+        UNPRICED.add(recorded)
+        return DEFAULT_GPU
+    return key
 L4_USD_PER_S = GPU_USD_PER_HOUR["L4"] / 3600.0
 
 #: Measured 2026-09-30 against `modal billing report`: this ledger's floor was
@@ -71,8 +108,7 @@ def main() -> int:
         try:
             e = json.loads(line)
             secs = float(e.get("session_gpu_s", 0.0))
-            gpu = e.get("gpu_type") or DEFAULT_GPU
-            rate = GPU_USD_PER_HOUR.get(gpu, GPU_USD_PER_HOUR[DEFAULT_GPU]) / 3600.0
+            rate = GPU_USD_PER_HOUR[_rate_key(e.get("gpu_type"))] / 3600.0
         except (json.JSONDecodeError, TypeError, ValueError):
             malformed += 1
             continue
@@ -111,6 +147,14 @@ def main() -> int:
     print(f"  - four GPU entrypoints were unbilled before "
           f"{BILLING_COMPLETE_FROM}; the boot-variance and concurrency runs")
     print("    behind F020/F021 are not in this total")
+    if UNPRICED:
+        print()
+        print("  !! UNPRICED GPU(S) -- counted at the L4 rate, so this total "
+              "is WRONG:")
+        for name in sorted(UNPRICED):
+            print(f"     {name!r} has no entry in GPU_USD_PER_HOUR or "
+                  f"DRIVER_TO_RATE_KEY")
+        print("     Add it before trusting any figure above.")
     if malformed:
         print(f"  - {malformed} malformed log line(s) skipped")
     return 0
