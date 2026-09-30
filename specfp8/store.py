@@ -305,6 +305,7 @@ def append_budget_log(
     session_gpu_s: float,
     results_dir: str | Path,
     detail: str = "",
+    gpu_type: str | None = None,
 ) -> None:
     """Append one line to budget.log, carrying the running total forward.
 
@@ -330,6 +331,11 @@ def append_budget_log(
         "cumulative_gpu_s": round(
             _logged_total(log_path) + session_gpu_s, 1),
     }
+    # Which card. Priced at the L4 rate when absent, which is what every
+    # entry before 2026-09-30 ran on. Without this the ledger misprices any
+    # non-L4 run silently, and SPECFP8_GPU makes that a reachable mistake.
+    if gpu_type:
+        entry["gpu_type"] = gpu_type
     if detail:
         entry["detail"] = detail
 

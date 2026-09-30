@@ -28,8 +28,27 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 LOG = ROOT / "results" / "budget.log"
 
-#: Modal L4 on-demand, USD per GPU-second, as quoted 2026-09.
-L4_USD_PER_S = 0.000222
+#: Modal on-demand GPU rates, USD per hour, as published 2026-09.
+#: Entries written before 2026-09-30 carry no `gpu_type` and are priced as
+#: L4, which is what they ran on.
+GPU_USD_PER_HOUR = {
+    "T4": 0.59, "L4": 0.80, "A10G": 1.10, "L40S": 1.95,
+    "A100-40GB": 2.10, "A100-80GB": 2.50, "RTX PRO 6000": 3.03,
+    "H100": 3.95, "H200": 4.54, "B200": 6.25, "B300": 7.10,
+}
+DEFAULT_GPU = "L4"
+L4_USD_PER_S = GPU_USD_PER_HOUR["L4"] / 3600.0
+
+#: Measured 2026-09-30 against `modal billing report`: this ledger's floor was
+#: $16.78 where Modal billed $22.54, so wall-clock inside the container misses
+#: about a quarter of the bill. Container start, image pull, CPU and memory all
+#: sit outside the timed region. Reported rather than silently corrected: the
+#: ratio depends on how much container churn a phase does, and inflating the
+#: floor by a constant would make it look like a measurement.
+FLOOR_CHECKED_ON = "2026-09-30"
+FLOOR_OBSERVED = 16.78
+BILLED_OBSERVED = 22.54
+OBSERVED_FLOOR_RATIO = BILLED_OBSERVED / FLOOR_OBSERVED
 
 #: Entries before this date predate the `billed` decorator, so bespoke GPU
 #: probes in that window are absent from the log entirely.
@@ -52,15 +71,18 @@ def main() -> int:
         try:
             e = json.loads(line)
             secs = float(e.get("session_gpu_s", 0.0))
+            gpu = e.get("gpu_type") or DEFAULT_GPU
+            rate = GPU_USD_PER_HOUR.get(gpu, GPU_USD_PER_HOUR[DEFAULT_GPU]) / 3600.0
         except (json.JSONDecodeError, TypeError, ValueError):
             malformed += 1
             continue
-        by_phase[e.get("phase", "?")].append(secs)
+        by_phase[e.get("phase", "?")].append((secs, rate))
         ts = e.get("ts", "")
         first = min(first, ts) if first else ts
         last = max(last, ts) if last else ts
 
-    total = sum(sum(v) for v in by_phase.values())
+    total = sum(sum(x for x, _ in v) for v in by_phase.values())
+    total_usd = sum(sum(x * r for x, r in v) for v in by_phase.values())
 
     print(f"budget from {LOG.relative_to(ROOT)}")
     if first and last:
@@ -68,18 +90,24 @@ def main() -> int:
     print()
     print(f"{'phase':<16}{'runs':>6}{'GPU s':>12}{'hours':>9}{'USD':>9}")
     print("-" * 52)
-    for phase in sorted(by_phase, key=lambda p: -sum(by_phase[p])):
-        secs = sum(by_phase[phase])
+    for phase in sorted(by_phase, key=lambda p: -sum(x for x, _ in by_phase[p])):
+        secs = sum(x for x, _ in by_phase[phase])
+        usd = sum(x * r for x, r in by_phase[phase])
         print(f"{phase:<16}{len(by_phase[phase]):>6}{secs:>12,.0f}"
-              f"{secs / 3600:>9.2f}{secs * L4_USD_PER_S:>9.2f}")
+              f"{secs / 3600:>9.2f}{usd:>9.2f}")
     print("-" * 52)
     n = sum(len(v) for v in by_phase.values())
     print(f"{'TOTAL':<16}{n:>6}{total:>12,.0f}{total / 3600:>9.2f}"
-          f"{total * L4_USD_PER_S:>9.2f}")
+          f"{total_usd:>9.2f}")
 
     print()
     print("This is a floor, not the billed amount:")
     print("  - container start and image pull are outside the timed region")
+    print("  - CPU and memory are billed alongside GPU and are not counted here")
+    print(f"  - measured {FLOOR_CHECKED_ON} against `modal billing report`: this "
+          f"floor read ${FLOOR_OBSERVED:.2f} where Modal billed "
+          f"${BILLED_OBSERVED:.2f},")
+    print(f"    so the real bill runs about {OBSERVED_FLOOR_RATIO:.2f}x this figure")
     print(f"  - four GPU entrypoints were unbilled before "
           f"{BILLING_COMPLETE_FROM}; the boot-variance and concurrency runs")
     print("    behind F020/F021 are not in this total")
