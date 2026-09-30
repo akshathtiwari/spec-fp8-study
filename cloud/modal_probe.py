@@ -118,7 +118,8 @@ def billed(phase: str):
                         sys.path.insert(0, "/root/spec-fp8-study")
                     from specfp8.store import append_budget_log
                     append_budget_log(phase, elapsed, "/results",
-                                      detail=f"{fn.__name__} (container wall, gpu_type=GPU_TYPE)")
+                                      detail=f"{fn.__name__} (container wall)",
+                                      gpu_type=GPU_TYPE)
                     results_vol.commit()
                 except Exception as e:
                     # Never let accounting take down a run that produced data.
