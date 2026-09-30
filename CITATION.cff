@@ -18,7 +18,7 @@ abstract: >-
   computed from stream-arrival timestamps is inter-chunk latency under
   speculation, which inverts a p95-ITL goodput ranking rather than merely
   adding error to it. Released with the harness, the raw append-only records,
-  the analysis scripts, and 30 findings of which 8 are retractions.
+  the analysis scripts, and 34 findings of which 8 are retractions.
 type: software
 authors:
   - family-names: Tiwari
@@ -26,6 +26,13 @@ authors:
     email: tiwariakshath@gmail.com
     affiliation: Independent
     orcid: "https://orcid.org/0009-0002-1738-4496"
+doi: 10.5281/zenodo.23033168
+identifiers:
+  - type: doi
+    value: 10.5281/zenodo.23033168
+    description: >-
+      Concept DOI. Always resolves to the most recent version. Cite this
+      unless you specifically mean one release.
 repository-code: https://github.com/akshathtiwari/spec-fp8-study
 license: MIT
 license-url: https://github.com/akshathtiwari/spec-fp8-study/blob/main/LICENSE

@@ -4,7 +4,13 @@ An independent measurement study of speculative decoding and FP8 quantization
 on vLLM 0.29.0 / NVIDIA L4 (SM89), with the harness, the raw records, and the
 full history of its own corrections.
 
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.23033168.svg)](https://doi.org/10.5281/zenodo.23033168)
+
 **Paper:** [`paper/paper.pdf`](paper/paper.pdf) (source: `paper/paper.tex`)
+
+**Archived:** [`10.5281/zenodo.23033168`](https://doi.org/10.5281/zenodo.23033168) --- concept DOI, always
+resolves to the current version. Releases are archived individually, so a
+superseded claim stays retrievable alongside the correction.
 
 ---
 
