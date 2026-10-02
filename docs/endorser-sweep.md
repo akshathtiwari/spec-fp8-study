@@ -25,6 +25,42 @@ qualifies.
 
 ---
 
+## Addresses found (2026-10-02) — all still need the cs.LG lookup
+
+Published by the authors themselves on homepages, CVs or papers. Every one is
+a PhD student or recent graduate working directly on this topic, which is the
+tier that actually replies.
+
+| person | email | where | paper | why them |
+|---|---|---|---|---|
+| **Jinda Jia** | `jindjia@iu.edu` | Indiana U. Bloomington, PhD (adv. Fengguang Song) | SAW-INT4 `2604.19157` | First author. Efficient ML systems, works directly in vLLM and SGLang. NeurIPS 2024 + DAC 2025, so the 3-paper bar is plausible |
+| **Zhongzhu Zhou** | `zhongzhu.zhou@sydney.edu.au` | U. Sydney PhD + Together AI | SAW-INT4 `2604.19157` | Low-bit weight/activation/KV quantization "under real serving constraints" — the same framing as this study |
+| **Wenchen Han** | `wenchen.han.22@ucl.ac.uk` | UCL, PhD (finishing Sep 2026) | Lynx `2607.01831` | First author. Speculative progressive KV transfer with mixed-precision KV quantization |
+| **Yuyeong Shin** | `yyshin@katech.re.kr` | Korea Automotive Technology Institute | Is INT8 Portable? `2609.16085` | Sole author. Cross-platform quantized-inference measurement — the same shape as our A10 result |
+| **Chenfeng Xu** | `xuchenfeng@utexas.edu` | UT Austin, incoming Asst. Prof (PhD Berkeley 2025) | SAW-INT4 `2604.19157` | See the note below before writing to him |
+| Teng-Ruei Chen | `luka@krixvon.com` | Krixvon, Taipei | Integer Alibi `2608.13756` | Same SM89 architecture, vLLM kernels. Draft already written |
+| Lea Schönherr | `schoenherr@cispa.de` | CISPA | Silent Hyperparameter `2605.19537` | **sent** |
+| David Pape | `david.pape@cispa.de` | CISPA | same | held as fallback to ~8 Oct |
+| Jonathan Evertz | `jonathan.evertz@cispa.de` | CISPA | same | third at one lab — do not use |
+| Ashok Chandrasekar | `achandrasekar@google.com` | Google | Measurement Bias `2605.24217` | paper carries **no cs.LG** |
+| Jason Kramberger | `jkramberger@google.com` | Google | same | same caveat |
+| Clemson ×5 | `shaerib@`, `nmehrab@`, `pnwoods@`, `ghilles@`, `arazi@g.clemson.edu` | Clemson | Don't Waste Bits `2604.04722` | cs.CV, on-device. Weak hook — one email at most |
+
+### Note on Chenfeng Xu
+
+He is incoming faculty at **UT Austin, which is on the MS application list**.
+Two consequences, and they pull in opposite directions.
+
+An endorsement request is a clean, low-stakes first contact with someone whose
+research actually overlaps, and if he endorses, that correspondence exists
+before any application does. But the email must be *only* about the
+endorsement. No mention of applications, no hint of one. If the two get mixed,
+the ask stops reading as a favour between researchers and starts reading as
+leverage, which is worse than not writing at all.
+
+He is also the most senior person on this list, so by the target-down rule he
+is not the first choice from that paper anyway. Jia or Zhou first.
+
 ## Tranche 1 — closest topic fit
 
 | # | arXiv | paper | cat | note |
