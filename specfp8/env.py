@@ -290,3 +290,130 @@ def _query_torch() -> tuple[str, str]:
         return version, compute_cap
     except ImportError:
         return "not-installed", "unknown"
+
+
+# ---------------------------------------------------------------------------
+# Achieved clocks, power and throttle reasons DURING a measurement.
+#
+# EnvInfo records configured limits: clocks.max.sm and power.limit. Those are
+# what the card is allowed to do, not what it did. F035 proposes that the
+# CUDA-graph deficit on the L4 is power throttling -- a 72 W part at 2040 MHz
+# against a 150 W A10 at 1695 MHz, same 22.5 GiB -- and that hypothesis is
+# precisely the one limits cannot test.
+#
+# nvidia-smi reports throttle REASONS, so this does not have to infer
+# throttling from a clock curve: clocks_throttle_reasons.sw_power_cap is the
+# driver saying "I am clamping this because of the power cap". That is a
+# direct answer where a clock drop would be circumstantial.
+# ---------------------------------------------------------------------------
+
+_SAMPLE_FIELDS = (
+    "clocks.sm", "power.draw", "temperature.gpu",
+    "clocks_throttle_reasons.sw_power_cap",
+    "clocks_throttle_reasons.hw_slowdown",
+    "clocks_throttle_reasons.sw_thermal_slowdown",
+)
+
+
+class GpuSampler:
+    """Poll the GPU in a background thread for the duration of a `with` block.
+
+    Sampling is deliberately cheap and deliberately recorded: an instrument
+    that perturbs the thing it measures has to be able to say by how much, so
+    `interval_s` and `n_samples` go into the record alongside the readings.
+
+    Every failure mode degrades to "no samples" rather than to a wrong number.
+    A card that does not expose throttle reasons yields None for them, which
+    is distinguishable from "not throttling" -- the distinction F018 and F031
+    were both about.
+    """
+
+    def __init__(self, interval_s: float = 2.0):
+        self.interval_s = interval_s
+        self._rows: list[dict] = []
+        self._stop = None
+        self._thread = None
+
+    def __enter__(self):
+        import threading
+        self._stop = threading.Event()
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()
+        return self
+
+    def __exit__(self, *exc):
+        if self._stop is not None:
+            self._stop.set()
+        if self._thread is not None:
+            self._thread.join(timeout=5)
+        return False
+
+    def _loop(self) -> None:
+        while self._stop is not None and not self._stop.is_set():
+            row = _sample_gpu()
+            if row:
+                self._rows.append(row)
+            if self._stop.wait(self.interval_s):
+                break
+
+    def summary(self) -> dict:
+        """Aggregate. Returns `{}` when nothing was sampled, never zeros."""
+        if not self._rows:
+            return {"gpu_samples": 0}
+
+        def _stat(key, fn):
+            vals = [r[key] for r in self._rows if r.get(key) is not None]
+            return round(fn(vals), 1) if vals else None
+
+        throttled = [r for r in self._rows
+                     if r.get("throttle_sw_power_cap") is True]
+        thermal = [r for r in self._rows
+                   if r.get("throttle_sw_thermal") is True]
+        hw = [r for r in self._rows if r.get("throttle_hw_slowdown") is True]
+        return {
+            "gpu_samples": len(self._rows),
+            "gpu_sample_interval_s": self.interval_s,
+            "sm_clock_mean_mhz": _stat("sm_clock_mhz", lambda v: sum(v) / len(v)),
+            "sm_clock_min_mhz": _stat("sm_clock_mhz", min),
+            "sm_clock_max_mhz": _stat("sm_clock_mhz", max),
+            "power_draw_mean_w": _stat("power_w", lambda v: sum(v) / len(v)),
+            "power_draw_max_w": _stat("power_w", max),
+            "temperature_max_c": _stat("temp_c", max),
+            # Fractions, not booleans: "throttled for 3% of the run" and
+            # "throttled for 90%" are different findings.
+            "frac_power_capped": round(len(throttled) / len(self._rows), 3),
+            "frac_thermal_throttled": round(len(thermal) / len(self._rows), 3),
+            "frac_hw_slowdown": round(len(hw) / len(self._rows), 3),
+        }
+
+
+def _sample_gpu() -> dict | None:
+    """One nvidia-smi reading. None if unavailable, never a fabricated row."""
+    try:
+        out = subprocess.run(
+            ["nvidia-smi", f"--query-gpu={','.join(_SAMPLE_FIELDS)}",
+             "--format=csv,noheader,nounits"],
+            capture_output=True, text=True, check=True, timeout=5,
+        ).stdout.strip().split("\n")[0]
+    except Exception:
+        return None
+    p = [x.strip() for x in out.split(",")]
+    if len(p) < len(_SAMPLE_FIELDS):
+        return None
+
+    def _b(v: str):
+        v = v.strip().lower()
+        if v in ("active", "1", "true"):
+            return True
+        if v in ("not active", "0", "false"):
+            return False
+        return None          # unsupported -- NOT the same as "not throttling"
+
+    return {
+        "sm_clock_mhz": _float_or_none(p[0]),
+        "power_w": _float_or_none(p[1]),
+        "temp_c": _float_or_none(p[2]),
+        "throttle_sw_power_cap": _b(p[3]),
+        "throttle_hw_slowdown": _b(p[4]),
+        "throttle_sw_thermal": _b(p[5]),
+    }

@@ -760,7 +760,7 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash",
 
     from specfp8.cells import expand, cell_id as compute_cell_id
     from specfp8.client import load_run
-    from specfp8.env import capture as capture_env
+    from specfp8.env import capture as capture_env, GpuSampler
     from specfp8.launchers.base import find_free_port, stop_process
     from specfp8.launchers.vllm import VllmLauncher
     from specfp8.metrics.base import scrape_spec_stats, delta as mdelta
@@ -843,10 +843,18 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash",
                     prompts = workload.prompts(nreq(c), seed=1234)
                     before = scrape_spec_stats(handle.base_url, scraper)
                     t0 = time.monotonic()
-                    res = asyncio.run(load_run(
-                        handle.base_url, cell.model, prompts, sampling,
-                        concurrency=c, n_warmup=min(4, nreq(c)), timeout_s=900.0))
+                    # Sample achieved clocks, power and throttle reasons for
+                    # exactly the measurement window. F035 hypothesises the
+                    # L4's CUDA-graph deficit is power throttling (72 W part
+                    # against a 150 W A10, same 22.5 GiB); env records only
+                    # the configured limits, which cannot test that.
+                    with GpuSampler(interval_s=2.0) as _gpu:
+                        res = asyncio.run(load_run(
+                            handle.base_url, cell.model, prompts, sampling,
+                            concurrency=c, n_warmup=min(4, nreq(c)),
+                            timeout_s=900.0))
                     wall = time.monotonic() - t0
+                    gpu_during = _gpu.summary()
                     after = scrape_spec_stats(handle.base_url, scraper)
                     toks = sum(r.output_tokens for r in res if r.ok)
                     tok_s = toks / wall if wall else 0.0
@@ -864,6 +872,10 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash",
                         # Measured, not declared (F031).
                         "engine_version": engine_version,
                         "engine_check": engine_check,
+                        # Achieved, not configured. Empty dict means the card
+                        # was not sampleable, which is not the same as "no
+                        # throttling" (F031's lesson, applied to a new field).
+                        "gpu_during": gpu_during,
                         "cell_id": compute_cell_id(cell),
                         "config": cell.model_dump(), "env": env.model_dump(),
                         "argv": argv, "argv_fingerprint": argv_fingerprint(argv),
