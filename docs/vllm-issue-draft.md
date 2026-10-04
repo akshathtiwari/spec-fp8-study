@@ -101,11 +101,12 @@ at #53867, #51700, #54646 and #52228 and could not attribute it from the
 release notes alone.
 
 **Possibly relevant:** the effect is much weaker on an A10 (ratio 0.959)
-than on an L4 (0.487 and 0.768) at the same engine version. The A10 has 24 GiB
-against the L4's 22.03 GiB usable, and this configuration sits close enough to
-the memory ceiling that `--enforce-eager` alone decides whether an fp8_e4m3-KV
-variant boots at all. So capacity pressure may matter here more than
-architecture. I have not separated the two.
+than on an L4 (0.487 and 0.768) at the same engine version. NOTE: an earlier
+version of this draft blamed memory capacity. That was wrong - both cards
+report 22.5 GiB. What differs is power: the L4 is a 72 W part at 2040 MHz, the
+A10 a 150 W part at 1695 MHz. Throttling under the faster execution path is a
+better fit for the symptom, but I cannot test it: I record configured limits,
+not achieved clocks under load.
 
 **Reproduction.** Harness, raw append-only records, the analysis scripts and
 the engine logs are at https://github.com/akshathtiwari/spec-fp8-study

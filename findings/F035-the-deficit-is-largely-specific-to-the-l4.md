@@ -63,15 +63,25 @@ It also changes what the finding is *about*. Two readings survive and they are
 not the same:
 
 1. The effect is architecture-conditioned (Ada versus Ampere).
-2. The effect is memory-capacity-conditioned. The A10 has 24 GiB against the
-   L4's 22.03 GiB usable, and F023 already shows this configuration sits close
-   enough to the memory ceiling that disabling CUDA graphs changes whether it
-   boots at all. A card with more headroom may simply not be in the regime
-   where the graph path degrades.
+2. ~~The effect is memory-capacity-conditioned.~~ **Retracted 2026-10-05.**
+   This finding originally claimed the A10 has 24 GiB against the L4's 22.03
+   GiB usable, and called capacity the more likely reading. **Both cards
+   report 22.5 GiB.** The claim was never checked against `env.vram_gb`, which
+   was sitting in every record. Capacity is not the difference.
 
-Nothing here distinguishes those, and reading (2) is the more mundane and
-therefore the more likely. Distinguishing them needs a same-architecture card
-with different capacity, or a capacity sweep on one card.
+3. The effect is power-conditioned. The L4 is a **72 W** part at 2040 MHz; the
+   A10 is a **150 W** part at 1695 MHz. Less than half the power budget, and
+   the faster execution path draws more. A card that throttles under graphs
+   and not under eager would produce exactly what we see: the default arm
+   slower *and* more variable, the eager arm neither, and the gap closing on
+   the card with headroom.
+
+Reading (3) replaces (2) as the plausible alternative to architecture, and
+nothing here distinguishes it from (1) either. **Our records cannot test it:**
+`env` stores the configured clock and power *limits*, not achieved clocks or
+draw under load. A throttling hypothesis is precisely what this
+instrumentation cannot see, which is the same gap `gpu_uuid` was added to
+close one finding ago.
 
 ## What this does NOT establish
 
@@ -109,17 +119,24 @@ part of a cell's identity.
 ## Consequence
 
 \S\ref{sec:c2} should report the A10 row and state that the deficit is largely
-L4-specific, with both readings (architecture, capacity) named and neither
-claimed. The honest headline for the section becomes narrower and more useful:
+L4-specific, with the surviving readings (architecture, power) named and
+neither claimed. The honest headline for the section becomes narrower and more useful:
 
 > On this card and this engine release the CUDA-graph path costs 23--51% of
 > eager throughput, unpredictably. One release later it costs nothing. On a
 > different card of the same generation-adjacent class it costs 4%. The effect
 > is real, and it is conditioned on more than the engine.
 
-The cheapest experiment that would separate the two readings is a second A10
-session plus an L40S or A100 run, which varies capacity and architecture
-independently.
+**The experiment this now calls for is different from the one it originally
+called for.** Capacity cannot be swept, because the cards already match at
+22.5 GiB. What can be done, and cheaply, is to stop recording only the
+configured limits and start sampling **achieved SM clock and power draw during
+the measurement window**. If the L4's default arm throttles where its eager
+arm does not, reading (3) is supported directly; if clocks hold at 2040 MHz
+throughout, it is dead and architecture is left standing.
+
+That is a harness change plus one L4 session, and it tests a hypothesis rather
+than adding a third card to a comparison that already has three.
 
 ## How to reproduce
 
