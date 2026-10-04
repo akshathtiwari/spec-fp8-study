@@ -71,6 +71,8 @@ wrong turns and what caught them — is part of the evidence.
 | [`F035`](F035-the-deficit-is-largely-specific-to-the-l4.md) | On an NVIDIA A10 the same 0.29.0 config gives ratio 0.959 and CV 2.08% against the L4's 0.487/0.768 and 13.92%/3.73%; the deficit is largely an L4 property | result | medium |
 | [`F036`](F036-the-fix-for-the-declared-value-defect-was-itself-declared.md) | The fix for F031's declared-vs-measured defect was itself declared: budget.log recorded gpu_type L4 for a run on an A10, because SPECFP8_GPU is read locally and the container never sees it | method | high |
 
+| [`F037`](F037-power-throttling-refuted.md) | Power throttling refuted by direct measurement: both arms capped 84-95% and the FASTER arm is capped more, at lower clock, drawing more power; the slow arm holds a higher boost clock while producing fewer tokens | result | high |
+
 ---
 
-36 findings: 18 result, 9 method, 1 gap, 8 retraction.
+37 findings: 19 result, 9 method, 1 gap, 8 retraction.

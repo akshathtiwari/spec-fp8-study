@@ -306,12 +306,23 @@ default arm is both slower and more variable, the eager arm is neither, and
 the gap closes on the card with headroom. Architecture (Ada versus Ampere)
 remains a competing reading.
 
-We cannot test either from our records. \tw{env} stores the configured clock
-and power \emph{limits}, not achieved clocks or draw under load, so a
-throttling hypothesis is exactly the thing our instrumentation cannot see ---
-the same shape of gap as the one \tw{gpu\_uuid} was added to close. We report
-the A10 as one session; by the argument above its 2.08\% is a draw, not a
-property.
+\textbf{We then measured it, and it is wrong.} Sampling achieved clocks,
+power draw and the driver's own throttle reasons across the measurement window
+gives, on one L4 session at vLLM 0.29.0: the default arm power-capped for
+84\% of samples at 1991\,MHz and 67.2\,W producing 56.6 tok/s, against the
+eager arm capped for \textbf{95\%} of samples at \textbf{1645\,MHz} and
+\textbf{69.8\,W} producing \textbf{78.1} tok/s. Thermal throttling is 0.0\%
+throughout. The faster arm is capped more, draws more, and clocks lower.
+Power capping is near-saturated in both arms and therefore cannot distinguish
+them.
+
+What the measurement does show is that the slow arm holds a \emph{higher}
+boost clock while producing \emph{fewer} tokens. A card clocking up and
+delivering less work is not at a ceiling; it is idle or stalled between
+bursts. That is a third hypothesis, it is cheap to test with
+\tw{utilization.gpu}, and we do not claim it either. Architecture remains the
+other surviving reading. We report the A10 as one session; by the argument
+above its 2.08\% is a draw, not a property.
 
 The ratio is the quantity to report. Session 09-29\,c ran 5.6\% slower than
 09-29\,b on \emph{both} arms (default 82.8 to 78.2, eager 81.6 to 77.0).

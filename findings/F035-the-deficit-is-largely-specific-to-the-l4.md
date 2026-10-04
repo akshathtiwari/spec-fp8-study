@@ -12,6 +12,7 @@ evidence:
   code_sha: pending
 supersedes: []
 superseded_by: []
+# reading (3) refuted by F037
 ---
 
 ## Claim
@@ -76,8 +77,11 @@ not the same:
    slower *and* more variable, the eager arm neither, and the gap closing on
    the card with headroom.
 
-Reading (3) replaces (2) as the plausible alternative to architecture, and
-nothing here distinguishes it from (1) either. **Our records cannot test it:**
+Reading (3) replaces (2) as the plausible alternative to architecture.
+**It was then measured and refuted: see F037.** Both arms are power-capped
+84--95% of the time and the faster arm is capped more, at a lower clock,
+drawing more power. Architecture is left standing, alongside a new reading
+(stalls rather than a ceiling) that F037 states and does not claim. **Our records cannot test it:**
 `env` stores the configured clock and power *limits*, not achieved clocks or
 draw under load. A throttling hypothesis is precisely what this
 instrumentation cannot see, which is the same gap `gpu_uuid` was added to
