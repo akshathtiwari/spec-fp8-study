@@ -73,6 +73,9 @@ wrong turns and what caught them — is part of the evidence.
 
 | [`F037`](F037-power-throttling-refuted.md) | Power throttling refuted by direct measurement: both arms capped 84-95% and the FASTER arm is capped more, at lower clock, drawing more power; the slow arm holds a higher boost clock while producing fewer tokens | result | high |
 
+| [`F038`](F038-the-deficit-is-intermittent-and-session-scoped.md) | A fifth 0.29.0 session gives parity (1.003), so the deficit is intermittent; deficit and dispersion are the same session-scoped phenomenon with disjoint regimes (p=0.029), and the version claim weakens to p=0.114 | result | high |
+| [`F039`](F039-parallel-runs-clobbered-the-append-only-store.md) | Two concurrent Modal jobs destroyed 49 records: the append-only store is read-modify-written per container and the later commit wins. Recovered from two snapshots taken for an unrelated reason | method | high |
+
 ---
 
-37 findings: 19 result, 9 method, 1 gap, 8 retraction.
+39 findings: 20 result, 10 method, 1 gap, 8 retraction.
