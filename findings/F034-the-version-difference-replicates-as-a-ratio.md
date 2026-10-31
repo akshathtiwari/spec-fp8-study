@@ -11,7 +11,7 @@ evidence:
   analysis: [analysis/boot_statistics.py]
   code_sha: pending
 supersedes: []
-superseded_by: []
+superseded_by: [F040]
 ---
 
 ## Claim

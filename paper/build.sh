@@ -12,6 +12,12 @@ cd "$(dirname "$0")/.."
 echo "== regenerating figure and its data table =="
 .venv/bin/python analysis/fig_bimodality.py
 
+# Session regimes. Must run before check_paper, which resolves the paper's
+# numbers against analysis/out/tables. This supersedes the engine-release
+# reading of the throughput split (F040); the table is regenerated rather
+# than checked in so the withdrawal cannot drift from the records.
+.venv/bin/python analysis/session_regimes.py
+
 echo "== provenance =="
 # This must BLOCK. An earlier version piped the failure into an echo and
 # carried on, so the build advertised "a paper that fails its own audit is

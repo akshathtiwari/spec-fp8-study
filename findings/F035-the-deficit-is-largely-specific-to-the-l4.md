@@ -13,6 +13,8 @@ evidence:
 supersedes: []
 superseded_by: []
 # reading (3) refuted by F037
+# the L4-specificity reading itself withdrawn by F040:
+# 0.959 is a parity-regime value, and 6 of 9 L4 sessions are also at parity
 ---
 
 ## Claim

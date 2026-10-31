@@ -42,16 +42,24 @@ First, attention-backend selection is \emph{conditioned on KV-cache dtype},
 so an FP8-versus-BF16 comparison under default settings silently swaps the
 attention kernel as well; target and draft models select backends
 independently, so pinning one does not pin the other. Second, speculative
-throughput is \emph{unreproducible across boots} of an identical
-configuration while acceptance is not --- and the dispersion is itself
-unreproducible. Two 12-boot measurements of the same configuration on the
-same engine release give CV 13.92\% and 3.73\%. What does replicate is the
-ratio to an \tw{-{}-enforce-eager} control measured in the same container:
-the CUDA-graph path delivers 0.487 and 0.768 of eager throughput on 0.29.0,
-and 1.014 and 1.017 on 0.30.0 --- two sessions on different cards agreeing
-to within 0.3\%. The mechanism remains unidentified, and the two checkable
-candidates, graph mode and backend selection, are ruled out by the engine
-log. Third, acceptance
+throughput is \emph{unreproducible across container sessions} of an
+identical configuration while acceptance is not. Across nine L4 sessions on
+nine distinct physical cards, the ratio of CUDA-graph to
+\tw{-{}-enforce-eager} throughput measured in the same container falls into
+two disjoint regimes: three sessions at 0.487--0.768 and six at
+1.003--1.039, with nothing between. The same partition separates
+boot-to-boot dispersion of the graph arm (3.73--10.38\% against
+0.86--1.95\%), so the deficit and the dispersion are one session-scoped
+phenomenon rather than two findings ($p = 0.012$ under random assignment).
+Pooled over 116 boots the two groups do not overlap at all: every boot
+measured in a deficit session is slower than every boot measured in a parity
+session, with a 9.9 tok/s gap between them.
+We previously read the split as an engine-release fix; three further 0.29.0
+sessions reached parity and we withdraw that reading (3 of 6 against 0 of 3,
+Fisher $p = 0.238$). The mechanism remains unidentified: graph mode and
+backend selection are ruled out by the engine log, and power throttling by
+direct sampling --- capping is near-saturated in every arm of every
+instrumented session, and the slow arm holds the \emph{higher} clock. Third, acceptance
 length $\tau$ has a boot-to-boot \emph{coefficient of variation of 0.62\%}
 under repeated identical boots, which we could not find reported; our own
 FP8-precision comparison is unreplicated and we withdraw the equivalence
@@ -98,14 +106,15 @@ the effect they obscured.
 vLLM's \tw{auto} backend selection is conditioned on KV-cache dtype, and
 target and draft select independently. A precision A/B under defaults is a
 kernel A/B as well.
-\item \textbf{Unreproducible speculative throughput} (\S\ref{sec:c2}).
-Identical configurations disperse across boots at constant acceptance, by
-CV 13.92\% in one session and 3.73\% in another: the dispersion is real in
-both and its magnitude is not a property of the configuration. The
-reproducible quantity is the ratio to a same-container eager control ---
-0.487 and 0.768 on 0.29.0 against 1.014 and 1.017 on 0.30.0. We do not
-identify the mechanism, and we report a draft-model localisation as
-suggestive rather than established. \tw{-{}-enforce-eager} removes the
+\item \textbf{Two session-scoped throughput regimes} (\S\ref{sec:c2}).
+Identical configurations disperse across boots at constant acceptance, and
+both the level and the dispersion are properties of the container session
+rather than of the configuration. Nine L4 sessions split cleanly: three at
+ratio 0.487--0.768 with graph-arm CV 3.73--10.38\%, six at 1.003--1.039 with
+CV 0.86--1.95\%, and no session between them. The deficit and the dispersion
+are therefore one phenomenon, not two. We do not identify the mechanism, we
+withdraw our earlier engine-release reading of the split, and we report a
+draft-model localisation as suggestive rather than established. \tw{-{}-enforce-eager} removes the
 variance but is not a free control --- it costs FP8-weight configurations
 a fifth to a half of their throughput and cannot boot speculative FP8-KV
 cells at all on this card.
@@ -223,106 +232,168 @@ corrected the report. The mistake is instructive because we compared
 requested-versus-selected backend for \emph{a server} when there is no such
 thing as a server's backend --- there are two.
 
-\section{Confound 2: speculative throughput is unreproducible across boots,
-and so is the dispersion itself}\label{sec:c2}
+\section{Confound 2: speculative throughput falls into one of two
+session-scoped regimes}\label{sec:c2}
 
 Booting an identical speculative configuration repeatedly produces widely
-scattered throughput while acceptance stays put. We measured this twice, six
-days apart, and report both because they disagree:
+scattered throughput while acceptance stays put --- in some container
+sessions. In others the same configuration is quiet and reaches parity with
+its own eager control. We have now run ten sessions of the identical sweep,
+nine on the L4 and one on an A10, each landing on a distinct physical card:
 
 \begin{center}\small
-\begin{tabular}{lllrrr}
+\begin{tabular}{llrrrrrl}
 \toprule
-Engine & Card & Arm & Session & Mean tok/s & CV\\
+ & & \multicolumn{2}{c}{default (graph)} & \multicolumn{2}{c}{eager control} & &\\
+\cmidrule(lr){3-4}\cmidrule(lr){5-6}
+Engine & Session & tok/s & CV & tok/s & CV & ratio & Regime\\
 \midrule
-0.29.0 & L4 & default & 09-23 & 39.2 & \textbf{13.92\%}\\
-0.29.0 & L4 & default & 09-29 a & 61.2 & \textbf{3.73\%}\\
-0.30.0 & L4 & default & 09-29 b & 82.8 & 0.99\%\\
-0.30.0 & L4 & default & 09-29 c & 78.2 & 1.61\%\\
-0.29.0 & \textbf{A10} & default & 09-30 & \textbf{132.6} & \textbf{2.08\%}\\
+0.29.0 & 09-23 & 39.2 & \textbf{13.92\%} & 80.5 & 1.44\% & \textbf{0.487} & deficit\\
+0.29.0 & 09-29 a & 61.2 & \textbf{3.73\%} & 79.7 & 1.69\% & \textbf{0.768} & deficit\\
+0.29.0 & 10-04 & 56.6 & \textbf{10.38\%} & 78.1 & 6.25\% & \textbf{0.724} & deficit\\
 \addlinespace
-0.29.0 & L4 & eager & 09-23 & 80.5 & 1.44\%\\
-0.29.0 & L4 & eager & 09-29 a & 79.7 & 1.69\%\\
-0.30.0 & L4 & eager & 09-29 b & 81.6 & 1.28\%\\
-0.30.0 & L4 & eager & 09-29 c & 77.0 & 2.79\%\\
-0.29.0 & \textbf{A10} & eager & 09-30 & \textbf{138.3} & 1.28\%\\
-\bottomrule
-\end{tabular}
-\end{center}
-
-Each row is 12 fixed-prompt boots inside a single container (the 09-23 eager
-row is 8 and the 09-29\,c eager row is 11, truncated by a runner timeout).
-Sessions 09-29\,a, b and c ran on three distinct physical cards, recorded by
-UUID; 09-23 predates that recording.
-
-Both 0.29.0 default rows measure the same declared configuration on the same
-engine release and differ by a factor of 3.7 in dispersion and 1.6 in level.
-\textbf{The 0.30.0 rows do not:} 0.99\% and 1.61\%, on different cards. The
-low dispersion replicates where the high dispersion did not.
-
-\paragraph{The eager arm is the control, and it does not move.} 80.5, 79.7
-and 81.6 tok/s across three sessions, two engine releases and at least two
-distinct physical cards, with CV between 1.28\% and 1.69\%. Normalising each
-default measurement by the eager measurement taken beside it therefore
-removes session and card effects:
-
-\begin{center}\small
-\begin{tabular}{lllr}
-\toprule
-Engine & Card & Session & default / eager\\
+0.29.0 & 10-31 a & 81.2 & 1.53\% & 80.9 & 1.24\% & 1.003 & parity\\
+0.29.0 & 10-31 b & 82.0 & 1.00\% & 81.1 & 1.14\% & 1.011 & parity\\
+0.29.0 & 10-31 c & 81.2 & 1.95\% & 80.0 & 1.02\% & 1.015 & parity\\
+0.30.0 & 09-29 b & 82.8 & 0.99\% & 81.6 & 1.28\% & 1.014 & parity\\
+0.30.0 & 09-29 c & 78.2 & 1.61\% & 77.0 & 2.79\% & 1.017 & parity\\
+0.32.0 & 10-31 d & 81.7 & 0.86\% & 78.6 & 3.12\% & 1.039 & parity\\
 \midrule
-0.29.0 & L4 & 09-23 & 0.487\\
-0.29.0 & L4 & 09-29 a & 0.768\\
-0.30.0 & L4 & 09-29 b & \textbf{1.014}\\
-0.30.0 & L4 & 09-29 c & \textbf{1.017}\\
-0.29.0 & \textbf{A10} & 09-30 & \textbf{0.959}\\
+0.29.0 & 09-30 (\textbf{A10}) & 132.6 & 2.08\% & 138.3 & 1.28\% & 0.959 & parity\\
 \bottomrule
 \end{tabular}
 \end{center}
 
-\noindent
-On 0.29.0 the CUDA-graph path costs between 23\% and 51\% of the eager path's
-throughput on the L4, and how much it costs does not reproduce. On 0.30.0 it
-reaches parity, and \emph{that} reproduces: two sessions on different cards
-agree to within 0.3\%, against 58\% disagreement between the two 0.29.0
-sessions.
+Each cell is 12 fixed-prompt boots inside a single container, except three
+truncated by a runner timeout (09-23 eager $n=8$; 09-29\,c and 10-04 eager
+$n=11$). Every session ran on a distinct physical card, recorded by UUID,
+except 09-23, which predates that recording. All nine L4 cards report the
+same 22.5\,GiB, 2040\,MHz clock ceiling and 72\,W power limit.
 
-\paragraph{The deficit is largely specific to the L4.} Running the identical
-0.29.0 sweep on an NVIDIA A10 (SM86, Ampere) gives a ratio of 0.959 and a
-dispersion of 2.08\%. Same engine release, different card, and a 23--51\%
-deficit becomes 4\%. So \S\ref{sec:c2} is not a general property of
-speculative decoding under CUDA graphs, and the \textbf{L4} in this paper's
-title is load-bearing rather than merely descriptive.
+\paragraph{The split is binary, and it is one phenomenon rather than two.}
+The ratio column has no intermediate value: three sessions between 0.487 and
+0.768, six between 1.003 and 1.039, and a gap of 0.235 between the regimes
+wider than the spread within either. The graph arm's dispersion partitions
+the same way --- 3.73--10.38\% in the deficit sessions against 0.86--1.95\%
+in the parity sessions, again disjoint. \textbf{The two partitions are
+identical.} Under random assignment, the probability that the three
+lowest-ratio sessions are exactly the three highest-dispersion sessions is
+$1/\binom{9}{3} = 0.012$. We therefore stop reporting the deficit and the
+dispersion as separate results: a session is in one regime or the other, and
+in the deficit regime it is both slow and unstable.
+
+\paragraph{The separation holds boot by boot, not only session by session.}
+Pooling every fixed-prompt default-arm boot at concurrency 1 across all nine
+L4 sessions gives $n = 116$: 44 boots from the four sessions carrying the
+deficit signature, spanning 29.5--65.6 tok/s, and 72 from the six parity
+sessions, spanning 75.5--83.5. The fourth deficit session is a 10-04 run that
+measured no eager arm, so it has no ratio and does not appear in the table
+above; we include its boots here rather than discard a measured boot for
+lacking a control it never had. \textbf{Not one boot falls between 65.6 and
+75.5 --- the two groups do not overlap at all}, and the 9.9 tok/s gap between
+them is 1.7 times the largest gap inside either group (5.7). Every individual
+boot measured in a deficit session is slower than every individual boot
+measured in a parity session. A reader who runs this
+configuration once gets a number from one of two separated populations, and
+nothing in the configuration, the engine version or the recorded card
+identity tells them which.
+
+\paragraph{We withdraw the engine-release reading.} Four revisions of this
+paper reported 0.487 and 0.768 on 0.29.0 against 1.014 and 1.017 on 0.30.0,
+and read the pair as a regression fixed between releases. We then ran 0.29.0
+three more times. All three reached parity (1.003, 1.011, 1.015). The tally
+is 3 deficit sessions of 6 on 0.29.0 against 0 of 3 on later releases, which
+a one-sided Fisher exact test puts at $p = 0.238$: at this sample size the
+releases are indistinguishable. The earlier claim was two sessions against
+two, and it read as clean because both pairs were internally consistent.
+
+\textbf{Our design cannot separate the release from the calendar.} All three
+deficit sessions were measured between 23 September and 4 October; four of
+the six parity sessions, including all three 0.29.0 ones, were measured on
+31 October. So engine release and measurement date are entangled, and
+``0.29.0 was never the cause'' is not distinguishable in our data from
+``whatever produced the deficit stopped occurring on this provider's fleet''.
+Naming that confound is the most we can do with ten sessions; breaking it
+needs 0.29.0 and a current release interleaved within the same day, which is
+one more quota window.
+
+\paragraph{The deficit regime has only been observed on the L4, which is
+weaker than the claim we previously made.} Four revisions of this paper
+reported that running the identical 0.29.0 sweep on an NVIDIA A10 (SM86,
+Ampere) gives 0.959 against the L4's 0.487 and 0.768, and concluded that the
+deficit was ``largely specific to the L4''. With six L4 parity sessions now
+in hand, that inference no longer holds: 0.959 is simply a parity-regime
+value, and it is slightly \emph{below} the L4's own parity band of
+1.003--1.039. One A10 session landing in the regime that two thirds of our L4
+sessions also land in is close to no evidence about the A10. Under the
+observed L4 regime frequency of 3 in 9, a single session reaches parity by
+chance with probability 0.67.
+
+What survives is narrower and worth stating as a scope limit rather than a
+result: every deficit session we have seen was on an L4, and we have not seen
+one on any other card --- having given other cards one session. The
+\textbf{L4} in this paper's title marks where we looked, not where the effect
+has been shown to live.
 
 \textbf{An earlier revision attributed this to memory capacity. That was
 wrong}, and we had not checked it against our own records: both cards report
 \textbf{22.5\,GiB}. Capacity is not the difference between them.
 
-What does differ is sustained power. The L4 is a \textbf{72\,W} part running
-at 2040\,MHz; the A10 is a \textbf{150\,W} part at 1695\,MHz. A card with
-less than half the power budget can throttle under the faster execution path
-and not under the slower one, which is the shape of what we observe: the
-default arm is both slower and more variable, the eager arm is neither, and
-the gap closes on the card with headroom. Architecture (Ada versus Ampere)
-remains a competing reading.
+A power reading is the obvious candidate: the L4 is a \textbf{72\,W} part
+running at 2040\,MHz, and a card on that budget could throttle under the
+graph path and not under eager. \textbf{We measured it, and it is refuted.}
+Sampling achieved clocks, power draw and the driver's own throttle reasons
+across the measurement window gives, in the 10-04 deficit session, a default
+arm power-capped for 84\% of samples at 1991\,MHz and 67.2\,W producing
+56.6 tok/s, against an eager arm capped for \textbf{95\%} of samples at
+\textbf{1645\,MHz} and \textbf{69.8\,W} producing \textbf{78.1} tok/s.
+Thermal throttling is 0.0\% throughout. The faster arm is capped more, draws
+more, and clocks lower --- the opposite of the prediction.
 
-\textbf{We then measured it, and it is wrong.} Sampling achieved clocks,
-power draw and the driver's own throttle reasons across the measurement window
-gives, on one L4 session at vLLM 0.29.0: the default arm power-capped for
-84\% of samples at 1991\,MHz and 67.2\,W producing 56.6 tok/s, against the
-eager arm capped for \textbf{95\%} of samples at \textbf{1645\,MHz} and
-\textbf{69.8\,W} producing \textbf{78.1} tok/s. Thermal throttling is 0.0\%
-throughout. The faster arm is capped more, draws more, and clocks lower.
-Power capping is near-saturated in both arms and therefore cannot distinguish
-them.
+\paragraph{The same signature now separates the regimes, not just the arms.}
+Instrumenting the parity sessions lets us compare the deficit graph arm
+against a healthy graph arm running the identical configuration:
 
-What the measurement does show is that the slow arm holds a \emph{higher}
-boost clock while producing \emph{fewer} tokens. A card clocking up and
-delivering less work is not at a ceiling; it is idle or stalled between
-bursts. That is a third hypothesis, it is cheap to test with
-\tw{utilization.gpu}, and we do not claim it either. Architecture remains the
-other surviving reading. We report the A10 as one session; by the argument
-above its 2.08\% is a draw, not a property.
+\begin{center}\small
+\begin{tabular}{llrrrrr}
+\toprule
+Regime & Session & tok/s & SM clock & capped & power & util\\
+\midrule
+deficit & 10-04 & 56.6 & \textbf{1991\,MHz} & 0.84 & 67.2\,W & ---\\
+deficit$^\dagger$ & 10-04 b & 62.4 & \textbf{1985\,MHz} & 0.91 & 68.7\,W & ---\\
+\addlinespace
+parity & 10-31 a & 81.2 & 1700\,MHz & 0.96 & 70.1\,W & 91.3\%\\
+parity & 10-31 b & 82.0 & 1808\,MHz & 0.96 & 69.9\,W & 91.4\%\\
+parity & 10-31 c & 81.2 & 1777\,MHz & 0.95 & 70.0\,W & 90.5\%\\
+parity & 10-31 d & 81.7 & 1714\,MHz & 0.96 & 70.1\,W & 90.5\%\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+Default arm only; means over 12 boots. $^\dagger$10-04\,b ran no eager arm,
+so it has no ratio and is excluded from the regime tables; its level and
+clock put it in the deficit regime unambiguously.
+
+\textbf{The deficit arms hold a clock 177--291\,MHz higher than any parity
+arm while producing 23--31\% fewer tokens, drawing less power, and being
+capped less often.} A card that boosts higher, draws less and delivers less
+work is not against a ceiling --- it is doing nothing for part of the time.
+Power throttling is refuted as the mechanism rather than merely unsupported,
+and it is refuted twice over: across arms within a deficit session, and
+across regimes on the same arm.
+
+\paragraph{What this still does not settle.} The stall reading predicts low
+GPU utilisation in a deficit session. We added \tw{utilization.gpu} sampling
+on 31 October, and no deficit session has occurred since --- all four
+instrumented sessions landed in the parity regime, where utilisation is
+90.5--91.6\% and the two arms are indistinguishable. So we have the
+prediction and the baseline it would be measured against, and not the
+measurement. That is the single cheapest open experiment in this paper: one
+sweep in a deficit session with utilisation sampling on, which costs minutes
+of L4 time and is gated only on the regime appearing again. Architecture
+remains a competing reading for why the regime is reachable on this card at
+all.
 
 The ratio is the quantity to report. Session 09-29\,c ran 5.6\% slower than
 09-29\,b on \emph{both} arms (default 82.8 to 78.2, eager 81.6 to 77.0).
@@ -332,11 +403,11 @@ a control measured in the same container it would have read as a 5.6\%
 replication failure.
 
 \paragraph{An earlier revision of this paper reported only the first row.}
-It gave 13.92\% as \emph{the} boot dispersion of this configuration. A second
-measurement puts the same quantity at 3.73\%. The effect is present in both
---- the default arm disperses more than the eager arm beside it in every
-session we have run --- but the magnitude is a property of the session, not
-of the configuration, and quoting one number for it was wrong.
+It gave 13.92\% as \emph{the} boot dispersion of this configuration. Nine
+sessions later the same quantity ranges from 0.86\% to 13.92\%, a factor of
+sixteen, and which value a single session returns is settled by its regime.
+Quoting one number for it was wrong, and so was quoting a range as if the
+distribution were continuous: it is bimodal.
 
 We applied that standard to our own new figures rather than only to the old
 one. An earlier version of this section reported the 0.30.0 result from a
@@ -355,7 +426,10 @@ design, mixes prompt variation into what is meant to be boot variation and
 inflated this figure to 29.92\%. The pooled number is reported separately in
 the artifact and is not a boot-dispersion estimate.
 
-Pooling every valid default-arm boot at concurrency 1 (n = 23):
+The modes above are \emph{sessions}. Within a single session the boots
+themselves are not bimodal, and an earlier draft of this paper claimed they
+were. Pooling the default-arm boots available at the time that claim was
+examined, at concurrency 1 (n = 23):
 \[
 \begin{aligned}
 &24.8\;\; 28.4\;\; 29.5\;\; 31.9\;\; 32.1\;\; 33.2\;\; 37.0\;\; 39.1\;\; 40.6\;\; 41.1\\
@@ -372,15 +446,27 @@ the artifact. It is the same error we document elsewhere in this paper —
 reading structure off a sample too small to support it — and we made it in
 our own headline.
 
+\textbf{This retraction stands, and it is not in tension with the regime
+separation above.} The two statements are about different levels. Boots
+within one session form a single continuous distribution; sessions fall into
+two separated groups. Sampling five boots from inside one wide deficit
+session produced a gap that looked like structure and was not, while the
+structure that does exist sits one level up and was invisible until we had
+replicated the whole session nine times. Finding the right level took four
+revisions, and the error in both directions was the same: reading modality
+off whichever sample we happened to have.
+
 \begin{figure}[h]\centering
 \includegraphics[width=0.86\textwidth]{figures/bimodality.pdf}
 \caption{One dot per boot at concurrency 1, \emph{fixed-prompt boots only}
 so that only the boot varies. DFlash's default arm is a wide, continuously
 filled distribution (CV 13.92\%, $n=12$); its eager arm and both n-gram arms
 are tight (1.44\%, 2.67\%, 0.85\%). Every eager boot exceeds every default
-boot. \emph{This figure plots the 2026-09-23 session only.} A second session
-of the identical configuration gives CV 3.73\% with mean 61.2 tok/s, so this
-distribution's width is not reproducible; see \S\ref{sec:c2}. Two earlier versions of this figure were wrong in opposite
+boot. \emph{This figure plots the 2026-09-23 session only, which is a deficit
+session.} Eight further sessions of the identical configuration give default
+arms from 0.86\% to 10.38\% CV, six of them at parity with their eager
+control, so this distribution's width is a property of the session's regime
+and not of the configuration; see \S\ref{sec:c2}. Two earlier versions of this figure were wrong in opposite
 directions: one showed five boots and was captioned as two clusters, the
 other pooled grid runs whose prompts differ and so plotted prompt variation
 alongside boot variation.}
@@ -436,12 +522,17 @@ low-end boot the same eager numbers give $2.19\times$. The ratio is a
 statement about where in the default arm's distribution the comparison boot
 happened to land, not about the flag.
 
-What is stable, within a session, is the \emph{ordering}: CV 13.92\% over 12
-default boots against 1.44\% over 8 eager boots, and every eager boot exceeds
-every default boot. The default arm disperses more than the eager arm beside
-it in every session we have run (13.92 vs 1.44; 3.73 vs 1.69; 0.99 vs 1.28 on
-0.30.0, where the ordering finally inverts). The dispersion \emph{magnitude}
-is not stable and we no longer describe it as such. Turning CUDA graphs off does not reliably make speculative
+What is stable, within a deficit session, is the \emph{ordering}: CV 13.92\%
+over 12 default boots against 1.44\% over 8 eager boots, and every eager boot
+exceeds every default boot. \textbf{That ordering is regime-conditional, and
+an earlier revision of this section overstated it} by reporting that the
+default arm disperses more than its eager control ``in every session we have
+run'' on the strength of four sessions. It holds in all 3 deficit sessions
+(13.92 vs 1.44; 3.73 vs 1.69; 10.38 vs 6.25) and in only 1 of the 6 parity
+sessions (1.53 vs 1.24; the other five invert). In the parity regime both
+arms sit between 0.86\% and 3.12\% and the comparison carries no signal. The
+dispersion \emph{magnitude} is not stable and we no longer describe it as
+such. Turning CUDA graphs off does not reliably make speculative
 decoding faster by a stated factor --- it makes it \emph{reproducible}, and
 whatever throughput it gains is however far down the distribution the
 default would otherwise have fallen.
@@ -455,11 +546,15 @@ weaker than we first reported.} Running the identical protocol with n-gram
 (prompt-lookup) speculation gives CV 2.67\% across twelve boots against
 DFlash's 13.92\%, and no benefit from \tw{-{}-enforce-eager}. But those
 twelve n-gram boots pool two container sessions (CV 3.19\% at $n=4$ and
-1.55\% at $n=8$), and neither is the session that produced DFlash's 13.92\%.
-Since DFlash's own dispersion ranges from 3.73\% to 13.92\% across sessions,
-n-gram's 3.19\% is not distinguishable from DFlash's quieter session. The
-comparison is cross-session and the localisation is suggestive, not
-established. These are the same
+1.55\% at $n=8$), and neither is a session that produced a DFlash deficit.
+Both n-gram sessions therefore sit in the parity regime, where DFlash itself
+gives 0.86--1.95\%. \textbf{Under the regime account this comparison carries
+almost no information:} if n-gram entered the deficit regime at DFlash's
+observed rate of 3 in 9, two sessions would both land in parity with
+probability $(2/3)^2 = 0.44$. Observing two quiet n-gram sessions is thus an
+unremarkable outcome even if n-gram is affected exactly as DFlash is. The
+comparison is cross-session and cross-regime, and the localisation is
+suggestive at best. These are the same
 fact arriving twice: if throughput is already reproducible, there is nothing
 for the flag to stabilise. As a measurement sanity check, n-gram's acceptance is deterministic
 ($\tau = 1.732$ on every boot, spread $1.000\times$) where DFlash's spans
@@ -469,10 +564,12 @@ our records spans different prompt sets and is not comparable.)
 
 Twelve boots cannot prove absence; they bound it. At matched $n=12$, DFlash
 gives CV 13.92\% and n-gram 2.67\%, a factor of five apart. That argument
-holds only against DFlash's noisiest session: matched against its quieter one
-the two are 3.73\% and 2.67\%, and the factor of five disappears. We report
-this as a weak localisation and note that settling it requires n-gram and
-DFlash measured in the \emph{same} session, which we have not done. The
+holds only against DFlash's noisiest session: matched against a parity
+session the two are 0.86\% and 2.67\%, and the comparison reverses --- DFlash
+is the quieter of the pair. We report this as a weak localisation and note
+that settling it requires n-gram and DFlash measured in the \emph{same}
+session, and specifically in a \emph{deficit} session, which we have not
+done. The
 consequence is that a claim like ours has to name the mechanism:
 ``speculative throughput is unreproducible'' would be refuted by the first
 reader who tries prompt-lookup.
@@ -484,9 +581,9 @@ Across 12 boots of an identical configuration with identical prompts,
 acceptance has a coefficient of variation of \textbf{0.62\%} (mean $\tau$
 4.1055, sd 0.0256, 95\% CI on the mean [4.0893, 4.1218]).
 
-\paragraph{Unlike the throughput dispersion, this one replicates.} We later
-measured the same quantity in two further sessions, one on the same engine
-release and one on 0.30.0:
+\paragraph{Unlike the throughput dispersion, this one replicates --- in both
+regimes.} We have now measured the same quantity in every session of the
+sweep, across three engine releases and both throughput regimes:
 
 \begin{center}\small
 \begin{tabular}{llrrr}
@@ -495,18 +592,35 @@ Engine & Session & $n$ & Mean $\tau$ & CV\\
 \midrule
 0.29.0 & 2026-09-23 & 12 & 4.1055 & 0.62\%\\
 0.29.0 & 2026-09-29 & 12 & 4.1255 & 0.30\%\\
+0.29.0 & 2026-10-04 & 12 & 4.1594 & 0.00\%\\
+0.29.0 & 2026-10-31 a & 12 & 4.1337 & 0.88\%\\
+0.29.0 & 2026-10-31 b & 12 & 4.1564 & 0.26\%\\
+0.29.0 & 2026-10-31 c & 12 & 4.1421 & 0.60\%\\
 0.30.0 & 2026-09-29 & 12 & 4.1498 & 0.61\%\\
+0.30.0 & 2026-09-29 b & 12 & 4.0702 & 0.00\%\\
+0.32.0 & 2026-10-31 & 12 & 4.1594 & 0.00\%\\
 \bottomrule
 \end{tabular}
 \end{center}
 
 \noindent
-Three sessions, two engine releases, at least two physical cards: mean
-$\tau$ within 1\% and dispersion below 0.7\% throughout. This is the contrast
-that makes \S\ref{sec:c2} worth reporting. On the same boots, acceptance is
-reproducible and reproducibly quiet, while throughput dispersion ranges over
-a factor of fourteen. Whatever varies between boots is not changing which
-tokens the drafter gets accepted; it is changing how fast they are produced.
+Nine sessions, three engine releases, nine distinct physical cards: mean
+$\tau$ spans 4.0702--4.1594, a range of 2.2\%, and no session disperses by
+more than 0.88\%. This is the contrast that makes \S\ref{sec:c2} worth
+reporting, and it is now the cleaner of the two findings. On the same boots,
+acceptance is reproducible and reproducibly quiet while throughput dispersion
+ranges over a factor of sixteen. Whatever varies between sessions is not
+changing which tokens the drafter gets accepted; it is changing how fast they
+are produced.
+
+\paragraph{The contrast is itself regime-dependent, which sharpens it.} In
+the three deficit sessions throughput dispersion exceeds $\tau$ dispersion by
+a factor of 12 to 22. In the parity sessions both quantities are below 2\%
+and the factor falls to 1.6--3.8. So ``acceptance is stable where throughput
+is not'' is a statement about the deficit regime specifically: in the parity
+regime both are stable and there is no contrast to draw. The $\tau$ result
+holds across all nine sessions regardless; what varies is how much work it
+does.
 
 \paragraph{We previously called this a ``noise floor'' and withdraw that.}
 An earlier revision reported the \emph{range} of four boots, 1.32\%, and
@@ -925,9 +1039,11 @@ control --- for instance against a zero-latency mock server --- so this rests
 on a load-regime argument rather than on a measurement of our own harness.
 \item \textbf{Which claims are replicated, and which are single-session.}
 \S\ref{sec:c2} argues that a quantity measured once is a draw, so we state
-where this paper meets that standard. \emph{Replicated:} the throughput
-dispersion and the default/eager ratio (five sessions, three cards, two
-engine releases); acceptance dispersion (three sessions); the eager penalty
+where this paper meets that standard. \emph{Replicated:} the existence of two disjoint
+throughput regimes and the default/eager ratio within each (ten sessions, ten
+cards, three engine releases, 3 deficit and 7 parity); acceptance dispersion
+(nine sessions, below 0.88\% in every one); the refutation of power
+throttling (two deficit sessions, both arms, plus four parity sessions); the eager penalty
 on FP8 weights, whose direction reproduces across two independent grids
 while its coefficient does not, which is why we report a range.
 \emph{Structural rather than statistical, and so not subject to this:}
@@ -1003,8 +1119,9 @@ measure no throughput or latency at all.
 
 That pairing is worth stating plainly. The execution-path switch that moves
 output agreement by 0.15\% is the same switch across which we measure
-throughput dispersion of 3.73--13.92\% depending on the session
-(\S\ref{sec:c2}), on the same model family and the same GPU architecture. We do not read this as a contradiction: they are two
+throughput dispersion of 0.86--13.92\% depending on which regime the
+session lands in (\S\ref{sec:c2}), on the same model family and the same GPU
+architecture. We do not read this as a contradiction: they are two
 different quantities, and a switch may reasonably leave one alone while
 moving the other. We read it as the clearest available evidence that the
 throughput axis of this switch has not been examined --- a careful,

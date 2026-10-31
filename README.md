@@ -25,18 +25,27 @@ obscured:
    KV vLLM selects FlashAttention-2; at `fp8_e4m3` it selects FlashInfer. A
    precision A/B under default settings is a kernel A/B as well. Target and
    draft models select *independently*, so pinning one does not pin the other.
-2. **Throughput of an identical speculative configuration is
-   unreproducible across boots, and so is the dispersion.** Two 12-boot
-   measurements of the same configuration on the same engine release give
-   CV 13.92% and 3.73%, against an eager control reading 1.44% and 1.69%.
-   Normalised by that control the CUDA-graph path costs 23-51% of eager
-   throughput on 0.29.0 and reaches parity on 0.30.0. The mechanism is
-   unidentified and the two checkable candidates are ruled out (F032). A
-   dispersion measured once is a draw, not a property (F033).
-3. **Acceptance (tau) has a boot-to-boot CV of 0.62%** under repeated
-   identical boots, which we could not find reported. We do *not* convert
-   this into a detection threshold: our FP8 precision comparison is
-   unreplicated and establishes neither a difference nor an equivalence.
+2. **An identical speculative configuration lands in one of two
+   session-scoped throughput regimes, and nothing we record predicts
+   which.** Across nine L4 sessions on nine distinct cards, the ratio of
+   CUDA-graph to `--enforce-eager` throughput measured in the same container
+   splits into 0.487-0.768 (three sessions) and 1.003-1.039 (six), with
+   nothing between. The same partition separates boot-to-boot dispersion
+   (3.73-10.38% against 0.86-1.95%), so the deficit and the dispersion are
+   one phenomenon rather than two (p = 0.012). Pooled over 116 boots the two
+   groups do not overlap at all. We previously read the split as a
+   regression fixed in 0.30.0; three further 0.29.0 sessions reached parity
+   and we withdrew that (3 of 6 against 0 of 3, Fisher p = 0.238). The
+   mechanism is unidentified: graph mode and backend selection are ruled out
+   by the engine log (F032), power throttling by direct sampling -- the slow
+   arm holds the *higher* clock and draws *less* power (F037, F040).
+3. **Acceptance (tau) has a boot-to-boot CV under 0.88% in every session
+   we have run** -- nine sessions, three engine releases, both throughput
+   regimes, mean tau within 2.2% throughout -- which we could not find
+   reported. On the same boots, what the drafter gets accepted is
+   reproducible and how fast it is produced is not. We do *not* convert this
+   into a detection threshold: our FP8 precision comparison is unreplicated
+   and establishes neither a difference nor an equivalence.
 4. **"Inter-token latency" is inter-chunk latency** when computed from
    stream-arrival timestamps. A speculative step emits every accepted token
    in one chunk, so at concurrency 64 a p95-ITL objective scores the
@@ -52,7 +61,7 @@ became a measurement-methodology paper.
 ## The record
 
 ```
-findings/        39 numbered findings: results, methods, retractions, gaps.
+findings/        40 numbered findings: results, methods, retractions, gaps.
                  Each carries a mandatory "What this does NOT establish".
                  Wrong claims are superseded, never deleted.
 results/         Raw records, append-only. ~40 MB, committed on purpose:
@@ -63,7 +72,8 @@ docs/            Requirements, design, data model, paper outline.
 paper/           LaTeX source, figures, and build script.
 ```
 
-8 of the 39 findings are retractions. They are kept deliberately. The
+8 of the 40 findings are formal retractions, and several more withdraw a
+reading of their own predecessor. They are kept deliberately. The
 study's argument is that benchmark numbers are routinely reported without
 their error terms, and the most honest evidence for that is the list of times
 we did it ourselves and caught it.
@@ -139,6 +149,7 @@ The paper is a preprint draft. It has not been peer reviewed.
 Counts in this file go stale; run the tools rather than trusting them:
 
 ```bash
+python analysis/session_regimes.py    # the two regimes, from raw records
 python analysis/check_provenance.py   # 2 disclosed defects (F009, F014)
 python analysis/check_paper.py        # must report 0 untraceable
 ./paper/build.sh                      # blocks if either regresses
