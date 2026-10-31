@@ -312,6 +312,14 @@ _SAMPLE_FIELDS = (
     "clocks_throttle_reasons.sw_power_cap",
     "clocks_throttle_reasons.hw_slowdown",
     "clocks_throttle_reasons.sw_thermal_slowdown",
+    # Added 2026-10-31 to test F037's surviving hypothesis. F037 refuted
+    # power throttling and observed that the slow arm holds a HIGHER boost
+    # clock while producing FEWER tokens, which is the signature of gaps in
+    # the work rather than a ceiling on it. utilization.gpu is the field
+    # that distinguishes those: a stalled arm is busy a smaller fraction of
+    # the time at a higher clock. Nothing in the previous field set could
+    # tell idle-between-bursts from slow-but-saturated.
+    "utilization.gpu", "utilization.memory",
 )
 
 
@@ -379,6 +387,11 @@ class GpuSampler:
             "power_draw_mean_w": _stat("power_w", lambda v: sum(v) / len(v)),
             "power_draw_max_w": _stat("power_w", max),
             "temperature_max_c": _stat("temp_c", max),
+            # The stall test. Lower utilisation at a higher clock is the
+            # pattern F037 could see but not name.
+            "util_gpu_mean_pct": _stat("util_gpu_pct", lambda v: sum(v) / len(v)),
+            "util_gpu_min_pct": _stat("util_gpu_pct", min),
+            "util_mem_mean_pct": _stat("util_mem_pct", lambda v: sum(v) / len(v)),
             # Fractions, not booleans: "throttled for 3% of the run" and
             # "throttled for 90%" are different findings.
             "frac_power_capped": round(len(throttled) / len(self._rows), 3),
@@ -416,4 +429,6 @@ def _sample_gpu() -> dict | None:
         "throttle_sw_power_cap": _b(p[3]),
         "throttle_hw_slowdown": _b(p[4]),
         "throttle_sw_thermal": _b(p[5]),
+        "util_gpu_pct": _float_or_none(p[6]),
+        "util_mem_pct": _float_or_none(p[7]),
     }

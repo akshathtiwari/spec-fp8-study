@@ -1,0 +1,91 @@
+# Replication of boot_stability.yaml on vLLM 0.32.0 (released 2026-10-18).
+#
+# IDENTICAL to boot_stability.yaml except engine_ref, which is what keeps the
+# cell_ids distinct so versions coexist in the append-only store.
+#
+# Two items in the 0.31.0 and 0.32.0 notes bear directly on section 4:
+#
+#   0.32.0  "keeps the FlashInfer autotune table warm across restarts"
+#           This is a candidate MECHANISM for the whole of section 4. If
+#           FlashInfer autotunes at startup and the outcome varies between
+#           boots, that reproduces our signature exactly: byte-identical
+#           configuration, different throughput per boot. Caching the table
+#           across restarts would remove it.
+#
+#   0.31.0  "--enforce-eager now also disables JIT kernel warmup"
+#           BREAKING, and it lands on our control arm. From 0.31.0 onward
+#           --enforce-eager is not the same intervention it was in 0.29.0 and
+#           0.30.0, so a default/eager ratio measured here is not strictly
+#           comparable to the earlier ones. Report it, do not quietly pool it.
+#
+# Run with a matching image or the F031 guard aborts:
+#   SPECFP8_VLLM_VERSION=0.32.0 modal run cloud/modal_probe.py \
+#       --engine bootvar --repeats 12 \
+#       --sweep-file sweeps/boot_stability_v032.yaml
+
+# Is speculative throughput stable across BOOTS within one container?
+#
+# An identical dflash config with identical prompts decoded 2x faster in one
+# container run than another (3505ms vs 7316-7923ms mean e2e, same output
+# lengths). The non-speculative cell reproduced exactly across the same two
+# containers, so it is not the GPU or thermal state.
+#
+# The suspected cause is CUDA-graph capture: the engine logs
+#   "CUDAGraphMode.FULL_AND_PIECEWISE is not supported with spec-decode for
+#    attention backend FlashInfer"
+# and falls back to PIECEWISE. If what gets captured varies between boots, a
+# 2x swing follows.
+#
+# Design: two ServerCells, one speculative and one not, measured at c=1, with
+# the whole sweep repeated across several BOOTS inside a single container.
+# `none` is the control: if it is stable across boots while dflash is not,
+# the instability is speculation-specific rather than environmental.
+#
+# Outcome decides how throughput may be reported:
+#   stable within container  -> never compare throughput across containers;
+#                               the existing grid stands with that caveat
+#   unstable within container -> speculative throughput needs boot-level
+#                               repeats and the sweep needs redesigning
+
+model: Qwen/Qwen3-4B
+model_revision: main
+spec_tokens: 5
+
+axes:
+  engine: [vllm]
+  engine_ref: [vllm-0.32.0]
+  # ngram added 2026-09-23 to test whether the bimodality of F020/F021 is
+  # a property of DFlash drafting or of speculative decoding on this engine.
+  # It needs no draft checkpoint (prompt-lookup), so it isolates the
+  # speculative verification path from anything the draft model contributes.
+  mechanism: [none, dflash, ngram]
+  weight_precision: [bf16]
+  kv_cache_dtype: [auto]
+  attn_backend: [FLASHINFER]
+
+defaults:
+  draft_model: null
+  draft_revision: null
+  block_size: null
+  guided_decoding: false
+
+per_mechanism:
+  # block_size carries prompt_lookup_max for ngram (see vllm.py argv).
+  ngram:
+    draft_model: null
+    draft_revision: null
+    block_size: 4
+  dflash:
+    draft_model: z-lab/Qwen3-4B-DFlash-b16
+    draft_revision: main
+    block_size: 16
+
+run_axes:
+  workload: [gsm8k]
+  concurrency: [1]
+  seed: [1234]
+  repeat: [0]
+
+correctness:
+  floor_correct: 0.10
+  floor_degraded: 0.05
