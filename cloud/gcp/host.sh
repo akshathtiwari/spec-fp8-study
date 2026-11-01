@@ -9,6 +9,11 @@
 #   host.sh verify             driver, card, torch, vllm, async flag -- no GPU load
 #   host.sh run ARGS...        cloud/gcp/run_in_container.py ARGS
 #
+# The repo is mounted from the VM user's disk into a container that runs as
+# root, so git refuses it ("dubious ownership", exit 128) and boot_variance's
+# own `git pull` fails before measuring anything. `run` marks that one path
+# safe through git's environment config, which touches no file.
+#
 # Layout on the VM's disk, so everything survives the reboot a driver swap
 # needs:  /data/repo (this repo)  /data/models (HF cache)  /data/results
 set -euo pipefail
@@ -68,6 +73,8 @@ print(\"vllm\",vllm.__version__); print(\"device\",torch.cuda.get_device_name(0)
 run)
   sudo docker run --rm --gpus all --shm-size=16g --ipc=host \
     -e SPECFP8_PLATFORM=gcp -e HF_HUB_DISABLE_PROGRESS_BARS=1 \
+    -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory \
+    -e GIT_CONFIG_VALUE_0=/root/spec-fp8-study \
     -v /data/models:/models -v /data/results:/results \
     -v /data/repo:/root/spec-fp8-study \
     "$IMAGE" python cloud/gcp/run_in_container.py "$@"
