@@ -1,0 +1,6 @@
+Recorded 2026-11-01 ~19:30 UTC, BEFORE any enforce_eager record of leg 1 existed.
+Seen at the time: 2 boots of dflash default, c=1 = 78.7, 81.2 tok/s (driver 580.95.05, GCP).
+Rule: after dflash default (12) + enforce_eager (12) on driver 580.95.05,
+  ratio < 0.95  -> deficit reproduced: run the full plan (noasync arm, then swap to 610.57.04)
+  ratio >= 0.95 -> parity: driver 580 alone does not reproduce the deficit on GCP;
+                   stop after the eager arm, skip the 610 leg (parity vs parity is uninformative).

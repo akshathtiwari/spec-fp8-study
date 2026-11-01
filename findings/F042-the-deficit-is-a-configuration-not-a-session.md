@@ -18,6 +18,15 @@ supersedes: [F041]
 superseded_by: []
 ---
 
+> **Revised by F044 (2026-11-01).** The conjunction below is incomplete. The
+> same configuration -- L4, driver 580.95.05, vLLM 0.29.0, DFlash -- installed by
+> hand on a GCP L4 with every recorded factor matched is at parity (1.001). The
+> platform is a necessary factor. On Modal the driver cannot change without the
+> sandbox's driver proxy changing too, so what this finding calls "the driver"
+> may be the sandbox; Modal's containers also had one CPU or less, against
+> four here. The one-factor neighbour structure below stands, now with a fifth
+> row: platform -> gcp, 1 session, 0 deficient.
+
 ## Claim
 
 Every session that measured both arms, on every card and mechanism, with the

@@ -61,8 +61,20 @@ def code_sha() -> str:
 BASELINE_MECH = "dflash"
 
 
+#: Records predating the `platform` field are all Modal. The Modal series is
+#: kept pure by default: a GCP session on the same driver is a different host
+#: stack, and pooling it into these tables is the confound F044 exists to
+#: show. It appears in configuration_table() as a platform neighbour instead.
+BASELINE_PLATFORM = "modal"
+
+
+def _platform(r: dict) -> str:
+    return r.get("platform") or "modal"
+
+
 def load(gpu: str | None = BASELINE_GPU,
-         mech: str = BASELINE_MECH) -> dict[tuple, list[dict]]:
+         mech: str = BASELINE_MECH,
+         platform: str | None = BASELINE_PLATFORM) -> dict[tuple, list[dict]]:
     """Fixed-prompt boot_variance records for one mechanism at c=1."""
     out: dict[tuple, list[dict]] = {}
     with (ROOT / "results" / "probes.jsonl").open() as fh:
@@ -74,6 +86,8 @@ def load(gpu: str | None = BASELINE_GPU,
             if r.get("phase") != "boot_variance":
                 continue
             if cfg.get("mechanism") != mech:
+                continue
+            if platform is not None and _platform(r) != platform:
                 continue
             if (r.get("load") or {}).get("concurrency") != 1:
                 continue
@@ -156,6 +170,7 @@ def configuration_table() -> list[dict]:
             k = (r["probe_run"], cfg.get("mechanism"))
             d = by.setdefault(k, {
                 "session": r["probe_run"][5:16],
+                "platform": _platform(r),
                 "engine": (cfg.get("engine_ref") or "").replace("vllm-", ""),
                 "driver": env.get("driver"),
                 "gpu": (env.get("gpu") or "").replace("NVIDIA ", ""),
@@ -168,7 +183,7 @@ def configuration_table() -> list[dict]:
             d["ratio"] = st.mean(a["default"]) / st.mean(a["enforce_eager"])
             d["regime"] = "deficit" if d["ratio"] < DEFICIT_RATIO else "parity"
             out.append(d)
-    return sorted(out, key=lambda d: (d["gpu"], d["driver"] or "",
+    return sorted(out, key=lambda d: (d["platform"], d["gpu"], d["driver"] or "",
                                       d["engine"], d["mech"] or "",
                                       d["session"]))
 
@@ -181,7 +196,7 @@ def deficit_conjunction(cfgs: list[dict]) -> dict:
     one) and, for each factor, the sessions that differ from it in that
     factor alone.
     """
-    FACTORS = ("engine", "driver", "gpu", "mech")
+    FACTORS = ("platform", "engine", "driver", "gpu", "mech")
     deficit = [c for c in cfgs if c["regime"] == "deficit"]
     if not deficit:
         return {"shared": None}
@@ -435,19 +450,19 @@ def main() -> int:
           "## What every deficit session has in common", "",
           "All sessions that measured both arms, on every card and mechanism, "
           "with the host driver each record stores under `env.driver`.", "",
-          "| gpu | driver | engine | mechanism | session | ratio | regime |",
-          "|---|---|---|---|---|---|---|"]
+          "| platform | gpu | driver | engine | mechanism | session | ratio | regime |",
+          "|---|---|---|---|---|---|---|---|"]
     cfgs = configuration_table()
     for c in cfgs:
-        L.append(f"| {c['gpu']} | {c['driver']} | {c['engine']} | {c['mech']} "
-                 f"| {c['session']} | **{c['ratio']:.3f}** | {c['regime']} |")
+        L.append(f"| {c['platform']} | {c['gpu']} | {c['driver']} | {c['engine']} "
+                 f"| {c['mech']} | {c['session']} | **{c['ratio']:.3f}** | {c['regime']} |")
     dc = deficit_conjunction(cfgs)
     if dc["shared"]:
         sh = dc["shared"]
         nd = sum(1 for c in dc["in_cell"] if c["regime"] == "deficit")
         L += ["", f"Every deficit session shares one configuration: "
-              f"**{sh['gpu']}, driver {sh['driver']}, vLLM {sh['engine']}, "
-              f"{sh['mech']}**. That cell holds {len(dc['in_cell'])} sessions, "
+              f"**{sh['platform']}, {sh['gpu']}, driver {sh['driver']}, "
+              f"vLLM {sh['engine']}, {sh['mech']}**. That cell holds {len(dc['in_cell'])} sessions, "
               f"{nd} of them deficient.", "",
               "Its one-factor neighbours -- sessions that differ from it in "
               "exactly one factor and match it in all others:", "",
@@ -460,11 +475,14 @@ def main() -> int:
             vals = sorted({str(c[f]) for c in nb})
             L.append(f"| {f} | {', '.join(vals)} | {len(nb)} "
                      f"| {sum(1 for c in nb if c['regime'] == 'deficit')} |")
-        L += ["", "Driver and calendar date are perfectly collinear in these "
-              "records, so no test on this data can separate them. The driver "
-              "is preferred because it can cause something and a date cannot; "
-              "the two make different predictions only on a host where the "
-              "driver can be chosen.", ""]
+        L += ["", "Driver and calendar date are perfectly collinear in the "
+              "Modal records, so no test on Modal data can separate them. The "
+              "platform row is that test's first result: driver 580.95.05 "
+              "installed by hand on a GCP L4, with everything else matched, is "
+              "at parity (F044). The driver is therefore not sufficient on its "
+              "own, and on Modal a driver change cannot happen without a "
+              "change to the sandbox that proxies the driver -- so what F042 "
+              "calls the driver may be the sandbox.", ""]
 
     L += ["## Which predicts the regime better: the release, or the date?", "",
           "F040 withdrew the engine-release reading and named calendar date "
