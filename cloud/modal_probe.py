@@ -714,6 +714,15 @@ def backend_report() -> str:
     return format_report(analyse("/results"))
 
 
+#: The vLLM switch that turns async scheduling off. F043 hypothesises the
+#: deficit needs it: async scheduling overlaps the CPU scheduler with GPU
+#: execution, and a broken overlap leaves the GPU idle at a high clock, which
+#: is F040's telemetry exactly. Verified against `vllm serve --help` on the
+#: target engine before any measurement, and against the engine's config
+#: dump after, because a flag the engine accepts and then ignores is F001.
+NOASYNC_FLAG = "--no-async-scheduling"
+
+
 @app.function(
     # 4 hours, not 90 minutes. The 90 was sized for 24 boots (2 arms x 12)
     # at roughly 200 s a boot, which fits in 5400 s with margin. The 2x2
@@ -729,7 +738,8 @@ def backend_report() -> str:
 )
 @billed('boot_variance')
 def boot_variance(boots: int = 2, mechanism: str = "dflash",
-                  sweep_file: str = "sweeps/boot_stability.yaml") -> str:
+                  sweep_file: str = "sweeps/boot_stability.yaml",
+                  noasync: bool = False) -> str:
     """Does --enforce-eager still win under load, or does it invert?
 
     `mechanism` accepts a comma-separated list ("dflash,none"), and every
@@ -813,6 +823,12 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash",
     nreq = lambda c: min(max(16, c * 4), 256, workload.size)
 
     arms = {"default": [], "enforce_eager": ["--enforce-eager"]}
+    # F043: a third arm, CUDA graphs ON and async scheduling OFF, for
+    # speculative mechanisms only. Against `default` in the same container
+    # it asks whether the deficit needs async scheduling; `none` does not
+    # need it, since the 2x2 already supplies that control.
+    if noasync:
+        arms["default_noasync"] = [NOASYNC_FLAG]
     # Every measurement is written to results/probes.jsonl as it is taken.
     # Without this the probe's only output is stdout, and a finding built on
     # it cites terminal scrollback -- which docs/data-model.md section 4
@@ -834,7 +850,8 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash",
     # session effect. Mechanism varies slowest so that a run killed partway
     # still leaves one mechanism complete and comparable.
     for mech, arm, extra in [(m, a, e) for m in mechs
-                             for a, e in arms.items()]:
+                             for a, e in arms.items()
+                             if not (m == "none" and a == "default_noasync")]:
         cell = cells[mech]
         base = VllmLauncher()
         launcher = VllmLauncher()
@@ -913,6 +930,15 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash",
                         # records collapse into indistinguishable duplicates.
                         "arm": arm, "boot": i,
                         "enforce_eager": arm == "enforce_eager",
+                        # Requested, not verified: the engine's config dump in
+                        # the log is the evidence that it took effect (F043).
+                        "async_disabled_requested": arm == "default_noasync",
+                        # Which host platform produced this record. Records
+                        # predating the field are all Modal. Without it, a GCP
+                        # session on driver 580 pools silently with Modal ones
+                        # on 580 -- different hosts, the confound F042's
+                        # intervention exists to remove.
+                        "platform": os.environ.get("SPECFP8_PLATFORM", "modal"),
                         # Measured, not declared (F031).
                         "engine_version": engine_version,
                         "engine_check": engine_check,
@@ -967,6 +993,19 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash",
                 continue
             dm, em = statistics.mean(d), statistics.mean(e)
             out.append(f"{m:>10}{c:>6}{dm:>10.1f}{em:>10.1f}{dm / em:>14.3f}")
+
+    if noasync:
+        out += ["", "async scheduling, CUDA-graph arm, c=1 (F043):"]
+        for m in mechs:
+            if m == "none":
+                continue
+            d = data.get((m, "default", 1), [])
+            na = data.get((m, "default_noasync", 1), [])
+            e = data.get((m, "enforce_eager", 1), [])
+            if d and na and e:
+                out.append(f"  {m:<8} graph+async {statistics.mean(d) / statistics.mean(e):.3f}"
+                           f"   graph+noasync {statistics.mean(na) / statistics.mean(e):.3f}"
+                           f"   (both / eager)")
 
     ratios = {}
     for m in mechs:
