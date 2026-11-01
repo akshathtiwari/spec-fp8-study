@@ -18,9 +18,17 @@ IMAGE=specfp8-vllm:0.29.0
 case "$cmd" in
 driver)
   V=${1:?driver version}
+  # Build the module with the compiler that built the running kernel. On
+  # GCP's Ubuntu 22.04 the 6.8 kernel is built by gcc-12 while the default
+  # cc is gcc-11, which rejects -ftrivial-auto-var-init=zero and fails the
+  # build outright. Read the version from /proc/version, never assume it.
+  KCC=$(grep -oE 'gcc-[0-9]+' /proc/version | head -1)
+  KCC=${KCC:-gcc}
   sudo apt-get update -qq
   sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq \
-       build-essential "linux-headers-$(uname -r)" pkg-config libglvnd-dev
+       build-essential "$KCC" "linux-headers-$(uname -r)" pkg-config libglvnd-dev
+  export CC="$KCC"
+  echo "building with $CC ($($CC --version | head -1))"
   printf 'blacklist nouveau\noptions nouveau modeset=0\n' \
        | sudo tee /etc/modprobe.d/blacklist-nouveau.conf >/dev/null
   curl -fsSLo "/tmp/NVIDIA-$V.run" \
@@ -28,7 +36,7 @@ driver)
   # The installer replaces an earlier .run install itself. Installer
   # defaults are kept for every version, so the kernel-module flavour is
   # held fixed across the swap and only the driver version changes.
-  sudo sh "/tmp/NVIDIA-$V.run" --silent --no-questions --ui=none
+  sudo CC="$CC" sh "/tmp/NVIDIA-$V.run" --silent --no-questions --ui=none
   echo "installed $V; reboot to load it cleanly, then: host.sh verify"
   ;;
 docker)
