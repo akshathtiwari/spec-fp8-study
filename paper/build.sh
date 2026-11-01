@@ -18,6 +18,10 @@ echo "== regenerating figure and its data table =="
 # than checked in so the withdrawal cannot drift from the records.
 .venv/bin/python analysis/session_regimes.py
 
+# Engine logs by regime cell (F043). Reads results/logs/ and classifies
+# each log from results/probes.jsonl, so it cannot drift from the records.
+.venv/bin/python analysis/engine_logs.py
+
 echo "== provenance =="
 # This must BLOCK. An earlier version piped the failure into an echo and
 # carried on, so the build advertised "a paper that fails its own audit is

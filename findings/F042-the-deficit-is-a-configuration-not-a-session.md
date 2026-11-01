@@ -52,6 +52,14 @@ parity:
 | GPU | A10 | 1 | 0 |
 | mechanism | n-gram | 2 | 0 |
 
+> **Corrected by F043 (2026-11-01).** The n-gram row is not a one-factor
+> neighbour. Every n-gram log shows the engine falling back to the V1 model
+> runner and disabling async scheduling, neither of which happens for DFlash.
+> That row changed three factors, so its parity cannot localise the deficit
+> to DFlash. The engine, driver and GPU rows are confirmed one-factor changes
+> by the same logs. The DFlash entry in "Within one driver, each original
+> reading holds" below is withdrawn for the same reason.
+
 That is the structure of a one-factor-at-a-time factorial design. Nobody
 designed it; it was assembled by accident across six weeks of sessions, and
 it was sitting in the records the whole time.
