@@ -53,8 +53,17 @@ def code_sha() -> str:
         return "unknown"
 
 
-def load(gpu: str | None = BASELINE_GPU) -> dict[tuple, list[dict]]:
-    """Fixed-prompt boot_variance records for the dflash sweep at c=1."""
+#: The speculative mechanism every regime figure in the paper is measured
+#: on. It is a parameter rather than a constant because boot_variance can
+#: now measure the non-speculative cell in the SAME container, but every
+#: default in this module stays "dflash" so that F040's numbers regenerate
+#: byte-identically.
+BASELINE_MECH = "dflash"
+
+
+def load(gpu: str | None = BASELINE_GPU,
+         mech: str = BASELINE_MECH) -> dict[tuple, list[dict]]:
+    """Fixed-prompt boot_variance records for one mechanism at c=1."""
     out: dict[tuple, list[dict]] = {}
     with (ROOT / "results" / "probes.jsonl").open() as fh:
         for line in fh:
@@ -64,7 +73,7 @@ def load(gpu: str | None = BASELINE_GPU) -> dict[tuple, list[dict]]:
             cfg, env = r.get("config") or {}, r.get("env") or {}
             if r.get("phase") != "boot_variance":
                 continue
-            if cfg.get("mechanism") != "dflash":
+            if cfg.get("mechanism") != mech:
                 continue
             if (r.get("load") or {}).get("concurrency") != 1:
                 continue
@@ -81,9 +90,10 @@ def _cv(v: list[float]) -> float:
     return st.stdev(v) / st.mean(v) * 100 if len(v) > 1 else 0.0
 
 
-def sessions(gpu: str | None = BASELINE_GPU) -> list[dict]:
+def sessions(gpu: str | None = BASELINE_GPU,
+             mech: str = BASELINE_MECH) -> list[dict]:
     """One row per container session that measured both arms."""
-    by_arm = load(gpu)
+    by_arm = load(gpu, mech)
     keys = {(e, p) for e, p, _ in by_arm}
     rows = []
     for engine, run in sorted(keys, key=lambda k: k[1]):
@@ -177,6 +187,42 @@ def boot_separation(rows: list[dict]) -> dict:
             "gap": min(p_boots) - max(d_boots), "largest_inner_gap": inner,
             "overlap": max(d_boots) >= min(p_boots),
             "unpaired": [(e, s, m, n) for e, s, m, n in unpaired]}
+
+
+def mechanism_contrast(gpu: str | None = BASELINE_GPU,
+                       mechs: tuple[str, ...] = ("dflash", "none")) -> list[dict]:
+    """Sessions that measured several mechanisms in ONE container.
+
+    The question F040 left open is whether the regimes are a property of
+    speculative decoding or of CUDA graphs generally. Only a within-container
+    comparison can answer it: measured in separate containers, each session's
+    regime is a free variable again, which is the confound the default/eager
+    ratio exists to remove.
+
+    A session appears here only if every mechanism in `mechs` has BOTH arms
+    in that same container. A session that measured one mechanism is not a
+    half-answer, it is silence, and listing it would invite reading the
+    missing arm as a null.
+    """
+    per = {m: {r["session"]: r for r in sessions(gpu, m)} for m in mechs}
+    shared = set.intersection(*(set(v) for v in per.values())) if per else set()
+    out = []
+    for sess in sorted(shared):
+        row = {"session": sess,
+               "engine": per[mechs[0]][sess]["engine"],
+               "ratios": {m: per[m][sess]["ratio"] for m in mechs},
+               "cvs": {m: per[m][sess]["d_cv"] for m in mechs}}
+        spec = [m for m in mechs if m != "none"]
+        if "none" in row["ratios"] and spec:
+            dfc = any(row["ratios"][m] < DEFICIT_RATIO for m in spec)
+            non = row["ratios"]["none"] < DEFICIT_RATIO
+            row["reading"] = (
+                "regime needs speculation" if dfc and not non else
+                "CUDA-graph property" if dfc and non else
+                "parity session, separates nothing" if not dfc and not non else
+                "non-speculative deficient only (unexpected)")
+        out.append(row)
+    return out
 
 
 def telemetry(rows: list[dict]) -> list[dict]:
@@ -311,6 +357,40 @@ def main() -> int:
 
     k = sum(1 for r in rows if r["regime"] == "deficit")
     q = (len(rows) - k) / len(rows)
+    mc = mechanism_contrast()
+    L += ["", "## Is the regime speculative, or a CUDA-graph property?", "",
+          "Sessions that measured both mechanisms inside ONE container. A "
+          "session measuring only one mechanism is absent rather than listed "
+          "blank: a missing arm is silence, not a null result.", ""]
+    if not mc:
+        L += ["None yet. `boot_variance` gained the comma-separated mechanism "
+              "list on 2026-11-01; run it as",
+              "",
+              "```",
+              "modal run cloud/modal_probe.py --engine bootvar \\",
+              "    --sweep dflash,none --repeats 12",
+              "```",
+              "",
+              "Until a session lands in the deficit regime with both "
+              "mechanisms measured, this question stays open: a parity "
+              "session separates the two readings not at all."]
+    else:
+        L += ["| session | engine | dflash ratio | none ratio | dflash CV | "
+              "none CV | reading |", "|---|---|---|---|---|---|---|"]
+        for r in mc:
+            L.append(f"| {r['session']} | {r['engine']} "
+                     f"| **{r['ratios'].get('dflash', float('nan')):.3f}** "
+                     f"| **{r['ratios'].get('none', float('nan')):.3f}** "
+                     f"| {r['cvs'].get('dflash', float('nan')):.2f}% "
+                     f"| {r['cvs'].get('none', float('nan')):.2f}% "
+                     f"| {r.get('reading', '')} |")
+        decisive = [r for r in mc
+                    if r.get("reading") in ("regime needs speculation",
+                                            "CUDA-graph property")]
+        L += ["", f"{len(decisive)} of {len(mc)} sessions are decisive; the "
+              f"rest are parity sessions, which separate the two readings "
+              f"not at all."]
+
     L += ["", "## What the n-gram comparison can still support", "",
           f"The draft-model localisation (F018) rests on two n-gram sessions "
           f"being quiet. Both sat in the parity regime. At the observed deficit "
