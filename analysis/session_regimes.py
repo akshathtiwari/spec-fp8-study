@@ -126,6 +126,56 @@ def fisher_one_sided(rows: list[dict], baseline: str = "vllm-0.29.0") -> dict:
     return {"n": n, "deficit": k, "grp_n": len(grp), "grp_deficit": a, "p": p}
 
 
+def predictor_contrast(rows: list[dict], cut: str = "10-31") -> dict:
+    """Compare two candidate predictors of the regime on the same sessions.
+
+    F040 withdrew the engine-release reading at p = 0.238 and named calendar
+    date as an entangled confound it could not separate. Tested directly,
+    date is the BETTER predictor: within vLLM 0.29.0 alone it separates the
+    regimes perfectly.
+
+    **The cut date is chosen post hoc** -- it is the obvious gap in our
+    calendar, picked after seeing which sessions were deficient -- so the
+    p-value below is optimistic and is reported as a comparison between two
+    hypotheses on identical data, not as a test of one. With 3 against 3,
+    1/20 = 0.05 is also the smallest p obtainable, so "significant" here
+    means only "perfectly separated at the smallest sample that could be".
+    What would make it a real test is future sessions, which is why
+    `main()` prints the prediction.
+    """
+    def fisher(n, k, gn, a):
+        return sum(comb(k, x) * comb(n - k, gn - x) / comb(n, gn)
+                   for x in range(a, min(k, gn) + 1))
+
+    out = {"cut": cut}
+    n, k = len(rows), sum(1 for r in rows if r["regime"] == "deficit")
+    grp = [r for r in rows if r["engine"] == "vllm-0.29.0"]
+    a = sum(1 for r in grp if r["regime"] == "deficit")
+    out["version"] = {"a": a, "n_a": len(grp), "b": k - a, "n_b": n - len(grp),
+                      "p": fisher(n, k, len(grp), a)}
+
+    # Date, held to one engine release so the two predictors are not
+    # competing on different data.
+    early = [r for r in grp if r["session"][:5] < cut]
+    late = [r for r in grp if r["session"][:5] >= cut]
+    ae = sum(1 for r in early if r["regime"] == "deficit")
+    out["date_within_baseline"] = {
+        "a": ae, "n_a": len(early), "b": a - ae, "n_b": len(late),
+        "p": fisher(len(grp), a, len(early), ae) if early and late else None}
+
+    e2 = [r for r in rows if r["session"][:5] < cut]
+    ae2 = sum(1 for r in e2 if r["regime"] == "deficit")
+    out["date_all"] = {"a": ae2, "n_a": len(e2), "b": k - ae2,
+                       "n_b": n - len(e2),
+                       "p": fisher(n, k, len(e2), ae2) if e2 else None}
+
+    # What one further parity session after the cut would do to the date
+    # reading, stated before it is run.
+    g2 = len(grp) + 1
+    out["next_parity_would_give"] = fisher(g2, a, len(early), ae)
+    return out
+
+
 def partition_agreement(rows: list[dict]) -> dict:
     """Do the ratio-defined and dispersion-defined partitions coincide?
 
@@ -310,6 +360,37 @@ def main() -> int:
           "",
           "Both axes are within-session, so neither can be produced by a "
           "card-level offset that moves both arms together (F034).", "",
+          "## Which predicts the regime better: the release, or the date?", "",
+          "F040 withdrew the engine-release reading and named calendar date "
+          "as a confound it could not separate. Tested directly on the same "
+          "sessions, date is the better predictor. The cut is chosen post "
+          "hoc, so these are two hypotheses compared on identical data, not "
+          "a test of either.", "",
+          "| predictor | split | one-sided Fisher p |", "|---|---|---|"]
+    pc = predictor_contrast(rows)
+    for key, label in (("version", "engine release (0.29.0 vs later)"),
+                       ("date_within_baseline",
+                        f"date within 0.29.0 (before {pc['cut']} vs on/after)"),
+                       ("date_all", f"date, all engines (before {pc['cut']} vs on/after)")):
+        d = pc[key]
+        if d["p"] is None:
+            continue
+        L.append(f"| {label} | {d['a']}/{d['n_a']} vs {d['b']}/{d['n_b']} "
+                 f"| **{d['p']:.3f}** |")
+    L += ["",
+          f"With {pc['date_within_baseline']['n_a']} against "
+          f"{pc['date_within_baseline']['n_b']}, "
+          f"{1 / comb(pc['date_within_baseline']['n_a'] + pc['date_within_baseline']['n_b'], pc['date_within_baseline']['n_a']):.3f} "
+          f"is the smallest p reachable, so a perfect split scores the floor "
+          f"and nothing stronger is obtainable at this sample size.", "",
+          f"**Prediction, recorded before the next run.** One further 0.29.0 "
+          f"session after {pc['cut']} landing in parity takes the date "
+          f"reading to p = **{pc['next_parity_would_give']:.3f}**. One "
+          f"landing in deficit refutes it outright. The practical "
+          f"consequence: if the deficit regime has stopped occurring on this "
+          f"provider's fleet, waiting for one to appear is not a plan, and "
+          f"the open mechanism question cannot be closed by spending more.",
+          "",
           "## Is the deficit associated with the engine release?", "",
           f"{fi['grp_deficit']} of {fi['grp_n']} sessions on vllm-0.29.0 against "
           f"{fi['deficit'] - fi['grp_deficit']} of {fi['n'] - fi['grp_n']} on later "
