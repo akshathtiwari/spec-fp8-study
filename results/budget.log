@@ -32,3 +32,4 @@
 {"ts": "2026-10-31T08:49:49.207628+00:00", "phase": "boot_variance", "session_gpu_s": 4786.6, "cumulative_gpu_s": 89169.7, "gpu_type": "NVIDIA L4", "detail": "boot_variance (container wall)"}
 {"ts": "2026-10-31T10:31:17.996929+00:00", "phase": "boot_variance", "session_gpu_s": 4790.3, "cumulative_gpu_s": 93960.0, "gpu_type": "NVIDIA L4", "detail": "boot_variance (container wall)"}
 {"ts": "2026-10-31T11:57:57.897771+00:00", "phase": "boot_variance", "session_gpu_s": 4836.0, "cumulative_gpu_s": 98796.0, "gpu_type": "NVIDIA L4", "detail": "boot_variance (container wall)"}
+{"ts": "2026-11-01T15:59:32.994726+00:00", "phase": "boot_variance", "session_gpu_s": 12577.1, "cumulative_gpu_s": 111373.1, "gpu_type": "NVIDIA L4", "detail": "boot_variance (container wall)"}

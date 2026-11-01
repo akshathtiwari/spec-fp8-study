@@ -74,10 +74,11 @@ Ten 2x2 sessions is about $28.60, which is one month's credit. The decision
 this finding forces is whether to spend it on a lottery whose odds we cannot
 estimate, and the honest answer is that we cannot estimate them.
 
-## Prediction, recorded before the result
+## Prediction, recorded before the result -- and the result
 
 A 2x2 session was launched on 2026-11-01 at 17:52 IST, before this finding
-was committed, and its outcome was not known when this was written.
+was committed (`de33fb0`), and its outcome was not known when the prediction
+was written:
 
 - **If it lands at parity:** the date reading goes to 0/4 after the cut,
   p = 0.029, and the case that the regime has stopped occurring strengthens.
@@ -86,9 +87,45 @@ was committed, and its outcome was not known when this was written.
   measured inside a deficit container, which is the measurement the whole
   2x2 was built for.
 
-Either outcome is informative, which is the only defensible reason to have
-launched it. The prediction is recorded first because F038 did the same
-thing and that is the only reason its successor reads as a test.
+**Outcome: parity, as the first branch.** Session `11-01T12-30`, vLLM
+0.29.0, L4, gave dflash 1.012 and none 1.034. The date reading is now
+3/3 before the cut against **0/4** on or after it, **p = 0.029** -- the
+figure named in advance, because with 3 against 4 that split admits only
+one value.
+
+The prediction is recorded first because F038 did the same thing, and that
+is the only reason either reads as a test. Note what it is *not*: predicting
+the floor of a perfectly-separated 3-against-4 split is arithmetic, not
+insight. What was genuinely at risk was the branch, and the branch that
+would have been informative is the one that did not happen.
+
+## What the session did establish
+
+The 2x2 ran all four cells in one container, so three things are now
+measured that were not before:
+
+| quantity | value | note |
+|---|---|---|
+| dflash default/eager | 1.012 | parity, consistent with the other 10-31 sessions |
+| none default/eager | 1.034 | CUDA graphs **help** without speculation |
+| none default/eager at c=64 | 1.102 | and help more under concurrency |
+| speculative speedup, c=1, graph | 3.09x | 83.5 against 27.0 tok/s |
+| speculative speedup, c=1, eager | 3.16x | 82.5 against 26.1 tok/s |
+
+The non-speculative ratio above 1 is the expected direction and worth
+stating: with no spec-decode fallback for graph capture to trip over, CUDA
+graphs do what they are supposed to do. That makes the deficit regime's
+behaviour stranger rather than less so, since in it the same switch costs
+23--51% on the speculative path.
+
+The speculative speedup is the first this study can quote with a
+non-speculative control measured in the **same container**. Every earlier
+speedup figure in this repo compared across containers, which F033 and F040
+show is a comparison between two draws of an unknown session state.
+
+The wiring is validated on real hardware: `none` boots under
+`--enforce-eager`, the spec-stats scrape degrades correctly on a cell with
+no speculation, and the 4-hour timeout was sufficient at 3.49 GPU-hours.
 
 ## What this does NOT establish
 
