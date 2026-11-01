@@ -16,6 +16,16 @@ supersedes: [F034, F038]
 superseded_by: []
 ---
 
+> **Revised by F042 (2026-11-01).** Every measurement below stands. Its
+> interpretation does not. All three withdrawals in this finding -- the engine
+> release (F034), L4 specificity (F035) and draft-model localisation (F018) --
+> compared sessions on NVIDIA driver 580.95.05 against sessions on 610.57.04
+> without knowing it. Within one driver, each original reading holds (3/3
+> against 0/2, 0/1 and 0/2). And "session-scoped" is probably the wrong
+> description: every deficit session shares one configuration (L4, 580.95.05,
+> 0.29.0, DFlash), and every one-factor neighbour is at parity. This finding
+> corrected an over-confident claim with an over-confident withdrawal.
+
 ## Claim
 
 Two more vLLM 0.29.0 sessions were run on 2026-10-31 after F038, bringing

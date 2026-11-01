@@ -12,7 +12,7 @@ evidence:
   analysis: [analysis/session_regimes.py, analysis/out/tables/session_regimes.md]
   code_sha: pending
 supersedes: []
-superseded_by: []
+superseded_by: [F042]
 ---
 
 ## Claim
@@ -137,6 +137,15 @@ no speculation, and the 4-hour timeout was sufficient at 3.49 GPU-hours.
   record: host, rack, neighbour tenancy, driver rollout, firmware, cooling.
   We record none of these, so the finding names a gap in instrumentation,
   not a cause.
+
+  > **Corrected by F042 (2026-11-01).** "Driver rollout" does not belong in
+  > that list. The host driver has been stored in every record under
+  > `env.driver` since the first session. The comparison behind this
+  > finding queried `driver_version`, got nothing, and read the empty result
+  > as absence. Under the right key the driver changes from 580.95.05 to
+  > 610.57.04 exactly where the date cut falls: the "date" here is that
+  > rollout seen through time. The statement is left in place, struck by
+  > this note rather than edited away, because the error is the evidence.
 - **That the regime will not recur.** Three sessions on one morning cannot
   establish that a sometimes-occurring condition has stopped.
 - **A mechanism.** Unchanged from F040. Graph mode, backend selection and

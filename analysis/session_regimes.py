@@ -126,6 +126,78 @@ def fisher_one_sided(rows: list[dict], baseline: str = "vllm-0.29.0") -> dict:
     return {"n": n, "deficit": k, "grp_n": len(grp), "grp_deficit": a, "p": p}
 
 
+def configuration_table() -> list[dict]:
+    """Every session that measured both arms, on any card and any mechanism.
+
+    The regime tables above hold the GPU and the mechanism fixed, which is
+    right for comparing like with like and wrong for asking what the deficit
+    depends on. This one varies them, and carries the host driver, which
+    every record has stored under `env.driver` since the first session.
+
+    F041 listed "driver rollout" among the things this study does not record.
+    That was false: the field was in every record, and a query for
+    `driver_version` instead of `driver` returned nothing and was read as
+    absence. F042 is what the right key shows.
+    """
+    by: dict[tuple, dict] = {}
+    with (ROOT / "results" / "probes.jsonl").open() as fh:
+        for line in fh:
+            if not line.strip():
+                continue
+            r = json.loads(line)
+            if r.get("phase") != "boot_variance":
+                continue
+            if (r.get("load") or {}).get("concurrency") != 1:
+                continue
+            tp = (r.get("throughput") or {}).get("output_tokens_per_s")
+            if not tp:
+                continue
+            cfg, env = r.get("config") or {}, r.get("env") or {}
+            k = (r["probe_run"], cfg.get("mechanism"))
+            d = by.setdefault(k, {
+                "session": r["probe_run"][5:16],
+                "engine": (cfg.get("engine_ref") or "").replace("vllm-", ""),
+                "driver": env.get("driver"),
+                "gpu": (env.get("gpu") or "").replace("NVIDIA ", ""),
+                "mech": cfg.get("mechanism"), "arms": {}})
+            d["arms"].setdefault(r.get("arm"), []).append(tp)
+    out = []
+    for d in by.values():
+        a = d.pop("arms")
+        if "default" in a and "enforce_eager" in a:
+            d["ratio"] = st.mean(a["default"]) / st.mean(a["enforce_eager"])
+            d["regime"] = "deficit" if d["ratio"] < DEFICIT_RATIO else "parity"
+            out.append(d)
+    return sorted(out, key=lambda d: (d["gpu"], d["driver"] or "",
+                                      d["engine"], d["mech"] or "",
+                                      d["session"]))
+
+
+def deficit_conjunction(cfgs: list[dict]) -> dict:
+    """Which configuration do all deficit sessions share, and do its
+    one-factor neighbours escape it?
+
+    Returns the shared configuration (if every deficit session has the same
+    one) and, for each factor, the sessions that differ from it in that
+    factor alone.
+    """
+    FACTORS = ("engine", "driver", "gpu", "mech")
+    deficit = [c for c in cfgs if c["regime"] == "deficit"]
+    if not deficit:
+        return {"shared": None}
+    shared = {f: deficit[0][f] for f in FACTORS}
+    if any(any(c[f] != shared[f] for f in FACTORS) for c in deficit):
+        return {"shared": None}
+    in_cell = [c for c in cfgs if all(c[f] == shared[f] for f in FACTORS)]
+    neighbours = {}
+    for f in FACTORS:
+        nb = [c for c in cfgs
+              if c[f] != shared[f]
+              and all(c[g] == shared[g] for g in FACTORS if g != f)]
+        neighbours[f] = nb
+    return {"shared": shared, "in_cell": in_cell, "neighbours": neighbours}
+
+
 def predictor_contrast(rows: list[dict], cut: str = "10-31") -> dict:
     """Compare two candidate predictors of the regime on the same sessions.
 
@@ -360,7 +432,41 @@ def main() -> int:
           "",
           "Both axes are within-session, so neither can be produced by a "
           "card-level offset that moves both arms together (F034).", "",
-          "## Which predicts the regime better: the release, or the date?", "",
+          "## What every deficit session has in common", "",
+          "All sessions that measured both arms, on every card and mechanism, "
+          "with the host driver each record stores under `env.driver`.", "",
+          "| gpu | driver | engine | mechanism | session | ratio | regime |",
+          "|---|---|---|---|---|---|---|"]
+    cfgs = configuration_table()
+    for c in cfgs:
+        L.append(f"| {c['gpu']} | {c['driver']} | {c['engine']} | {c['mech']} "
+                 f"| {c['session']} | **{c['ratio']:.3f}** | {c['regime']} |")
+    dc = deficit_conjunction(cfgs)
+    if dc["shared"]:
+        sh = dc["shared"]
+        nd = sum(1 for c in dc["in_cell"] if c["regime"] == "deficit")
+        L += ["", f"Every deficit session shares one configuration: "
+              f"**{sh['gpu']}, driver {sh['driver']}, vLLM {sh['engine']}, "
+              f"{sh['mech']}**. That cell holds {len(dc['in_cell'])} sessions, "
+              f"{nd} of them deficient.", "",
+              "Its one-factor neighbours -- sessions that differ from it in "
+              "exactly one factor and match it in all others:", "",
+              "| factor changed | to | sessions | deficient |",
+              "|---|---|---|---|"]
+        for f, nb in dc["neighbours"].items():
+            if not nb:
+                L.append(f"| {f} | (none measured) | 0 | -- |")
+                continue
+            vals = sorted({str(c[f]) for c in nb})
+            L.append(f"| {f} | {', '.join(vals)} | {len(nb)} "
+                     f"| {sum(1 for c in nb if c['regime'] == 'deficit')} |")
+        L += ["", "Driver and calendar date are perfectly collinear in these "
+              "records, so no test on this data can separate them. The driver "
+              "is preferred because it can cause something and a date cannot; "
+              "the two make different predictions only on a host where the "
+              "driver can be chosen.", ""]
+
+    L += ["## Which predicts the regime better: the release, or the date?", "",
           "F040 withdrew the engine-release reading and named calendar date "
           "as a confound it could not separate. Tested directly on the same "
           "sessions, date is the better predictor. The cut is chosen post "
@@ -395,8 +501,11 @@ def main() -> int:
           f"{fi['grp_deficit']} of {fi['grp_n']} sessions on vllm-0.29.0 against "
           f"{fi['deficit'] - fi['grp_deficit']} of {fi['n'] - fi['grp_n']} on later "
           f"releases. One-sided Fisher exact **p = {fi['p']:.3f}**.", "",
-          "At this sample size the releases are indistinguishable. The earlier "
-          "engine-release reading (F032, F035) is withdrawn.", "",
+          "Across all L4 sessions the releases are indistinguishable. That "
+          "comparison mixes two host drivers, and F042 shows the split is "
+          "clean within one: on driver 580.95.05, 0.29.0 is deficient 3/3 and "
+          "0.30.0 0/2. The engine-release reading is conditional on the "
+          "driver, not withdrawn.", "",
           "## Boot-level separation", "",
           f"Pooling every fixed-prompt default-arm boot gives n = **{bs['n']}**: "
           f"{bs['n_deficit']} deficit boots spanning "
