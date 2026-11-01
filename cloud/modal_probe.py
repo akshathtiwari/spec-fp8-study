@@ -715,7 +715,13 @@ def backend_report() -> str:
 
 
 @app.function(
-    image=vllm_image, gpu=GPU_TYPE, timeout=90 * 60, **GPU_GUARDRAILS,
+    # 4 hours, not 90 minutes. The 90 was sized for 24 boots (2 arms x 12)
+    # at roughly 200 s a boot, which fits in 5400 s with margin. The 2x2
+    # (--sweep dflash,none) is 48 boots, about 9700 s, so the old ceiling
+    # would have killed the container just after the dflash mechanism
+    # finished -- spending the full GPU budget and returning no control arm,
+    # which is precisely the measurement the 2x2 exists to take.
+    image=vllm_image, gpu=GPU_TYPE, timeout=4 * 60 * 60, **GPU_GUARDRAILS,
     # /results is mounted because this probe now writes records and logs.
     # Without it the writes land in the container filesystem and vanish on
     # exit, which is the same failure as not recording at all.
