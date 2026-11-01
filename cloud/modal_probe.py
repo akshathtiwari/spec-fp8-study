@@ -726,6 +726,27 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash",
                   sweep_file: str = "sweeps/boot_stability.yaml") -> str:
     """Does --enforce-eager still win under load, or does it invert?
 
+    `mechanism` accepts a comma-separated list ("dflash,none"), and every
+    mechanism named runs inside THIS container, against the same arms.
+
+    That list is the point, not a convenience. F040 established two
+    session-scoped throughput regimes but could not say whether they are a
+    property of speculative decoding or of CUDA graphs generally, because
+    every session this study has run measured speculation only. Answering it
+    needs the non-speculative cell measured in the SAME container: run it in
+    a separate session and the regime of that session is a free variable
+    again, which is the confound the within-container ratio exists to kill.
+
+    Four cells per container -- {default, enforce_eager} x {dflash, none} --
+    give two within-session ratios that are directly comparable:
+
+        dflash default/eager << 1, none ~= 1  -> regime needs speculation
+        both << 1                             -> a CUDA-graph property that
+                                                 speculation only makes visible
+
+    Cost is linear in the list: two mechanisms is roughly 2.7 GPU-hours a
+    session against 1.3.
+
     `mechanism` exists because the first run of this test answered the
     question only for speculative cells. `--enforce-eager` is an
     engine-wide switch, so pinning it for the grid also pins it for the
@@ -768,8 +789,17 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash",
     from specfp8.store import append_record, argv_fingerprint, persist_log
     from specfp8.workloads import get_workload
 
-    cell = next(c for c in expand(sweep_file)
-                if c.mechanism == mechanism)
+    mechs = [m.strip() for m in mechanism.split(",") if m.strip()]
+    available = {}
+    for _c in expand(sweep_file):          # first wins, as next() did
+        available.setdefault(_c.mechanism, _c)
+    missing = [m for m in mechs if m not in available]
+    if missing:
+        raise RuntimeError(
+            f"{sweep_file} declares no cell for mechanism(s) {missing}; "
+            f"it has {sorted(available)}. Refusing to run a partial 2x2: "
+            f"a missing arm would be read as a measurement, not a gap.")
+    cells = {m: available[m] for m in mechs}
     workload = get_workload("gsm8k")
     scraper = VllmMetricsScraper()
     sampling = workload.sampling()
@@ -786,23 +816,31 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash",
     probe_run = datetime.now(timezone.utc).strftime(
         "%Y-%m-%dT%H-%MZ_boot_variance")
     out = [f"concurrency x CUDA-graph test: {boots} boots x {len(arms)} arms "
-           f"[mechanism={mechanism}]",
-           f"cell: {cell.mechanism}|{cell.weight_precision}|"
-           f"{cell.kv_cache_dtype}|{cell.attn_backend}", ""]
+           f"x {len(mechs)} mechanisms {mechs}"]
+    for _m, _c in cells.items():
+        out.append(f"cell[{_m}]: {_c.mechanism}|{_c.weight_precision}|"
+                   f"{_c.kv_cache_dtype}|{_c.attn_backend}")
+    out.append("")
     data: dict[tuple, list[float]] = {}
 
-    for arm, extra in arms.items():
+    # One flat loop rather than a nested one: every (mechanism, arm) pair is
+    # measured in this container, so the ratio between them carries no
+    # session effect. Mechanism varies slowest so that a run killed partway
+    # still leaves one mechanism complete and comparable.
+    for mech, arm, extra in [(m, a, e) for m in mechs
+                             for a, e in arms.items()]:
+        cell = cells[mech]
         base = VllmLauncher()
         launcher = VllmLauncher()
         launcher.argv = lambda c, p, _b=base, _e=extra: _b.argv(c, p) + _e
         for i in range(boots):
-            boot_tag = f"{probe_run}_{arm}_{i}"
+            boot_tag = f"{probe_run}_{mech}_{arm}_{i}"
             handle = launcher.start(cell, boot_tag, find_free_port(), "logs")
             argv = launcher.argv(cell, handle.port)
             try:
                 h = launcher.wait_healthy(handle, timeout_s=900)
                 if not h.ok:
-                    out.append(f"  {arm} boot {i+1}: FAILED ({h.status})")
+                    out.append(f"  {mech} {arm} boot {i+1}: FAILED ({h.status})")
                     # A failed boot is evidence too -- and the verbatim
                     # error lives only in the engine log, which is why F012
                     # was diagnosable at all.
@@ -859,7 +897,7 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash",
                     toks = sum(r.output_tokens for r in res if r.ok)
                     tok_s = toks / wall if wall else 0.0
                     tau = mdelta(before, after).tau if (before and after) else None
-                    data.setdefault((arm, c), []).append(tok_s)
+                    data.setdefault((mech, arm, c), []).append(tok_s)
                     d = mdelta(before, after) if (before and after) else None
                     append_record({
                         "probe_run": probe_run, "phase": "boot_variance",
@@ -898,28 +936,65 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash",
                         "log_path": f"results/logs/{boot_tag}.log",
                     }, "/results", "probes.jsonl")
                     results_vol.commit()
-                    out.append(f"  {arm:14} boot {i+1} c={c:<3} "
+                    out.append(f"  {mech:7} {arm:14} boot {i+1} c={c:<3} "
                                f"{tok_s:8.2f} tok/s  tau={tau:.3f}" if tau
-                               else f"  {arm:14} boot {i+1} c={c:<3} {tok_s:8.2f} tok/s")
+                               else f"  {mech:7} {arm:14} boot {i+1} "
+                                    f"c={c:<3} {tok_s:8.2f} tok/s")
             finally:
                 persist_log(boot_tag, handle.log_path, "/results")
                 results_vol.commit()
                 stop_process(handle)
                 time.sleep(5)
 
-    out += ["", f"{'concurrency':>12}{'default':>12}{'eager':>12}{'eager/default':>15}"]
+    # default/eager, the orientation F040 and analysis/session_regimes.py
+    # use. Earlier revisions of this probe printed eager/default, so the two
+    # are stated here rather than left to the reader to invert.
+    out += ["", "default/eager within this container (ratio < 0.95 = deficit):",
+            f"{'mechanism':>10}{'conc':>6}{'default':>10}{'eager':>10}"
+            f"{'default/eager':>15}"]
     out.append("-" * 51)
-    for c in CONC:
-        d = data.get(("default", c), [])
-        e = data.get(("enforce_eager", c), [])
-        if not d or not e:
-            continue
-        dm, em = statistics.mean(d), statistics.mean(e)
-        out.append(f"{c:>12}{dm:>12.1f}{em:>12.1f}{em/dm:>14.2f}x")
-    out += ["", "Ratio > 1 at every concurrency: pin --enforce-eager and "
-                "re-measure at one boot per cell.",
-            "Ratio inverting at 16 or 64: the advantage is low-concurrency "
-            "only, and the grid needs boot-level repeats instead."]
+    for m in mechs:
+        for c in CONC:
+            d = data.get((m, "default", c), [])
+            e = data.get((m, "enforce_eager", c), [])
+            if not d or not e:
+                continue
+            dm, em = statistics.mean(d), statistics.mean(e)
+            out.append(f"{m:>10}{c:>6}{dm:>10.1f}{em:>10.1f}{dm / em:>14.3f}")
+
+    ratios = {}
+    for m in mechs:
+        d = data.get((m, "default", 1), [])
+        e = data.get((m, "enforce_eager", 1), [])
+        if d and e:
+            ratios[m] = statistics.mean(d) / statistics.mean(e)
+    if len(ratios) > 1:
+        out += ["", "Is the regime speculation-specific? (concurrency 1)"]
+        for m, v in ratios.items():
+            out.append(f"  {m:<8} default/eager = {v:.3f}"
+                       f"  {'DEFICIT' if v < 0.95 else 'parity'}")
+        spec = [m for m in ratios if m != "none"]
+        if "none" in ratios and spec:
+            dfc = any(ratios[m] < 0.95 for m in spec)
+            non = ratios["none"] < 0.95
+            out.append("")
+            if dfc and not non:
+                out.append("  -> speculative arm deficient, non-speculative at "
+                           "parity: the regime needs speculation.")
+            elif dfc and non:
+                out.append("  -> both arms deficient: a CUDA-graph property "
+                           "that speculation only makes visible.")
+            elif not dfc and not non:
+                out.append("  -> parity session. This container cannot "
+                           "separate the two readings; it is one draw.")
+            else:
+                out.append("  -> non-speculative arm deficient while the "
+                           "speculative one is not. Unexpected; do not "
+                           "interpret from one session.")
+    elif len(mechs) == 1:
+        out += ["", f"One mechanism ({mechs[0]}). Pass "
+                    "--sweep dflash,none for the 2x2 that tests whether the "
+                    "regime is speculation-specific."]
     return "\n".join(out)
 
 
@@ -1138,12 +1213,24 @@ def main(
         # is how a version replication is requested. It must match the image:
         # SPECFP8_VLLM_VERSION sets the engine, engine_ref in the sweep
         # declares it, and boot_variance aborts if they disagree (F031).
+        # --sweep names the mechanism, and accepts a comma-separated list.
+        # "dflash,none" runs the 2x2 ({default, enforce_eager} x {speculative,
+        # not}) inside ONE container, which is the only way to tell whether
+        # the F040 regimes need speculation: measured in separate containers,
+        # the regime of each is a free variable again.
         bv_kwargs = dict(boots=repeats if repeats > 1 else 2,
                          mechanism=sweep if sweep != "compat" else "dflash")
         if sweep_file:
             bv_kwargs["sweep_file"] = sweep_file
+        _mechs = [m.strip() for m in bv_kwargs["mechanism"].split(",") if m.strip()]
+        _cells = 2 * len(_mechs) * bv_kwargs["boots"]
         print(f"engine image: vllm=={VLLM_VERSION} on {GPU_TYPE}")
         print(f"sweep: {sweep_file or 'sweeps/boot_stability.yaml'}")
+        print(f"mechanisms: {_mechs}  ->  {_cells} boots in one container, "
+              f"roughly {_cells * 200 / 3600:.1f} GPU-hours")
+        if len(_mechs) == 1:
+            print("note: --sweep dflash,none runs the 2x2 that tests whether "
+                  "the regime is speculation-specific")
         print(boot_variance.remote(**bv_kwargs))
         return
     if engine == "backends":
