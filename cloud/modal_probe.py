@@ -939,6 +939,10 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash",
                         # on 580 -- different hosts, the confound F042's
                         # intervention exists to remove.
                         "platform": os.environ.get("SPECFP8_PLATFORM", "modal"),
+                        # CPUs this process may run on. F044: every GCP engine
+                        # log reports torch starting at 2 threads, no Modal log
+                        # does, and nothing recorded what the container had.
+                        "cpus_visible": len(os.sched_getaffinity(0)),
                         # Measured, not declared (F031).
                         "engine_version": engine_version,
                         "engine_check": engine_check,

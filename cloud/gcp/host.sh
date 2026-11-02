@@ -8,6 +8,7 @@
 #   host.sh build              the Modal-equivalent image (cloud/gcp/Dockerfile)
 #   host.sh verify             driver, card, torch, vllm, async flag -- no GPU load
 #   host.sh run ARGS...        cloud/gcp/run_in_container.py ARGS
+#                              (CPUSET=0 host.sh run ... pins to one vCPU)
 #
 # The repo is mounted from the VM user's disk into a container that runs as
 # root, so git refuses it ("dubious ownership", exit 128) and boot_variance's
@@ -71,7 +72,10 @@ print(\"vllm\",vllm.__version__); print(\"device\",torch.cuda.get_device_name(0)
     echo "async flag:"; vllm serve --help=all 2>/dev/null | grep -i -- "async-scheduling" | head -3'
   ;;
 run)
+  # CPUSET pins the container to those CPUs (e.g. CPUSET=0 for one vCPU),
+  # to test F044's CPU candidate. Unset, the container gets every CPU.
   sudo docker run --rm --gpus all --shm-size=16g --ipc=host \
+    ${CPUSET:+--cpuset-cpus=$CPUSET} \
     -e SPECFP8_PLATFORM=gcp -e HF_HUB_DISABLE_PROGRESS_BARS=1 \
     -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory \
     -e GIT_CONFIG_VALUE_0=/root/spec-fp8-study \
