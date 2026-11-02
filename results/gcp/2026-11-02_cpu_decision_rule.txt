@@ -25,3 +25,12 @@ Prior, stated so it can be wrong in public: leaning parity. Modal's 610.57.04
 sessions ran with the same (default) CPU request and were at parity, so a starved
 CPU alone did not produce the deficit there. Low confidence; this run is cheap
 precisely because either answer moves the question.
+
+ADDENDUM, committed 2026-11-02 after the VM came up and BEFORE any measurement:
+  This run landed on a different card (GPU-8cf63913-107d-d607-1bf2-bd44da62bbaa)
+  from F044's (GPU-82670c91-...). So a deficit here could be the card, not the pin.
+  If the pinned run shows a deficit, an UNPINNED default + enforce_eager control
+  (12 boots each) is run on this same card before any conclusion is drawn:
+    unpinned at parity   -> the pin caused it (one starved CPU is sufficient)
+    unpinned also deficit -> this card/host does it on its own; the pin is not shown
+  Thresholds above are unchanged. This adds a control; it does not move a line.
