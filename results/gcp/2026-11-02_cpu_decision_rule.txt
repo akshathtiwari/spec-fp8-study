@@ -1,0 +1,27 @@
+Pre-registered 2026-11-02, committed before the VM for this run was created.
+
+Run:  GCP L4, driver 580.95.05 installed by hand, the leg-1 setup of F044, with the
+      container pinned to ONE vCPU (CPUSET=0). mechanism dflash; arms default,
+      enforce_eager, default_noasync; 12 boots each.
+
+Fidelity check, before any measurement is trusted:
+  With one vCPU, torch should already start at a single thread, so the engine
+  log should NOT contain "Reducing Torch threads from N to 1" -- matching every
+  Modal log and unlike every unpinned GCP log. If the line still appears, the
+  pin does not reproduce what Modal's containers looked like, and the run is
+  reported as a test of "one vCPU", not of "Modal's CPU".
+
+Rule, applied after default + enforce_eager (24 boots):
+  ratio < 0.95 and graph-arm CV in the deficit band (>= 3.73%)
+      -> one starved CPU reproduces the deficit on plain hardware, no sandbox.
+         Continue to default_noasync: parity there means the deficit needs
+         async scheduling AND a starved CPU (F043 + F044 jointly).
+  ratio >= 0.95
+      -> CPU starvation alone is not sufficient. Stop; skip default_noasync,
+         which can remove nothing from a session with no deficit. The sandbox
+         (gVisor nvproxy) is left as the candidate.
+
+Prior, stated so it can be wrong in public: leaning parity. Modal's 610.57.04
+sessions ran with the same (default) CPU request and were at parity, so a starved
+CPU alone did not produce the deficit there. Low confidence; this run is cheap
+precisely because either answer moves the question.
