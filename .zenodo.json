@@ -29,11 +29,11 @@
     "SM89",
     "GPU power and clock telemetry",
     "replication",
-    "session-scoped measurement regimes",
     "bimodality",
     "serverless GPU platforms",
     "gVisor",
-    "intervention"
+    "intervention",
+    "platform-dependent performance"
   ],
   "notes": "Measurements were taken on rented NVIDIA L4 and A10 instances, on the Modal serverless platform and on Google Cloud VMs. Physical GPU identity (gpu_uuid) has been recorded per measurement since 2026-09-29, achieved SM clock, power draw and driver throttle reasons across the measurement window since 2026-10-04, and GPU utilisation since 2026-10-31; measurements taken before those dates lack the corresponding fields, and the paper states which of its claims are replicated and which are single-session draws. Every session reported here ran on a distinct physical card, so no regime can be attributed to a specific card. Zenodo's GitHub integration adds its own isSupplementTo relation to the release, so this file deliberately declares none."
 }
