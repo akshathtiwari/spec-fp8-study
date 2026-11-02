@@ -171,6 +171,9 @@ def configuration_table() -> list[dict]:
             d = by.setdefault(k, {
                 "session": r["probe_run"][5:16],
                 "platform": _platform(r),
+                # Display only, not a conjunction factor: Modal records predate
+                # the field, so Modal's CPU is unrecorded ("?"), not unequal.
+                "cpus": r.get("cpus_visible", "?"),
                 "engine": (cfg.get("engine_ref") or "").replace("vllm-", ""),
                 "driver": env.get("driver"),
                 "gpu": (env.get("gpu") or "").replace("NVIDIA ", ""),
@@ -450,11 +453,11 @@ def main() -> int:
           "## What every deficit session has in common", "",
           "All sessions that measured both arms, on every card and mechanism, "
           "with the host driver each record stores under `env.driver`.", "",
-          "| platform | gpu | driver | engine | mechanism | session | ratio | regime |",
-          "|---|---|---|---|---|---|---|---|"]
+          "| platform | cpus | gpu | driver | engine | mechanism | session | ratio | regime |",
+          "|---|---|---|---|---|---|---|---|---|"]
     cfgs = configuration_table()
     for c in cfgs:
-        L.append(f"| {c['platform']} | {c['gpu']} | {c['driver']} | {c['engine']} "
+        L.append(f"| {c['platform']} | {c['cpus']} | {c['gpu']} | {c['driver']} | {c['engine']} "
                  f"| {c['mech']} | {c['session']} | **{c['ratio']:.3f}** | {c['regime']} |")
     dc = deficit_conjunction(cfgs)
     if dc["shared"]:

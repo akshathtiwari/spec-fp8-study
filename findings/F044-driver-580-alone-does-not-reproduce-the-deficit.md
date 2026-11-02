@@ -17,6 +17,12 @@ supersedes: []
 superseded_by: []
 ---
 
+> **Followed by F045 (2026-11-02).** The CPU candidate below was tested: pinned
+> to one vCPU (torch at one thread, as on Modal), the same configuration is still
+> at parity (1.028). One starved CPU is not sufficient. A fractional CPU quota,
+> as opposed to a pinned core, was not tested. The sandbox is left as the leading
+> candidate, by elimination.
+
 ## Claim
 
 F042 found every deficit session shares one configuration -- L4, driver
