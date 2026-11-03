@@ -44,11 +44,22 @@ in the records and in the regime table generated from them:
 | parity boot range | 75.5--83.5 | 75.5--83.9 |
 | mean tau range | 4.0702--4.1594 (2.2%) | 4.0702--4.1675 (2.4%) |
 | thr/tau dispersion factor, deficit | 12--22 | 13--22 (12.6--22.4) |
+| L4 sessions on Modal (section 4 opening) | nine | ten |
+| figure 1 caption, other sessions | eight, 0.86--10.38%, six at parity | nine, 0.82--10.38%, seven at parity |
+| parity sessions where graph CV exceeds eager CV | 1 of 6 | 3 of 7 |
+| parity sessions, both-arm CV range | 0.86--3.12% | 0.75--3.12% |
+
+One row was wrong before the 2026-11-01 session existed. The paper said the
+graph arm out-disperses its eager control in "only 1 of the 6 parity
+sessions"; its own table gave 2 of 6 (10-31 c: 1.95% against 1.02%). With
+11-01 it is 3 of 7. The sentence's point, that in the parity regime the
+comparison carries no signal, holds either way.
 
 None of these changes a conclusion. The two regimes stay disjoint in ratio,
 in CV and in pooled boots; the partition is still one partition and is now
 less likely under random assignment (0.008 against 0.012); tau CV stays below
-0.88% in every session. The corrections are in v1.5.1.
+0.88% in every session. The corrections are in v1.5.2. (Tag v1.5.1 carries only part of them and
+was never released.)
 
 ## Evidence
 
@@ -60,8 +71,8 @@ and the GCP ratios with their bootstrap intervals, then requires that
 `paper/paper.tex` contain the **exact string** each recomputed value would be
 typeset as (for example `3.73--13.92\%`, `$n = 128$`, `\binom{10}{3}`).
 
-- On the corrected paper: **19 of 19** strings present, exit 0.
-- On the v1.5.0 text: **9 of 19**, exit 1. It names the deficit band first.
+- On the corrected paper: **26 of 26** strings present, exit 0.
+- On the v1.5.0 text: **9 of 26**, exit 1. It names the deficit band first.
 
 The check is now a blocking step of `paper/build.sh`, before `check_paper`.
 
@@ -89,8 +100,9 @@ see it.
 
 ## What this does NOT establish
 
-- That every number in the paper is now correct. The gate covers the 19
-  headline values of sections 1 and 4 and the abstract. Other sections are
+- That every number in the paper is now correct. The gate covers 26
+  values in the abstract, the contributions, section 4 and the figure 1
+  caption. Other sections are
   still covered only by `check_paper`'s existence test.
 - That the generated tables were wrong. They were right throughout. The
   errors were in prose and in a finding's summary line.
@@ -101,8 +113,8 @@ see it.
 ## How to reproduce
 
 ```bash
-python -I analysis/recompute_cleanroom.py      # exit 0, 19/19
+python -I analysis/recompute_cleanroom.py      # exit 0, 26/26
 git show v1.5.0:paper/paper.tex > /tmp/old.tex
-SPECFP8_PAPER=/tmp/old.tex python -I analysis/recompute_cleanroom.py   # exit 1, 9/19
+SPECFP8_PAPER=/tmp/old.tex python -I analysis/recompute_cleanroom.py   # exit 1, 9/26
 python analysis/check_provenance.py            # check 8: 0 malformed, 0 blank, 0 duplicate
 ```

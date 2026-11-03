@@ -60,7 +60,7 @@ def ci_ratio(d, e):
 def main() -> int:
     A = sessions()
     paired = {run: a for run, a in A.items() if "default" in a and "enforce_eager" in a}
-    rows = sorted(((run, st.mean(a["default"]) / st.mean(a["enforce_eager"]), cv(a["default"]))
+    rows = sorted(((run, st.mean(a["default"]) / st.mean(a["enforce_eager"]), cv(a["default"]), cv(a["enforce_eager"]))
                    for run, a in paired.items()), key=lambda x: x[0])
     deficit = [r for r in rows if r[1] < 0.95]; parity = [r for r in rows if r[1] >= 0.95]
     n, k = len(rows), len(deficit)
@@ -142,7 +142,7 @@ def main() -> int:
     # SPECFP8_PAPER points the gate at another text, e.g. an older release,
     # to show it fails there.
     tex = Path(os.environ.get("SPECFP8_PAPER", ROOT / "paper" / "paper.tex")).read_text()
-    words = {7: "seven", 10: "ten", 3: "three"}
+    words = {3: "three", 7: "seven", 9: "nine", 10: "ten"}
     must = [
         ("deficit ratio band", f"{min(r[1] for r in deficit):.3f}--{max(r[1] for r in deficit):.3f}"),
         ("parity ratio band", f"{min(r[1] for r in parity):.3f}--{max(r[1] for r in parity):.3f}"),
@@ -159,6 +159,20 @@ def main() -> int:
         ("tau CV ceiling", f"more than {math.ceil(max(tau_cvs) * 100) / 100:.2f}\\%"),
         ("parity CV/tau factor", f"{pf_lo:.1f}--{pf_hi:.1f}"),
         ("n-gram both-parity", f"({n - k}/{n})^2 = {q * q:.2f}"),
+    ]
+    # v1.5.0 also said "only 1 of the 6 parity sessions" disperse more on the
+    # graph arm than on eager; its own table gave 2 of 6. Count, do not read.
+    pw = [r for r in parity if r[2] > r[3]]
+    others = [r for r in rows if r[0] != min(rows)[0]]   # all but the first session
+    must += [
+        ("parity sessions, graph CV > eager CV", f"only {len(pw)} of the {len(parity)} parity"),
+        ("parity, both arms CV range", f"between {min(min(r[2], r[3]) for r in parity):.2f}\\% and "
+                                       f"{max(max(r[2], r[3]) for r in parity):.2f}\\%"),
+        ("figure caption, other sessions", f"{words.get(len(others), len(others)).capitalize()} further sessions"),
+        ("figure caption, CV range", f"from {min(r[2] for r in others):.2f}\\% to {max(r[2] for r in others):.2f}\\% CV"),
+        ("figure caption, parity count", f"{words.get(len(parity), len(parity))} of them at parity"),
+        ("L4 session count", f"{words.get(n, n)} on the L4"),
+        ("default CV span", f"from {min(r[2] for r in rows):.2f}\\% to {max(r[2] for r in rows):.2f}\\%"),
     ]
     for s_, r, lo, hi, c in gcp:
         must.append((f"GCP {s_} ratio", f"{r:.3f}"))

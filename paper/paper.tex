@@ -238,8 +238,8 @@ regimes, and the platform decides which}\label{sec:c2}
 Booting an identical speculative configuration repeatedly produces widely
 scattered throughput while acceptance stays put --- in some container
 sessions. In others the same configuration is quiet and reaches parity with
-its own eager control. We ran ten sessions of the identical sweep on
-Modal, a serverless GPU platform, nine on the L4 and one on an A10, each
+its own eager control. We ran eleven sessions of the identical sweep on
+Modal, a serverless GPU platform, ten on the L4 and one on an A10, each
 landing on a distinct physical card:
 
 \begin{center}\small
@@ -447,8 +447,8 @@ also wrong: both cards report \textbf{22.5\,GiB}.
 
 \paragraph{An earlier revision of this paper reported only the first row.}
 It gave 13.92\% as \emph{the} boot dispersion of this configuration. Nine
-sessions later the same quantity ranges from 0.86\% to 13.92\%, a factor of
-sixteen, and which value a single session returns is settled by its regime.
+sessions later the same quantity ranges from 0.82\% to 13.92\%, a factor of
+seventeen, and which value a single session returns is settled by its regime.
 Quoting one number for it was wrong, and so was quoting a range as if the
 distribution were continuous: it is bimodal.
 
@@ -495,7 +495,7 @@ within one session form a single continuous distribution; sessions fall into
 two separated groups. Sampling five boots from inside one wide deficit
 session produced a gap that looked like structure and was not, while the
 structure that does exist sits one level up and was invisible until we had
-replicated the whole session nine times. Finding the right level took four
+replicated the whole session nine times over. Finding the right level took four
 revisions, and the error in both directions was the same: reading modality
 off whichever sample we happened to have.
 
@@ -506,8 +506,8 @@ so that only the boot varies. DFlash's default arm is a wide, continuously
 filled distribution (CV 13.92\%, $n=12$); its eager arm and both n-gram arms
 are tight (1.44\%, 2.67\%, 0.85\%). Every eager boot exceeds every default
 boot. \emph{This figure plots the 2026-09-23 session only, which is a deficit
-session.} Eight further sessions of the identical configuration give default
-arms from 0.86\% to 10.38\% CV, six of them at parity with their eager
+session.} Nine further sessions of the identical configuration give default
+arms from 0.82\% to 10.38\% CV, seven of them at parity with their eager
 control, so this distribution's width is a property of the session's regime
 and not of the configuration; see \S\ref{sec:c2}. Two earlier versions of this figure were wrong in opposite
 directions: one showed five boots and was captioned as two clusters, the
@@ -571,9 +571,10 @@ exceeds every default boot. \textbf{That ordering is regime-conditional, and
 an earlier revision of this section overstated it} by reporting that the
 default arm disperses more than its eager control ``in every session we have
 run'' on the strength of four sessions. It holds in all 3 deficit sessions
-(13.92 vs 1.44; 3.73 vs 1.69; 10.38 vs 6.25) and in only 1 of the 6 parity
-sessions (1.53 vs 1.24; the other five invert). In the parity regime both
-arms sit between 0.86\% and 3.12\% and the comparison carries no signal. The
+(13.92 vs 1.44; 3.73 vs 1.69; 10.38 vs 6.25) and in only 3 of the 7 parity
+sessions (1.53 vs 1.24; 1.95 vs 1.02; 0.82 vs 0.75; the other four invert).
+In the parity regime both
+arms sit between 0.75\% and 3.12\% and the comparison carries no signal. The
 dispersion \emph{magnitude} is not stable and we no longer describe it as
 such. Turning CUDA graphs off does not reliably make speculative
 decoding faster by a stated factor --- it makes it \emph{reproducible}, and

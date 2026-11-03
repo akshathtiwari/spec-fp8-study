@@ -48,6 +48,13 @@
 | tau CV ceiling | `more than 0.88\%` | yes |
 | parity CV/tau factor | `1.6--7.6` | yes |
 | n-gram both-parity | `(7/10)^2 = 0.49` | yes |
+| parity sessions, graph CV > eager CV | `only 3 of the 7 parity` | yes |
+| parity, both arms CV range | `between 0.75\% and 3.12\%` | yes |
+| figure caption, other sessions | `Nine further sessions` | yes |
+| figure caption, CV range | `from 0.82\% to 10.38\% CV` | yes |
+| figure caption, parity count | `seven of them at parity` | yes |
+| L4 session count | `ten on the L4` | yes |
+| default CV span | `from 0.82\% to 13.92\%` | yes |
 | GCP 11-01T19-13 ratio | `1.001` | yes |
 | GCP 11-01T19-13 CI | `[0.989, 1.013]` | yes |
 | GCP 11-02T03-54 ratio | `1.028` | yes |
