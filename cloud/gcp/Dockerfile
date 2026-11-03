@@ -16,3 +16,9 @@ ENV PATH="/opt/venv/bin:${PATH}" VIRTUAL_ENV=/opt/venv
 ARG VLLM_VERSION=0.29.0
 RUN pip install "vllm==${VLLM_VERSION}" httpx "pydantic>=2.0" pyyaml pandas modal
 WORKDIR /root/spec-fp8-study
+# F046=1: backport vLLM 0.30.0's pin of flashinfer's host arange buffer into
+# 0.29.0 (cloud/gcp/f046_pin_range_buf.py), and nothing else. Off by default,
+# so the default image is unchanged.
+ARG F046=0
+COPY f046_pin_range_buf.py /tmp/f046_pin_range_buf.py
+RUN if [ "$F046" = 1 ]; then python /tmp/f046_pin_range_buf.py; fi

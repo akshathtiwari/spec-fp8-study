@@ -13,6 +13,7 @@
 #                              (RUNTIME=runsc ... runs it under gVisor nvproxy)
 #                              (THREADS1=1 ... library thread defaults of one)
 #   VLLM=0.30.0 host.sh build|verify|run   another engine release
+#   F046=1 host.sh build|verify|run        0.29.0 with F046's range-buffer pin
 #
 # The repo is mounted from the VM user's disk into a container that runs as
 # root, so git refuses it ("dubious ownership", exit 128) and boot_variance's
@@ -24,7 +25,7 @@
 set -euo pipefail
 cmd=${1:?usage: host.sh driver|docker|build|verify|run}; shift || true
 VLLM=${VLLM:-0.29.0}
-IMAGE=specfp8-vllm:$VLLM
+IMAGE=specfp8-vllm:$VLLM${F046:+-f046}
 
 case "$cmd" in
 driver)
@@ -61,7 +62,8 @@ docker)
   sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker
   ;;
 build)
-  sudo docker build --build-arg VLLM_VERSION="$VLLM" -t "$IMAGE" /data/repo/cloud/gcp
+  sudo docker build --build-arg VLLM_VERSION="$VLLM" --build-arg F046="${F046:-0}" \
+       -t "$IMAGE" /data/repo/cloud/gcp
   ;;
 gvisor)
   # Modal (support reply, 2026-11-03): GPU Functions run under gVisor with
@@ -133,7 +135,7 @@ run)
     $([ "$RT" = runc ] && echo --ipc=host) \
     ${CPUSET:+--cpuset-cpus=$CPUSET} \
     ${THREADS1:+-e OMP_NUM_THREADS=1 -e MKL_NUM_THREADS=1 -e OPENBLAS_NUM_THREADS=1} \
-    -e SPECFP8_SANDBOX="$SANDBOX" \
+    -e SPECFP8_SANDBOX="$SANDBOX" -e SPECFP8_IMAGE="$IMAGE" \
     -e SPECFP8_PLATFORM=gcp -e HF_HUB_DISABLE_PROGRESS_BARS=1 \
     -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory \
     -e GIT_CONFIG_VALUE_0=/root/spec-fp8-study \

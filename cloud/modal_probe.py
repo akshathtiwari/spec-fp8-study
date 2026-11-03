@@ -973,6 +973,9 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash",
                         # from inside, so it stays None there.
                         "sandbox": os.environ.get("SPECFP8_SANDBOX"),
                         "omp_num_threads": os.environ.get("OMP_NUM_THREADS"),
+                        # The image tag on hosts that build their own, e.g.
+                        # specfp8-vllm:0.29.0-f046 for the F046 backport.
+                        "image": os.environ.get("SPECFP8_IMAGE"),
                         # The commit each model's revision resolved to when this
                         # ran, read from the HF cache's refs/. Sweeps say
                         # revision "main", which is mutable; until now the
