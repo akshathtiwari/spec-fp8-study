@@ -80,6 +80,10 @@ gvisor)
   tar --zstd -xf gvisor.tar.zstd
   RUNSC=$(find /tmp/gv -type f -name runsc | head -1)
   sudo install -m 755 "$RUNSC" "/usr/local/bin/runsc-$R"
+  # Since 2026 runsc starts the sentry as a sidecar it looks up in
+  # gvisor-bin/ beside itself, and refuses to run without it (STRICT).
+  sudo rm -rf /usr/local/bin/gvisor-bin
+  sudo cp -r "$(dirname "$RUNSC")/gvisor-bin" /usr/local/bin/gvisor-bin
   "/usr/local/bin/runsc-$R" --version
   sudo python3 - "$R" <<'EOF'
 import json, sys, pathlib
