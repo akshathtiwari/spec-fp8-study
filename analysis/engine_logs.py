@@ -216,7 +216,8 @@ def main() -> int:
                  if frac(t, "DEFICIT") <= 0.10 and all(frac(t, c) >= 0.75 for c in nbs)]
     L += ["", "## Does any engine message separate the deficit cell?", "",
           f"Every distinct message template, normalised for numbers and "
-          f"timestamps, across {sum(n.values())} graph-arm logs.", "",
+          f"timestamps, across the {n['DEFICIT'] + sum(n[c] for c in nbs)} graph-arm logs "
+          f"of Modal's deficit cell and its one-factor neighbours.", "",
           f"- present in >=75% of deficit logs and <=10% of every neighbour: "
           f"**{len(only_def)}**",
           f"- present in <=10% of deficit logs and >=75% of every neighbour: "

@@ -92,6 +92,17 @@ Modal says its 2026-10-04 containers ran its build "Release20260916"
 (cfce95d57233, not an upstream commit). The upstream build is the closest
 public one, not a copy of Modal's.
 
+**The GPU is idle, not throttled.** Each record samples GPU telemetry
+across its measurement window. In every gVisor deficit leg the graph arm's
+mean GPU utilisation is **62.2-63.2%**, against 90.0-92.3% in every parity
+graph arm (runc, and 0.30.0 under gVisor). It clocks higher (2020-2024 MHz
+against 1610-1893), draws less (67.5-68.0 W against 69.8-70.2) and is
+power-capped less often (0.66-0.79 of samples against 0.96). That is the
+signature section 4 of the paper found in Modal's 10-04 deficit session and
+could not complete, because utilisation sampling started after Modal's last
+deficit session. A GPU that boosts higher, draws less and does less work is
+waiting for the host about a third of the time.
+
 ## Reasoning
 
 A difference between runc and gVisor on one card, with the same image,

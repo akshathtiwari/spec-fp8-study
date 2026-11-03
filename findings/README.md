@@ -57,6 +57,7 @@ wrong turns and what caught them — is part of the evidence.
 | [`F036`](F036-the-fix-for-the-declared-value-defect-was-itself-declared.md) | The fix for F031's declared-versus-measured defect was itself a declared value; budget.log recorded gpu_type "L4" for a run that took place on an A10, because SPECFP8_GPU is read locally and the remote container never sees it | established | high |
 | [`F039`](F039-parallel-runs-clobbered-the-append-only-store.md) | Running two Modal jobs concurrently silently destroyed 49 measurement records, because the append-only store is read-modify-written per container and the later commit wins; recovered only because two snapshots had been taken for an unrelated reason | established | high |
 | [`F047`](F047-a-traceable-number-can-still-be-the-wrong-number.md) | v1.5.0 shipped a wrong deficit dispersion band (3.73--10.38% for 3.73--13.92%) and stale session counts, all of which passed check_paper because it asks only whether a number exists somewhere in the evidence; a clean-room recomputation that requires the paper to contain each recomputed value now gates the build | established | high |
+| [`F050`](F050-figure-1-pooled-every-session.md) | From v1.1.0 to v1.5.2 Figure 1 plotted every boot of every session on both cards (48 to 164 graph-arm boots) while its caption described the 2026-09-23 session alone (n=12, CV 13.92%); the script never filtered by session, so the figure drifted as sessions were added and no check compared it with its caption | established | high |
 
 ## Known gaps
 
@@ -80,4 +81,4 @@ wrong turns and what caught them — is part of the evidence.
 
 ---
 
-49 findings: 28 result, 11 method, 1 gap, 9 retraction.
+50 findings: 28 result, 12 method, 1 gap, 9 retraction.

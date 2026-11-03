@@ -26,16 +26,18 @@ obscured:
    precision A/B under default settings is a kernel A/B as well. Target and
    draft models select *independently*, so pinning one does not pin the other.
 2. **Speculative throughput falls into one of two regimes, and the
-   platform decides which.** The ratio of CUDA-graph to `--enforce-eager`
+   sandbox decides which.** The ratio of CUDA-graph to `--enforce-eager`
    throughput splits into 0.487-0.768 or 1.003-1.039 with nothing between,
-   and over 128 boots the groups do not overlap. Every deficit session shares
-   one configuration (vLLM 0.29.0, DFlash, L4, NVIDIA driver 580.95.05, on
-   Modal), and every session differing from it in one factor is at parity.
-   The same driver installed by hand on a GCP L4, everything else matched,
-   gives parity (1.001), and so does that container pinned to one CPU
-   (1.028): the deficit does not reproduce off the serverless platform.
-   Five candidates are ruled out by measurement; the platform's sandbox is
-   what remains, named as the leading candidate, not the cause (F042-F045).
+   and over 128 boots the groups do not overlap. Every deficit session on
+   Modal shares one configuration (vLLM 0.29.0, DFlash, L4, NVIDIA driver
+   580.95.05). On a rented GCP L4 that configuration is at parity under runc
+   (1.001) and deficient under gVisor, the sandbox Modal runs GPU functions
+   in: 0.736 against 1.018 under runc on the same card, 0.726-0.755 across
+   two gVisor releases and two drivers, while vLLM 0.30.0 in the same
+   sandbox is at parity (1.040). The deficit graph arm's GPU is busy 62-63%
+   of the time against 90-92% at parity: waiting on the host, not
+   throttled. Modal's dispersion does not reproduce, and why Modal's later
+   sessions are at parity is not known (F042-F049).
 
 3. **Acceptance (tau) has a boot-to-boot CV under 0.88% in every session
    we have run** -- nine sessions, three engine releases, both throughput

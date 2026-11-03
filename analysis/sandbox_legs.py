@@ -65,15 +65,25 @@ def rows() -> list[dict]:
             "session": r["probe_run"][:17], "sandbox": sandbox(r), "engine": variant(r),
             "driver": env.get("driver"), "card": (env.get("gpu_uuid") or "")[:12],
             "cpus": r.get("cpus_visible"), "omp": r.get("omp_num_threads"),
-            "arms": defaultdict(list), "tau": defaultdict(list)})
+            "arms": defaultdict(list), "tau": defaultdict(list), "gpu": defaultdict(list)})
         if r.get("arm") in ("default", "enforce_eager"):
             d["arms"][r["arm"]].append(r["throughput"]["output_tokens_per_s"])
             t = (r.get("spec") or {}).get("tau")
             if t:
                 d["tau"][r["arm"]].append(t)
+            # GPU telemetry sampled across the measurement window (since 10-31).
+            g = r.get("gpu_during") or {}
+            if r["arm"] == "default":
+                for f in ("util_gpu_mean_pct", "sm_clock_mean_mhz", "power_draw_mean_w",
+                          "frac_power_capped"):
+                    if g.get(f) is not None:
+                        d["gpu"][f].append(g[f])
     out = []
     for d in by.values():
-        a = d.pop("arms"); t = d.pop("tau")
+        a = d.pop("arms"); t = d.pop("tau"); gp = d.pop("gpu")
+        d["util"], d["clock"], d["power"], d["capped"] = (
+            st.mean(gp[f]) if gp[f] else None for f in
+            ("util_gpu_mean_pct", "sm_clock_mean_mhz", "power_draw_mean_w", "frac_power_capped"))
         if not (a["default"] and a["enforce_eager"]):
             continue
         g, e = a["default"], a["enforce_eager"]
@@ -98,13 +108,14 @@ def main() -> None:
          "default (CUDA graphs) over `--enforce-eager` throughput in the same container; "
          "the interval is conservative (ratio of opposite ends of each arm's t-interval). "
          "Records without a `sandbox` field ran under Docker's default runtime, runc.", "",
-         "| session | runtime | driver | engine | card | cpus | OMP | graph tok/s (CV) | eager tok/s (CV) | ratio [95%] | regime |",
-         "|---|---|---|---|---|---|---|---|---|---|---|"]
+         "| session | runtime | driver | engine | card | cpus | OMP | graph tok/s (CV) | eager tok/s (CV) | ratio [95%] | regime | graph util | graph clock | graph power |",
+         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for d in R:
         L.append(f"| {d['session']} | {d['sandbox']} | {d['driver']} | {d['engine']} | {d['card']} "
                  f"| {d['cpus']} | {d['omp'] or '-'} | {d['graph']:.1f} ({d['graph_cv']:.2f}%) "
                  f"| {d['eager']:.1f} ({d['eager_cv']:.2f}%) "
-                 f"| **{d['ratio']:.3f}** [{d['lo']:.3f}, {d['hi']:.3f}] | {d['regime']} |")
+                 f"| **{d['ratio']:.3f}** [{d['lo']:.3f}, {d['hi']:.3f}] | {d['regime']} "
+                 f"| {d['util']:.1f}% | {d['clock']:.0f} MHz | {d['power']:.1f} W |")
     one = [d for d in R if d["session"].startswith("2026-11-03")]
     if one:
         cards = {d["card"] for d in one}
@@ -124,6 +135,20 @@ def main() -> None:
             L.append(f"- What gVisor costs vLLM 0.29.0 against runc: graph arm "
                      f"{(1 - st.mean(ge) / rc[0]['graph']) * 100:.0f}%, eager arm "
                      f"{(1 - st.mean(ee) / rc[0]['eager']) * 100:.0f}% (mean over the gVisor 0.29.0 legs).")
+            dg = [d for d in R if d["regime"] == "deficit" and d["util"] is not None]
+            pg = [d for d in R if d["regime"] == "parity" and d["util"] is not None]
+            if dg and pg:
+                L.append(f"- Graph-arm GPU utilisation: **{min(d['util'] for d in dg):.1f}--"
+                         f"{max(d['util'] for d in dg):.1f}%** in the deficit sessions, against "
+                         f"{min(d['util'] for d in pg):.1f}--{max(d['util'] for d in pg):.1f}% at parity; "
+                         f"SM clock {min(d['clock'] for d in dg):.0f}--{max(d['clock'] for d in dg):.0f} MHz "
+                         f"against {min(d['clock'] for d in pg):.0f}--{max(d['clock'] for d in pg):.0f}; "
+                         f"power {min(d['power'] for d in dg):.1f}--{max(d['power'] for d in dg):.1f} W "
+                         f"against {min(d['power'] for d in pg):.1f}--{max(d['power'] for d in pg):.1f}; "
+                         f"power-capped {min(d['capped'] for d in dg):.2f}--{max(d['capped'] for d in dg):.2f} "
+                         f"of samples against {min(d['capped'] for d in pg):.2f}--{max(d['capped'] for d in pg):.2f}. "
+                         "The deficit graph arm clocks higher, draws less and is idle about a third of "
+                         "the time: the GPU is waiting, not throttled.")
             L.append(f"- Graph-arm CV under gVisor: {min(d['graph_cv'] for d in g):.2f}--"
                      f"{max(d['graph_cv'] for d in g):.2f}%, against 3.73--13.92% in Modal's deficit "
                      "sessions. The ratio reproduces; the dispersion does not.")

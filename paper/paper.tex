@@ -51,15 +51,20 @@ two disjoint regimes: three sessions at 0.487--0.768 and seven at
 boot-to-boot dispersion of the graph arm (3.73--13.92\% against
 0.82--1.95\%), so the deficit and the dispersion are one phenomenon rather
 than two findings ($p = 0.008$ under random assignment), and pooled over 128
-boots the two groups do not overlap at all. Every deficit session shares one
-configuration --- vLLM 0.29.0, DFlash, the L4 and NVIDIA driver 580.95.05 ---
-and every session differing from it in one factor is at parity. Installing
-that driver by hand on a rented L4, with everything else matched, gives
-parity (1.001), and so does pinning that container to one CPU (1.028): the
-effect does not reproduce off the serverless platform it was measured on.
-Graph mode, backend selection, power throttling, CPU starvation and the
-driver alone are each ruled out by direct measurement; the platform's sandbox
-is what remains, and we name it as the leading candidate, not the cause.
+boots the two groups do not overlap at all. Every deficit session on Modal
+shares one configuration --- vLLM 0.29.0, DFlash, the L4 and NVIDIA driver
+580.95.05 --- and every Modal session differing from it in one factor is at
+parity. On a rented L4 the same configuration is at parity under Docker's
+default runtime (1.001) and deficient under the gVisor sandbox that Modal
+runs GPU functions in (0.736, against 1.018 under the default runtime on the
+same card), on either driver and under two gVisor releases (0.726--0.755),
+while vLLM 0.30.0 in the same sandbox is at parity (1.040). In the sandboxed
+deficit the graph arm's GPU is busy 62.2--63.2\% of the time against
+90.0--92.3\% at parity, at a higher clock and lower power: it is waiting on
+the host, not throttled. The sandbox is necessary and the driver is not.
+Modal's boot-to-boot dispersion does not reproduce, a candidate engine fix
+we backported changes nothing, and four Modal sessions on the later driver
+are at parity for a reason we cannot see.
 Third, acceptance
 length $\tau$ has a boot-to-boot \emph{coefficient of variation of 0.62\%}
 under repeated identical boots, which we could not find reported; our own
@@ -107,14 +112,15 @@ the effect they obscured.
 vLLM's \tw{auto} backend selection is conditioned on KV-cache dtype, and
 target and draft select independently. A precision A/B under defaults is a
 kernel A/B as well.
-\item \textbf{A platform-dependent throughput regime} (\S\ref{sec:c2}).
+\item \textbf{A sandbox-dependent throughput regime} (\S\ref{sec:c2}).
 Identical configurations disperse across boots at constant acceptance and
 fall into two disjoint regimes: ratio 0.487--0.768 with graph-arm CV
 3.73--13.92\%, or 1.003--1.039 with CV 0.82--1.95\%, with nothing between.
-The deficit appears in exactly one configuration on one platform, and an
-intervention reproducing that configuration on rented hardware gives parity.
-We eliminate five candidate mechanisms by measurement, name the platform's
-sandbox as what remains, and do not claim it as shown. \tw{-{}-enforce-eager} removes the
+On one rented card the deficit appears under gVisor and not under runc,
+follows the engine release and not the driver, and comes with a GPU idle a
+third of the time. Power throttling, CPU starvation, the driver and one
+candidate engine change are each ruled out by measurement; which part of the
+sandbox, and which change in vLLM 0.30.0, we do not identify. \tw{-{}-enforce-eager} removes the
 variance but is not a free control --- it costs FP8-weight configurations
 a fifth to a half of their throughput and cannot boot speculative FP8-KV
 cells at all on this card.
@@ -310,8 +316,8 @@ with it, two more readings: that the deficit is specific to the L4, and that
 it needs draft-model speculation. Both revisions missed a variable stored in
 every record. \textbf{Every session up to 4 October ran NVIDIA driver
 580.95.05; every session from 31 October ran 610.57.04.} Every deficit session
-shares one configuration, and every session that differs from it in exactly
-one factor is at parity:
+on Modal shares one configuration, and every Modal session that differs from
+it in exactly one factor is at parity:
 
 \begin{center}\small
 \begin{tabular}{llrr}
@@ -324,27 +330,33 @@ engine release & 0.30.0 & 2 & 0\\
 host driver & 610.57.04 & 4 & 0\\
 card & A10 & 1 & 0\\
 speculation mechanism & n-gram$^\ast$ & 2 & 0\\
-\textbf{platform} & \textbf{GCP, driver by hand} & \textbf{2} & \textbf{0}\\
+\addlinespace
+\textbf{platform} & \textbf{GCP, under gVisor} & \textbf{1} & \textbf{1}\\
+platform and runtime$^\dagger$ & GCP, runc & 3 & 0\\
 \bottomrule
 \end{tabular}
 \end{center}
 
 \noindent
 $^\ast$Not a one-factor change; see the n-gram paragraph below.
+$^\dagger$Two factors: Modal runs GPU functions under gVisor, and these ran
+under Docker's default runtime. Both GCP rows use driver 580.95.05 installed
+by hand.
 The withdrawals had compared sessions across two drivers without knowing it.
 Within one driver, two of the three readings hold: on 580.95.05, vLLM 0.29.0
 is deficient in 3 sessions of 3 against 0 of 2 for 0.30.0, and the L4 in 3 of
 3 against 0 of 1 for the A10. The third does not, because switching to n-gram
-changes more than the mechanism. The engine logs see none of it: across 164
-graph-arm logs, not one message separates the deficit configuration from any
-of its neighbours.
+changes more than the mechanism. The engine logs see none of it: across 140
+graph-arm logs, not one message separates Modal's deficit configuration from
+any of its neighbours.
 
 \paragraph{The driver alone does not reproduce it.} Driver and calendar date
 are collinear in the Modal records, so no analysis of them can separate the
 two; only an intervention can. We rented a GCP L4, installed 580.95.05 from
 NVIDIA's own installer, and ran the unmodified harness inside a rebuild of the
-Modal image, matching torch (2.13.0+cu130), vLLM, the CUDA base image, the
-model runner and async scheduling. The ratio is \textbf{1.001} (conservative
+Modal image under Docker's default runtime, runc, matching torch
+(2.13.0+cu130), vLLM, the CUDA base image, the model runner and async
+scheduling. The ratio is \textbf{1.001} (conservative
 95\% interval [0.989, 1.013]) with a graph-arm CV of \textbf{0.91\%}: parity
 on both signatures, under the configuration that was deficient on Modal three
 times in three. A decision rule committed before the eager arm was measured
@@ -358,7 +370,8 @@ observable --- torch at one thread, the log line absent --- and the ratio is
 graph arm gains, which is what CUDA graphs are for: they remove CPU launch
 overhead, and that overhead costs more when CPU is scarce. A fractional CPU
 quota, which throttles harder than a pinned core and which torch's thread
-count cannot tell apart from one, was not tested.
+count cannot tell apart from one, was not tested. Nor is a starved CPU
+needed: under gVisor the deficit appears with all four vCPUs visible.
 
 A power reading is the obvious candidate: the L4 is a \textbf{72\,W} part
 running at 2040\,MHz, and a card on that budget could throttle under the
@@ -406,13 +419,10 @@ across regimes on the same arm.
 
 \paragraph{What this still does not settle.} The stall reading predicts low
 GPU utilisation in a deficit session. We added \tw{utilization.gpu} sampling
-on 31 October, and no deficit session has occurred since --- all four
-instrumented sessions landed in the parity regime, where utilisation is
-90.5--91.6\% and the two arms are indistinguishable. So we have the
-prediction and the baseline it would be measured against, and not the
-measurement. That measurement now has nowhere to run: Modal's fleet has
-moved to a driver on which this configuration is at parity, and the deficit
-has not been reproduced off Modal.
+on 31 October, and no Modal deficit session has occurred since --- all four
+instrumented Modal sessions landed in the parity regime, where utilisation is
+90.5--91.6\% and the two arms are indistinguishable. The sandboxed deficit
+below supplies the measurement Modal no longer could.
 
 The ratio is the quantity to report. Session 09-29\,c ran 5.6\% slower than
 09-29\,b on \emph{both} arms (default 82.8 to 78.2, eager 81.6 to 77.0).
@@ -421,24 +431,68 @@ the card rather than of the execution path, and the ratio absorbs it. Without
 a control measured in the same container it would have read as a 5.6\%
 replication failure.
 
-\paragraph{What is left is the sandbox.} Modal documents that its sandboxes
-run under gVisor,\footnote{\url{https://modal.com/resources/best-serverless-sandboxes-ai-code-execution}}
-whose GPU access goes through \tw{nvproxy}, a proxy that translates every
-CUDA driver call and must know each driver version's ABI
-exactly;\footnote{\url{https://gvisor.dev/docs/user_guide/gpu}} we have not
-confirmed that the functions our runs used are sandboxed the same way. If
-they are, the host driver cannot change without the proxy changing with it
---- gVisor added support for 610.57.04 in
-release-20260817.0\footnote{\url{https://github.com/google/gvisor/releases/tag/release-20260817.0}}
---- and driver and sandbox are collinear on Modal by construction, as driver
-and date are collinear in our records. We name the sandbox as the leading
-candidate by elimination, not as shown. Current gVisor does not list
-580.95.05 among its supported drivers and we found no evidence that any
-release did, so we could not reproduce Modal's sandbox faithfully. Whether
-Modal ran stock gVisor, or forced the proxy onto a neighbouring ABI, only
-Modal can say.
+\paragraph{Under the sandbox, the deficit reproduces.} Modal confirmed
+(support correspondence, 3 November 2026) that its GPU functions, not only
+its sandboxes, run under gVisor, whose GPU access goes through \tw{nvproxy},
+a proxy that forwards every driver call and is built against each driver
+version's ABI;\footnote{\url{https://gvisor.dev/docs/user_guide/gpu}} that the
+4 October containers ran its own gVisor build on 580.95.05 with
+\tw{-{}-nvproxy-allow-unsupported-driver}; and that library thread counts
+default to one. Upstream gVisor release-20260914.0, published on
+16 September, registers 580.95.05 in exactly that way, as an unsupported ABI
+derived from 580.65.06. We installed it on a rented L4 and ran the same image
+on one card, one container per row, changing one factor at a time. The rule
+for the first row was committed before the machine existed; the other five
+are exploratory, each with its reading committed before it ran.
 
-\textbf{What we can state without that answer is the methodological point.} A
+\begin{center}\small
+\begin{tabular}{lllrrlr}
+\toprule
+Runtime & Driver & Engine & Graph & Eager & Ratio [95\%] & Graph util\\
+\midrule
+gVisor 09-14 & 580.95.05$^\ddagger$ & 0.29.0 & 57.2 & 77.7 & \textbf{0.736} [0.722, 0.750] & 62.2\%\\
+runc & 580.95.05 & 0.29.0 & 82.6 & 81.1 & 1.018 [1.004, 1.032] & 92.3\%\\
+gVisor 09-14 & 580.95.05$^\ddagger$ & 0.30.0 & 81.4 & 78.3 & 1.040 [1.022, 1.058] & 91.7\%\\
+gVisor 09-14 & 580.95.05$^\ddagger$ & 0.29.0+pin$^\S$ & 56.7 & 78.1 & \textbf{0.726} [0.715, 0.738] & 62.7\%\\
+gVisor 09-14 & 610.57.04 & 0.29.0 & 58.5 & 77.5 & \textbf{0.755} [0.742, 0.767] & 63.2\%\\
+gVisor 10-26 & 610.57.04 & 0.29.0 & 57.8 & 77.6 & \textbf{0.744} [0.732, 0.757] & 62.7\%\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+Throughput in tok/s, 12 boots per arm, threads at one, DFlash at
+concurrency 1; the interval is the conservative one used above.
+$^\ddagger$Unsupported ABI: nvproxy logs that the version ``is not officially
+supported''. $^\S$vLLM 0.30.0's pin of FlashInfer's host arange buffer,
+backported into 0.29.0 and nothing else.
+
+Under runc the card is at parity. Under gVisor, vLLM 0.29.0 loses 30\% of its
+graph-arm throughput and 4\% of its eager-arm throughput, and the ratio lands
+inside Modal's deficit band. vLLM 0.30.0 in the same sandbox is at parity, as
+it was on Modal on the same driver. The driver does not matter here: on
+610.57.04, which nvproxy supports, and under a late-October gVisor, 0.29.0 is
+still deficient. \textbf{The telemetry completes the stall reading.} The
+deficit graph arm is busy 62.2--63.2\% of the time against 90.0--92.3\% at
+parity, at 2020--2024\,MHz against 1610--1893\,MHz and 67.5--68.0\,W against
+69.8--70.2\,W, the same signature as Modal's 10-04 session: for about a third
+of every step the GPU is waiting on the host. A per-call proxy cost would hurt
+the eager arm, which launches every kernel from the host, more than the graph
+arm. The opposite happens, so the cost lies in something the 0.29.0 graph
+path does and its eager path does not. One candidate, a pageable
+host-to-device copy that vLLM 0.30.0 pins, changes nothing when its pin is
+backported (0.726).
+
+\paragraph{What the sandbox does not explain.} Two things. Modal's deficit
+sessions scattered from boot to boot (graph-arm CV 3.73--13.92\%); the
+sandboxed deficit here does not (0.91--1.73\%), so on Modal something else,
+plausibly a shared host, added the dispersion. And four Modal sessions on
+610.57.04 with vLLM 0.29.0 are at parity (1.003--1.015) while sharing every
+factor we can record with the deficit sessions, the sandbox included. No
+upstream gVisor build we ran reproduces their parity. Modal's later build is
+not public, and whatever changed in it is the remaining unknown.
+
+\textbf{The methodological point does not depend on that unknown.} A
 measurement on a serverless GPU platform includes a layer the user can
 neither see nor pin; that layer changed during this study without notice;
 and the change moved the CUDA-graph path's throughput by up to a factor of
@@ -509,10 +563,11 @@ boot. \emph{This figure plots the 2026-09-23 session only, which is a deficit
 session.} Nine further sessions of the identical configuration give default
 arms from 0.82\% to 10.38\% CV, seven of them at parity with their eager
 control, so this distribution's width is a property of the session's regime
-and not of the configuration; see \S\ref{sec:c2}. Two earlier versions of this figure were wrong in opposite
-directions: one showed five boots and was captioned as two clusters, the
-other pooled grid runs whose prompts differ and so plotted prompt variation
-alongside boot variation.}
+and not of the configuration; see \S\ref{sec:c2}. Three earlier versions of this figure were wrong: one showed five boots
+and was captioned as two clusters; one pooled grid runs whose prompts differ
+and so plotted prompt variation alongside boot variation; and from v1.1.0 to
+v1.5.2 it plotted every session on both cards while this caption described
+one (F050).}
 \label{fig:bimodality}
 \end{figure}
 
@@ -1096,9 +1151,11 @@ on a load-regime argument rather than on a measurement of our own harness.
 \S\ref{sec:c2} argues that a quantity measured once is a draw, so we state
 where this paper meets that standard. \emph{Replicated:} the existence of two disjoint
 throughput regimes and the default/eager ratio within each (eleven sessions
-on Modal, three engine releases, 3 deficit and 8 parity), and the
-absence of the deficit off Modal (two GCP sessions on two further cards,
-unpinned and pinned to one CPU, both at parity); acceptance dispersion
+on Modal, three engine releases, 3 deficit and 8 parity); the absence of
+the deficit under runc off Modal (three GCP sessions on three cards, all at
+parity); the sandboxed deficit (four gVisor containers on one card, two
+releases, two drivers, 0.726--0.755, with the same utilisation signature in
+each); acceptance dispersion
 (ten sessions, below 0.88\% in every one); the refutation of power
 throttling (two deficit sessions, both arms, plus four parity sessions); the eager penalty
 on FP8 weights, whose direction reproduces across two independent grids
@@ -1107,7 +1164,9 @@ while its coefficient does not, which is why we report a range.
 backend selection under dtype change and the ITL/chunk identity, both
 categorical facts read from engine logs. \emph{Single-session, and to be
 read as draws:} the A10 dispersion, the 0.30.0 dispersion at each individual
-card, and the goodput figures at concurrency 64.
+card, each one-factor contrast on the GCP card (runc, vLLM 0.30.0, and the
+backported pin: one container each), and the goodput figures at
+concurrency 64.
 \item \textbf{Grid records carry no session identity.} \tw{probes.jsonl}
 records a \tw{probe\_run} per container; \tw{sweep.jsonl} records nothing
 equivalent. So for any result derived from the grid --- capacity, accuracy,
