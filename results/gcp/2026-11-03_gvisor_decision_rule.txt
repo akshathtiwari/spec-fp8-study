@@ -84,3 +84,28 @@ ADDENDUM 1, committed 2026-11-03 after leg 1 and BEFORE any further measurement:
   The graph-arm dispersion question stays open: Modal's deficit sessions were
   also noisy (CV 3.73-13.92%), this quiet single-tenant VM was not. Shared-host
   contention on Modal is one untested reading of that difference.
+
+ADDENDUM 2, committed 2026-11-03 after leg 5 and BEFORE leg 6. Exploratory.
+  Results so far, same card GPU-8e3f74b9-3a97-0a87-df25-3459cebe7833, THREADS1,
+  dflash, 12 + 12 boots each, ratio = default/eager at c=1:
+    leg 1  runsc 20260914.0, 580.95.05 (unsupported ABI), vLLM 0.29.0   0.736
+    leg 2  runc,             580.95.05,                    vLLM 0.29.0   1.018
+    leg 3  runsc 20260914.0, 580.95.05 (unsupported ABI), vLLM 0.30.0   1.040
+    leg 4  runsc 20260914.0, 580.95.05 (unsupported ABI), 0.29.0+F046   0.726
+    leg 5  runsc 20260914.0, 610.57.04 (supported ABI),   vLLM 0.29.0   0.755
+  Leg 5 reading as fixed in addendum 1: gVisor alone does it on this host, and
+  Modal's 610.57.04 parity needs another explanation. Leg 4: F046's range-buffer
+  pin does not remove it.
+
+  The other explanation this leg tests: Modal says a driver change requires a
+  sandbox change, so their 610.57.04 sessions (2026-10-31, 2026-11-01) ran a
+  later gVisor build than 2026-10-04's. Their build is not public.
+    leg 6  runsc release-20261026.0 (last upstream release before 2026-10-31),
+           610.57.04, vLLM 0.29.0, THREADS1, 12 + 12.
+           ratio >= 0.95 -> an upstream gVisor change between 20260914.0 and
+                            20261026.0 removes the deficit; Modal's 610 parity is
+                            consistent with a sandbox-build change, not a driver
+                            effect. Which change is not identified (no bisection).
+           ratio <  0.95 -> upstream gVisor through 20261026.0 still produces it;
+                            Modal's 610 parity is not explained by any upstream
+                            build tested, and stays open.
