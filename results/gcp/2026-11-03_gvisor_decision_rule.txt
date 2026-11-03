@@ -52,3 +52,35 @@ has now been matched or tested (driver, image, engine, async, CPU pin, threads),
 and nvproxy on an unsupported ABI is the one layer that changed with the driver
 on Modal. Against it: nvproxy intercepts ioctls, and a CUDA-graph replay issues
 few of them, so an ioctl-cost story favours the graph arm, not the eager one.
+
+ADDENDUM 1, committed 2026-11-03 after leg 1 and BEFORE any further measurement:
+  Leg 1 result (run 2026-11-03T03-29Z, card GPU-8e3f74b9-3a97-0a87-df25-3459cebe7833,
+  asia-northeast1-a; fidelity checks (a)-(c) all passed):
+      default        n=12  mean 57.2 tok/s  CV 1.73%
+      enforce_eager  n=12  mean 77.7 tok/s  CV 1.26%
+      ratio 0.736
+  This is the rule's third case: ratio < 0.95 with graph-arm CV < 3.73%. As
+  pre-registered it is "neither regime as defined", and it is reported that way:
+  the deficit RATIO reproduced off Modal under gVisor; the deficit DISPERSION did
+  not. No claim that "the deficit regime reproduced" is made from leg 1.
+
+  The rule said no legs 2-4 in this case. That clause saved money in an
+  ambiguous outcome; it did not protect any inference. The following legs are
+  therefore run as EXPLORATORY, labelled so wherever they are reported, and
+  their reading is fixed here before they run:
+    leg 2  runc on THIS card, same image, THREADS1, default + eager 12 each.
+           ratio >= 0.95 -> the sandbox, not this card, lowers the graph arm.
+           ratio <  0.95 -> this card/host does it under runc too; leg 1 says
+                            nothing about gVisor.
+    leg 3  (only if leg 2 >= 0.95) gVisor as leg 1, vLLM 0.30.0 image.
+           ratio >= 0.95 -> matches Modal on 580.95.05 (0.30.0 at parity there).
+    leg 5  (only if leg 2 >= 0.95) gVisor as leg 1, host driver 610.57.04,
+           which this gVisor release supports. Modal's 610.57.04 sessions were
+           at parity. ratio >= 0.95 -> the unsupported-ABI path, not gVisor as
+           such, is needed; ratio < 0.95 -> gVisor alone does it on this host,
+           and Modal's 610 parity needs another explanation.
+    leg 4  (only if leg 3 >= 0.95) 0.29.0 with F046's two buffers pinned.
+  Leg numbering follows the original rule; leg 5 is new.
+  The graph-arm dispersion question stays open: Modal's deficit sessions were
+  also noisy (CV 3.73-13.92%), this quiet single-tenant VM was not. Shared-host
+  contention on Modal is one untested reading of that difference.
