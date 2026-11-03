@@ -1,0 +1,54 @@
+Pre-registered 2026-11-03, committed before the VM for this run was created.
+
+Why now: Modal support replied (2026-11-03) that regular GPU Functions, not only
+Sandboxes, run under gVisor with nvproxy; that the 2026-10-04 containers used
+their gVisor build "Release20260916" with driver 580.95.05 and
+-nvproxy-allow-unsupported-driver; that a single-L4 Function reserves one
+physical core with bursting; and that library thread-count defaults are set to
+one. They state these facts do not establish the cause.
+
+Upstream gVisor release-20260914.0 was published 2026-09-16 and registers
+580.95.05 as addUnsupportedDriverABI(580, 95, 05, v580_65_06): an unsupported
+entry reusing 580.65.06's ioctl table, reachable only with that flag. Modal's
+build is their own (cfce95d57233 is not an upstream commit). This run uses the
+closest public build. It is not a copy of Modal's sandbox.
+
+Run (leg 1):
+  GCP L4, driver 580.95.05 (F044's install), vLLM 0.29.0 image (F044's),
+  container runtime runsc-20260914.0 with --nvproxy-allow-unsupported-driver,
+  OMP/MKL/OPENBLAS threads = 1, no CPU pin (all 4 vCPUs available: "bursting").
+  mechanism dflash; arms default, enforce_eager; 12 boots each.
+
+Fidelity checks, before any measurement is trusted:
+  (a) the runsc debug log contains nvproxy's own warning that 580.95.05 "is not
+      officially supported" -- the unsupported-ABI path is the one exercised;
+  (b) the container's dmesg is gVisor's;
+  (c) the engine log does NOT contain "Reducing Torch threads", as on Modal.
+  If (a) or (b) fails the run is not a gVisor run and is not reported as one.
+  If (c) fails it is reported, with the thread count it shows.
+
+Rule, applied after default + enforce_eager (24 boots):
+  ratio < 0.95 and graph-arm CV >= 3.73%
+      -> the deficit reproduces OFF Modal, under gVisor nvproxy on the
+         unsupported 580.95.05 ABI. F044 (same host, same driver, runc) was at
+         parity, so the sandbox is necessary on this host. Then:
+         leg 2  runc control on THIS card, same image, THREADS1, default +
+                eager 12 each. Parity -> the sandbox, not the card, does it.
+         leg 3  same as leg 1 with the vLLM 0.30.0 image. F042 predicts parity
+                (0.30.0 was at parity on Modal on 580.95.05).
+         leg 4  only if leg 3 is at parity: 0.29.0 with F046's two buffers
+                pinned. Parity there would make F046 the mechanism.
+  ratio >= 0.95
+      -> gVisor 20260914.0 with the unsupported-driver flag is not sufficient
+         on this host. Stop. What remains differs between this build and
+         Modal's, or is outside the sandbox (host kernel, CPU share, card
+         population); the report says which of these were not tested.
+  0.95 <= ratio but graph CV >= 3.73%, or ratio < 0.95 with CV < 3.73%
+      -> neither regime as defined; reported as such, no leg 2-4.
+
+Prior, stated so it can be wrong in public: leaning deficit, low-to-medium
+confidence. Every factor that differed between Modal and F044 except the sandbox
+has now been matched or tested (driver, image, engine, async, CPU pin, threads),
+and nvproxy on an unsupported ABI is the one layer that changed with the driver
+on Modal. Against it: nvproxy intercepts ioctls, and a CUDA-graph replay issues
+few of them, so an ioctl-cost story favours the graph arm, not the eager one.

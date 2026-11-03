@@ -7,8 +7,12 @@
 #   host.sh docker             Docker + NVIDIA Container Toolkit
 #   host.sh build              the Modal-equivalent image (cloud/gcp/Dockerfile)
 #   host.sh verify             driver, card, torch, vllm, async flag -- no GPU load
+#   host.sh gvisor 20260914.0  install that upstream runsc as Docker runtime "runsc"
 #   host.sh run ARGS...        cloud/gcp/run_in_container.py ARGS
 #                              (CPUSET=0 host.sh run ... pins to one vCPU)
+#                              (RUNTIME=runsc ... runs it under gVisor nvproxy)
+#                              (THREADS1=1 ... library thread defaults of one)
+#   VLLM=0.30.0 host.sh build|verify|run   another engine release
 #
 # The repo is mounted from the VM user's disk into a container that runs as
 # root, so git refuses it ("dubious ownership", exit 128) and boot_variance's
@@ -19,7 +23,8 @@
 # needs:  /data/repo (this repo)  /data/models (HF cache)  /data/results
 set -euo pipefail
 cmd=${1:?usage: host.sh driver|docker|build|verify|run}; shift || true
-IMAGE=specfp8-vllm:0.29.0
+VLLM=${VLLM:-0.29.0}
+IMAGE=specfp8-vllm:$VLLM
 
 case "$cmd" in
 driver)
@@ -56,7 +61,43 @@ docker)
   sudo nvidia-ctk runtime configure --runtime=docker && sudo systemctl restart docker
   ;;
 build)
-  sudo docker build -t "$IMAGE" /data/repo/cloud/gcp
+  sudo docker build --build-arg VLLM_VERSION="$VLLM" -t "$IMAGE" /data/repo/cloud/gcp
+  ;;
+gvisor)
+  # Modal (support reply, 2026-11-03): GPU Functions run under gVisor with
+  # nvproxy; the 2026-10-04 containers used their build "Release20260916"
+  # with driver 580.95.05 and -nvproxy-allow-unsupported-driver. Upstream
+  # release-20260914.0 was published 2026-09-16 and registers 580.95.05 as
+  # an UNSUPPORTED ABI derived from 580.65.06, usable only with that flag.
+  # Modal's build is their own (cfce95d57233 is not an upstream commit), so
+  # this is the closest public build, not a copy of theirs.
+  R=${1:?gVisor release, e.g. 20260914.0}
+  B="https://storage.googleapis.com/gvisor/releases/release/$R/x86_64"
+  sudo apt-get install -y -qq zstd
+  rm -rf /tmp/gv && mkdir -p /tmp/gv && cd /tmp/gv
+  curl -fsSLO "$B/gvisor.tar.zstd" && curl -fsSLO "$B/gvisor.tar.zstd.sha512"
+  sha512sum -c gvisor.tar.zstd.sha512
+  tar --zstd -xf gvisor.tar.zstd
+  RUNSC=$(find /tmp/gv -type f -name runsc | head -1)
+  sudo install -m 755 "$RUNSC" "/usr/local/bin/runsc-$R"
+  "/usr/local/bin/runsc-$R" --version
+  sudo python3 - "$R" <<'EOF'
+import json, sys, pathlib
+p = pathlib.Path("/etc/docker/daemon.json")
+d = json.loads(p.read_text()) if p.exists() else {}
+d.setdefault("runtimes", {})["runsc"] = {
+    "path": f"/usr/local/bin/runsc-{sys.argv[1]}",
+    "runtimeArgs": ["--nvproxy-allow-unsupported-driver",
+                    "--debug-log=/data/runsc/", "--debug"]}
+p.write_text(json.dumps(d, indent=2))
+print(json.dumps(d["runtimes"]["runsc"]))
+EOF
+  sudo mkdir -p /data/runsc && sudo systemctl restart docker
+  echo "== gVisor sees the GPU? =="
+  sudo docker run --rm --runtime=runsc --gpus all nvidia/cuda:13.0.3-base-ubuntu24.04 \
+       bash -c 'dmesg | head -2; nvidia-smi --query-gpu=driver_version,name --format=csv,noheader'
+  echo "== nvproxy's own verdict on the driver =="
+  sudo grep -rh "not officially supported\|unsupported Nvidia" /data/runsc/ | head -2
   ;;
 verify)
   echo "== host driver and card =="
@@ -74,8 +115,19 @@ print(\"vllm\",vllm.__version__); print(\"device\",torch.cuda.get_device_name(0)
 run)
   # CPUSET pins the container to those CPUs (e.g. CPUSET=0 for one vCPU),
   # to test F044's CPU candidate. Unset, the container gets every CPU.
-  sudo docker run --rm --gpus all --shm-size=16g --ipc=host \
+  # RUNTIME=runsc: gVisor has no host IPC namespace to share, and Modal's
+  # containers do not get one either, so --ipc=host is dropped there.
+  # THREADS1=1: Modal sets library thread-count defaults to one (support
+  # reply, 2026-11-03), which is why no Modal log shows torch reducing its
+  # threads. Both are recorded on every measurement.
+  RT=${RUNTIME:-runc}
+  SANDBOX=$RT
+  [ "$RT" = runsc ] && SANDBOX=$(grep -o 'runsc-[0-9.]*[0-9]' /etc/docker/daemon.json | head -1)
+  sudo docker run --rm --runtime="$RT" --gpus all --shm-size=16g \
+    $([ "$RT" = runc ] && echo --ipc=host) \
     ${CPUSET:+--cpuset-cpus=$CPUSET} \
+    ${THREADS1:+-e OMP_NUM_THREADS=1 -e MKL_NUM_THREADS=1 -e OPENBLAS_NUM_THREADS=1} \
+    -e SPECFP8_SANDBOX="$SANDBOX" \
     -e SPECFP8_PLATFORM=gcp -e HF_HUB_DISABLE_PROGRESS_BARS=1 \
     -e GIT_CONFIG_COUNT=1 -e GIT_CONFIG_KEY_0=safe.directory \
     -e GIT_CONFIG_VALUE_0=/root/spec-fp8-study \

@@ -967,6 +967,12 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash",
                         # log reports torch starting at 2 threads, no Modal log
                         # does, and nothing recorded what the container had.
                         "cpus_visible": len(os.sched_getaffinity(0)),
+                        # The container runtime, on hosts where it is chosen:
+                        # "runc", or "runsc-<gVisor release>". On Modal it is
+                        # gVisor (support reply, 2026-11-03) but not visible
+                        # from inside, so it stays None there.
+                        "sandbox": os.environ.get("SPECFP8_SANDBOX"),
+                        "omp_num_threads": os.environ.get("OMP_NUM_THREADS"),
                         # The commit each model's revision resolved to when this
                         # ran, read from the HF cache's refs/. Sweeps say
                         # revision "main", which is mutable; until now the
