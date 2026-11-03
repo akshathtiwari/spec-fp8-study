@@ -16,6 +16,13 @@ supersedes: []
 superseded_by: []
 ---
 
+> **Correction (2026-11-03, F047).** Copied from F040. The graph-arm CV band of the
+> deficit sessions is **3.73--13.92%**, not 3.73--10.38% as written below: the
+> 09-23 session (13.92%) is the upper end. The disjointness claim is unaffected.
+> The figure was mistyped here, carried into the v1.5.0 paper and metadata, and
+> passed `check_paper` because 10.38 is a real CV of another session. With the
+> 2026-11-01 session included, the parity band is 0.82--1.95%, not 0.86--1.95%. See F047.
+
 ## Claim
 
 F044 found the F042 configuration at parity on a GCP L4 and named two platform

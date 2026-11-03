@@ -47,6 +47,14 @@ if [ "$defects" -gt "$ALLOWED_PROVENANCE_DEFECTS" ]; then
   exit 1
 fi
 
+echo "== headline claims match a clean-room recomputation from raw records =="
+# check_paper asks whether a number exists somewhere in the evidence. That
+# let v1.5.0 ship "3.73--10.38%" for a band whose true upper end is 13.92:
+# 10.38 is a real CV of another session, so it was "traceable". This
+# recomputes each headline value from results/ without importing analysis/
+# and requires the paper to contain the exact recomputed string. Blocking.
+.venv/bin/python -I analysis/recompute_cleanroom.py
+
 echo "== every numeric claim in the paper traces to a record =="
 # check_paper exits with the count of untraceable claims; set -e stops here
 # on any nonzero, which is the intended behaviour: zero is the only

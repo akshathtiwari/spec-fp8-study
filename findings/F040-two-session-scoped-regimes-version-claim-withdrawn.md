@@ -16,6 +16,12 @@ supersedes: [F034, F038]
 superseded_by: []
 ---
 
+> **Correction (2026-11-03, F047).** This finding's own table shows it. The graph-arm CV band of the
+> deficit sessions is **3.73--13.92%**, not 3.73--10.38% as written below: the
+> 09-23 session (13.92%) is the upper end. The disjointness claim is unaffected.
+> The figure was mistyped here, carried into the v1.5.0 paper and metadata, and
+> passed `check_paper` because 10.38 is a real CV of another session. See F047.
+
 > **Revised by F042 (2026-11-01).** Every measurement below stands. Its
 > interpretation does not. All three withdrawals in this finding -- the engine
 > release (F034), L4 specificity (F035) and draft-model localisation (F018) --

@@ -28,7 +28,7 @@ obscured:
 2. **Speculative throughput falls into one of two regimes, and the
    platform decides which.** The ratio of CUDA-graph to `--enforce-eager`
    throughput splits into 0.487-0.768 or 1.003-1.039 with nothing between,
-   and over 116 boots the groups do not overlap. Every deficit session shares
+   and over 128 boots the groups do not overlap. Every deficit session shares
    one configuration (vLLM 0.29.0, DFlash, L4, NVIDIA driver 580.95.05, on
    Modal), and every session differing from it in one factor is at parity.
    The same driver installed by hand on a GCP L4, everything else matched,

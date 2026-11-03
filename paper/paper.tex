@@ -43,14 +43,14 @@ so an FP8-versus-BF16 comparison under default settings silently swaps the
 attention kernel as well; target and draft models select backends
 independently, so pinning one does not pin the other. Second, speculative
 throughput of an identical configuration falls into one of two regimes
-while acceptance does not. Across nine L4 sessions on
-nine distinct physical cards, the ratio of CUDA-graph to
+while acceptance does not. Across ten L4 sessions on Modal, the ratio of
+CUDA-graph to
 \tw{-{}-enforce-eager} throughput measured in the same container falls into
-two disjoint regimes: three sessions at 0.487--0.768 and six at
+two disjoint regimes: three sessions at 0.487--0.768 and seven at
 1.003--1.039, with nothing between. The same partition separates
-boot-to-boot dispersion of the graph arm (3.73--10.38\% against
-0.86--1.95\%), so the deficit and the dispersion are one phenomenon rather
-than two findings ($p = 0.012$ under random assignment), and pooled over 116
+boot-to-boot dispersion of the graph arm (3.73--13.92\% against
+0.82--1.95\%), so the deficit and the dispersion are one phenomenon rather
+than two findings ($p = 0.008$ under random assignment), and pooled over 128
 boots the two groups do not overlap at all. Every deficit session shares one
 configuration --- vLLM 0.29.0, DFlash, the L4 and NVIDIA driver 580.95.05 ---
 and every session differing from it in one factor is at parity. Installing
@@ -110,7 +110,7 @@ kernel A/B as well.
 \item \textbf{A platform-dependent throughput regime} (\S\ref{sec:c2}).
 Identical configurations disperse across boots at constant acceptance and
 fall into two disjoint regimes: ratio 0.487--0.768 with graph-arm CV
-3.73--10.38\%, or 1.003--1.039 with CV 0.86--1.95\%, with nothing between.
+3.73--13.92\%, or 1.003--1.039 with CV 0.82--1.95\%, with nothing between.
 The deficit appears in exactly one configuration on one platform, and an
 intervention reproducing that configuration on rented hardware gives parity.
 We eliminate five candidate mechanisms by measurement, name the platform's
@@ -256,6 +256,7 @@ Engine & Session & tok/s & CV & tok/s & CV & ratio & Regime\\
 0.29.0 & 10-31 a & 81.2 & 1.53\% & 80.9 & 1.24\% & 1.003 & parity\\
 0.29.0 & 10-31 b & 82.0 & 1.00\% & 81.1 & 1.14\% & 1.011 & parity\\
 0.29.0 & 10-31 c & 81.2 & 1.95\% & 80.0 & 1.02\% & 1.015 & parity\\
+0.29.0 & 11-01 & 83.5 & 0.82\% & 82.5 & 0.75\% & 1.012 & parity\\
 0.30.0 & 09-29 b & 82.8 & 0.99\% & 81.6 & 1.28\% & 1.014 & parity\\
 0.30.0 & 09-29 c & 78.2 & 1.61\% & 77.0 & 2.79\% & 1.017 & parity\\
 0.32.0 & 10-31 d & 81.7 & 0.86\% & 78.6 & 3.12\% & 1.039 & parity\\
@@ -268,26 +269,27 @@ Engine & Session & tok/s & CV & tok/s & CV & ratio & Regime\\
 Each cell is 12 fixed-prompt boots inside a single container, except three
 truncated by a runner timeout (09-23 eager $n=8$; 09-29\,c and 10-04 eager
 $n=11$). Every session ran on a distinct physical card, recorded by UUID,
-except 09-23, which predates that recording. All nine L4 cards report the
-same 22.5\,GiB, 2040\,MHz clock ceiling and 72\,W power limit.
+except 09-23, which predates that recording. Every L4 card reports
+22.5\,GiB, and every one whose limits were recorded (all but 09-23) reports
+the same 2040\,MHz clock ceiling and 72\,W power limit.
 
 \paragraph{The split is binary, and it is one phenomenon rather than two.}
 The ratio column has no intermediate value: three sessions between 0.487 and
-0.768, six between 1.003 and 1.039, and a gap of 0.235 between the regimes
+0.768, seven between 1.003 and 1.039, and a gap of 0.235 between the regimes
 wider than the spread within either. The graph arm's dispersion partitions
-the same way --- 3.73--10.38\% in the deficit sessions against 0.86--1.95\%
+the same way --- 3.73--13.92\% in the deficit sessions against 0.82--1.95\%
 in the parity sessions, again disjoint. \textbf{The two partitions are
 identical.} Under random assignment, the probability that the three
 lowest-ratio sessions are exactly the three highest-dispersion sessions is
-$1/\binom{9}{3} = 0.012$. We therefore stop reporting the deficit and the
+$1/\binom{10}{3} = 0.008$. We therefore stop reporting the deficit and the
 dispersion as separate results: a session is in one regime or the other, and
 in the deficit regime it is both slow and unstable.
 
 \paragraph{The separation holds boot by boot, not only session by session.}
-Pooling every fixed-prompt default-arm boot at concurrency 1 across all nine
-L4 sessions gives $n = 116$: 44 boots from the four sessions carrying the
-deficit signature, spanning 29.5--65.6 tok/s, and 72 from the six parity
-sessions, spanning 75.5--83.5. The fourth deficit session is a 10-04 run that
+Pooling every fixed-prompt default-arm boot at concurrency 1 across all ten
+L4 sessions gives $n = 128$: 44 boots from the four sessions carrying the
+deficit signature, spanning 29.5--65.6 tok/s, and 84 from the seven parity
+sessions, spanning 75.5--83.9. The fourth deficit session is a 10-04 run that
 measured no eager arm, so it has no ratio and does not appear in the table
 above; we include its boots here rather than discard a measured boot for
 lacking a control it never had. \textbf{Not one boot falls between 65.6 and
@@ -589,10 +591,10 @@ DFlash's 13.92\%, and no benefit from \tw{-{}-enforce-eager}. But those
 twelve n-gram boots pool two container sessions (CV 3.19\% at $n=4$ and
 1.55\% at $n=8$), and neither is a session that produced a DFlash deficit.
 Both n-gram sessions therefore sit in the parity regime, where DFlash itself
-gives 0.86--1.95\%. \textbf{Under the regime account this comparison carries
+gives 0.82--1.95\%. \textbf{Under the regime account this comparison carries
 almost no information:} if n-gram entered the deficit regime at DFlash's
-observed rate of 3 in 9, two sessions would both land in parity with
-probability $(2/3)^2 = 0.44$. Observing two quiet n-gram sessions is thus an
+observed rate of 3 in 10, two sessions would both land in parity with
+probability $(7/10)^2 = 0.49$. Observing two quiet n-gram sessions is thus an
 unremarkable outcome even if n-gram is affected exactly as DFlash is. The
 comparison is cross-session and cross-regime, and the localisation is
 suggestive at best. These are the same
@@ -648,6 +650,7 @@ Engine & Session & $n$ & Mean $\tau$ & CV\\
 0.29.0 & 2026-10-31 a & 12 & 4.1337 & 0.88\%\\
 0.29.0 & 2026-10-31 b & 12 & 4.1564 & 0.26\%\\
 0.29.0 & 2026-10-31 c & 12 & 4.1421 & 0.60\%\\
+0.29.0 & 2026-11-01 & 12 & 4.1675 & 0.11\%\\
 0.30.0 & 2026-09-29 & 12 & 4.1498 & 0.61\%\\
 0.30.0 & 2026-09-29 b & 12 & 4.0702 & 0.00\%\\
 0.32.0 & 2026-10-31 & 12 & 4.1594 & 0.00\%\\
@@ -656,9 +659,8 @@ Engine & Session & $n$ & Mean $\tau$ & CV\\
 \end{center}
 
 \noindent
-Nine sessions, three engine releases, nine distinct physical cards: mean
-$\tau$ spans 4.0702--4.1594, a range of 2.2\%, and no session disperses by
-more than 0.88\%. This is the contrast that makes \S\ref{sec:c2} worth
+Ten sessions, three engine releases: mean $\tau$ spans 4.0702--4.1675, a
+range of 2.4\%, and no session disperses by more than 0.88\%. This is the contrast that makes \S\ref{sec:c2} worth
 reporting, and it is now the cleaner of the two findings. On the same boots,
 acceptance is reproducible and reproducibly quiet while throughput dispersion
 ranges over a factor of sixteen. Whatever varies between sessions is not
@@ -667,11 +669,11 @@ are produced.
 
 \paragraph{The contrast is itself regime-dependent, which sharpens it.} In
 the three deficit sessions throughput dispersion exceeds $\tau$ dispersion by
-a factor of 12 to 22. In the parity sessions both quantities are below 2\%
-and the factor falls to 1.6--3.8. So ``acceptance is stable where throughput
+a factor of 13 to 22 where $\tau$ varies at all. In the parity sessions both
+quantities are below 2\% and the factor falls to 1.6--7.6. So ``acceptance is stable where throughput
 is not'' is a statement about the deficit regime specifically: in the parity
 regime both are stable and there is no contrast to draw. The $\tau$ result
-holds across all nine sessions regardless; what varies is how much work it
+holds across all ten sessions regardless; what varies is how much work it
 does.
 
 \paragraph{We previously called this a ``noise floor'' and withdraw that.}
@@ -1092,11 +1094,11 @@ on a load-regime argument rather than on a measurement of our own harness.
 \item \textbf{Which claims are replicated, and which are single-session.}
 \S\ref{sec:c2} argues that a quantity measured once is a draw, so we state
 where this paper meets that standard. \emph{Replicated:} the existence of two disjoint
-throughput regimes and the default/eager ratio within each (ten sessions on
-Modal, ten cards, three engine releases, 3 deficit and 7 parity), and the
+throughput regimes and the default/eager ratio within each (eleven sessions
+on Modal, three engine releases, 3 deficit and 8 parity), and the
 absence of the deficit off Modal (two GCP sessions on two further cards,
 unpinned and pinned to one CPU, both at parity); acceptance dispersion
-(nine sessions, below 0.88\% in every one); the refutation of power
+(ten sessions, below 0.88\% in every one); the refutation of power
 throttling (two deficit sessions, both arms, plus four parity sessions); the eager penalty
 on FP8 weights, whose direction reproduces across two independent grids
 while its coefficient does not, which is why we report a range.
