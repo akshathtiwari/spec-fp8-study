@@ -714,6 +714,30 @@ def backend_report() -> str:
     return format_report(analyse("/results"))
 
 
+def _resolved_snapshots(cell) -> dict:
+    """Commit each model's revision resolved to in the local HF cache.
+
+    The cache layout is <cache>/models--<org>--<name>/refs/<revision>, whose
+    content is the commit SHA. None means the ref was not on disk, which is
+    recorded as unknown rather than guessed.
+    """
+    import os
+    from pathlib import Path
+    root = Path(os.environ.get("SPECFP8_MODEL_CACHE", "/models"))
+
+    def one(repo, rev):
+        if not repo:
+            return None
+        ref = root / ("models--" + repo.replace("/", "--")) / "refs" / (rev or "main")
+        try:
+            return ref.read_text().strip() or None
+        except OSError:
+            return None
+
+    return {"target": one(cell.model, cell.model_revision),
+            "draft": one(cell.draft_model, cell.draft_revision)}
+
+
 #: The vLLM switch that turns async scheduling off. F043 hypothesises the
 #: deficit needs it: async scheduling overlaps the CPU scheduler with GPU
 #: execution, and a broken overlap leaves the GPU idle at a high clock, which
@@ -943,6 +967,12 @@ def boot_variance(boots: int = 2, mechanism: str = "dflash",
                         # log reports torch starting at 2 threads, no Modal log
                         # does, and nothing recorded what the container had.
                         "cpus_visible": len(os.sched_getaffinity(0)),
+                        # The commit each model's revision resolved to when this
+                        # ran, read from the HF cache's refs/. Sweeps say
+                        # revision "main", which is mutable; until now the
+                        # actual commit was inferred after the fact
+                        # (docs/reproducibility.md). External audit, 3 Nov 2026.
+                        "model_snapshot": _resolved_snapshots(cell),
                         # Measured, not declared (F031).
                         "engine_version": engine_version,
                         "engine_check": engine_check,

@@ -25,6 +25,9 @@ echo "== regenerating figure and its data table =="
 # vLLM 0.29.0 vs 0.30.0 decode-path pinning (F046), from committed upstream files.
 .venv/bin/python analysis/vllm_pinning.py
 
+# Release manifest: counts and checksums generated from the tree, never typed.
+.venv/bin/python analysis/manifest.py
+
 echo "== provenance =="
 # This must BLOCK. An earlier version piped the failure into an echo and
 # carried on, so the build advertised "a paper that fails its own audit is

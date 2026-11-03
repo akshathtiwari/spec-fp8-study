@@ -59,7 +59,7 @@ became a measurement-methodology paper.
 ## The record
 
 ```
-findings/        45 numbered findings: results, methods, retractions, gaps.
+findings/        Numbered findings: results, methods, retractions, gaps.
                  Each carries a mandatory "What this does NOT establish".
                  Wrong claims are superseded, never deleted.
 results/         Raw records, append-only. ~40 MB, committed on purpose:
@@ -70,7 +70,7 @@ docs/            Requirements, design, data model, paper outline.
 paper/           LaTeX source, figures, and build script.
 ```
 
-8 of the 45 findings are formal retractions, and several more withdraw a
+Formal retractions are counted in `analysis/out/tables/manifest.md`, and several more findings withdraw a
 reading of their own predecessor. They are kept deliberately. The
 study's argument is that benchmark numbers are routinely reported without
 their error terms, and the most honest evidence for that is the list of times
@@ -147,7 +147,10 @@ engine-agnostic and speaks only HTTP.
 
 The paper is a preprint draft. It has not been peer reviewed.
 
-Counts in this file go stale; run the tools rather than trusting them:
+Counts in this file go stale; run the tools rather than trusting them.
+`analysis/out/tables/manifest.md` is generated on every build and states the
+version, DOIs, findings by kind, and each raw file's record count and sha256,
+so a checkout can be matched to a Zenodo version without trusting prose:
 
 ```bash
 python analysis/session_regimes.py    # the two regimes, from raw records

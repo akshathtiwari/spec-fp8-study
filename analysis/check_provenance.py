@@ -91,6 +91,43 @@ def known_cell_ids() -> set[str]:
     return ids
 
 
+def _record_integrity_defects() -> list[str]:
+    """Every raw record parses, and no record appears twice.
+
+    known_cell_ids() skips a line it cannot parse, which is fine for
+    collecting ids but means a corrupted record would vanish from every
+    check silently. That matters here: F039 found that two concurrent runs
+    destroyed records in the shared store, and a partially written line is
+    exactly what such a race leaves behind. An external audit (3 Nov 2026)
+    pointed out the skip. This pass reports every malformed line and every
+    exact duplicate as a defect, so the build fails on either.
+
+    Exact duplicates are checked rather than repeated cell_ids: the store is
+    append-only with supersession, so one cell legitimately has many records.
+    A byte-identical line twice is a merge or retry error, never a
+    measurement.
+    """
+    import hashlib
+    out: list[str] = []
+    for path in sorted((ROOT / "results").glob("*.jsonl")):
+        seen: dict[str, int] = {}
+        for n, line in enumerate(path.read_text().splitlines(), 1):
+            if not line.strip():
+                out.append(f"{path.name}:{n}: blank line in an append-only store")
+                continue
+            try:
+                json.loads(line)
+            except json.JSONDecodeError as e:
+                out.append(f"{path.name}:{n}: malformed record ({e.msg})")
+                continue
+            h = hashlib.sha256(line.strip().encode()).hexdigest()
+            if h in seen:
+                out.append(f"{path.name}:{n}: exact duplicate of line {seen[h]}")
+            else:
+                seen[h] = n
+    return out
+
+
 def _id_stability_defects() -> list[str]:
     """Recompute every stored cell_id from its stored config.
 
@@ -229,6 +266,9 @@ def main() -> int:
     # sweep re-runs work it already paid for. Nothing else catches it,
     # because every individual piece still looks well-formed.
     defects.extend(_id_stability_defects())
+
+    # 8. raw records parse, and none is duplicated (see _record_integrity_defects)
+    defects.extend(_record_integrity_defects())
 
     # 5. retraction links are symmetric and point somewhere real
     for fid, targets in supersedes.items():
