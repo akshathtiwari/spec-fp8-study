@@ -91,8 +91,10 @@ p = pathlib.Path("/etc/docker/daemon.json")
 d = json.loads(p.read_text()) if p.exists() else {}
 d.setdefault("runtimes", {})["runsc"] = {
     "path": f"/usr/local/bin/runsc-{sys.argv[1]}",
+    # No --debug: debug-level logging adds sentry overhead Modal would not
+    # have. Warnings, including nvproxy's driver verdict, still reach the log.
     "runtimeArgs": ["--nvproxy-allow-unsupported-driver",
-                    "--debug-log=/data/runsc/", "--debug"]}
+                    "--debug-log=/data/runsc/"]}
 p.write_text(json.dumps(d, indent=2))
 print(json.dumps(d["runtimes"]["runsc"]))
 EOF
