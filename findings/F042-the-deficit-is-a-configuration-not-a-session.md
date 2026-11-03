@@ -18,6 +18,13 @@ supersedes: [F041]
 superseded_by: []
 ---
 
+> **Revised by F048 (2026-11-03).** Off Modal, under upstream gVisor, vLLM
+> 0.29.0 is deficient on driver 610.57.04 too (0.755, 0.744). The driver was
+> standing in for Modal's sandbox build, which on Modal changes with it. What
+> every deficit session now shares is gVisor, vLLM 0.29.0, L4 and DFlash
+> (session_regimes.md), and four Modal 610.57.04 sessions share all of that
+> and are at parity, unexplained.
+
 > **Revised by F044 (2026-11-01).** The conjunction below is incomplete. The
 > same configuration -- L4, driver 580.95.05, vLLM 0.29.0, DFlash -- installed by
 > hand on a GCP L4 with every recorded factor matched is at parity (1.001). The

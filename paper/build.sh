@@ -24,6 +24,8 @@ echo "== regenerating figure and its data table =="
 
 # vLLM 0.29.0 vs 0.30.0 decode-path pinning (F046), from committed upstream files.
 .venv/bin/python analysis/vllm_pinning.py
+# The GCP intervention sessions by container runtime (F044, F045, F048, F049).
+.venv/bin/python analysis/sandbox_legs.py
 
 # Release manifest: counts and checksums generated from the tree, never typed.
 .venv/bin/python analysis/manifest.py

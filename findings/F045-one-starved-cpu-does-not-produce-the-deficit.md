@@ -16,6 +16,10 @@ supersedes: []
 superseded_by: []
 ---
 
+> **Followed by F048 (2026-11-03).** The deficit reproduces under gVisor with
+> all four vCPUs visible and library threads at one (0.736). A starved CPU is
+> therefore not necessary either, on that host.
+
 > **Correction (2026-11-03, F047).** Copied from F040. The graph-arm CV band of the
 > deficit sessions is **3.73--13.92%**, not 3.73--10.38% as written below: the
 > 09-23 session (13.92%) is the upper end. The disjointness claim is unaffected.

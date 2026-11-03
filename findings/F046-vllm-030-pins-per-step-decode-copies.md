@@ -2,7 +2,7 @@
 id: F046
 title: vLLM 0.30.0 pins two host buffers that FlashInfer's per-step decode planner copies to the GPU with non_blocking=True -- an internal arange buffer and kv_lens -- with comments saying the pinning keeps "the copy async"; in 0.29.0 neither is pinned, so every decode step makes a non-blocking copy from pageable memory, which CUDA stages synchronously; a code-grounded candidate for why 0.30.0 removed the deficit, not tested
 kind: result
-status: established
+status: superseded
 confidence: low
 date: 2026-11-02
 evidence:
@@ -17,8 +17,15 @@ evidence:
              https://github.com/vllm-project/vllm/pull/54856,
              https://github.com/vllm-project/vllm/pull/54374]
 supersedes: []
-superseded_by: []
+superseded_by: [F049]
 ---
+
+> **Retracted by F049 (2026-11-03).** Tested under gVisor, where vLLM 0.29.0
+> reproduces the deficit (F048): backporting 0.30.0's arange-buffer pin leaves
+> it at 0.726. The kv_lens copy below is not made on the L4 (fa2 decode path),
+> and both arms, not only the graph arm, make the remaining copy every step.
+> The code reading stands as a description of the two releases. The candidate
+> does not.
 
 ## Claim
 

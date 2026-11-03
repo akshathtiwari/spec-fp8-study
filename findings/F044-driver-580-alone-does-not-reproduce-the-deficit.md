@@ -17,6 +17,14 @@ supersedes: []
 superseded_by: []
 ---
 
+> **Followed by F048 (2026-11-03).** The same image and driver on a GCP L4
+> under **gVisor** (upstream 20260914.0, unsupported-driver ABI, as Modal
+> described its setup) is deficient: 0.736, against 1.018 under runc on that
+> card. So the result below stands as stated, the driver alone does not
+> reproduce the deficit, and the platform layer it pointed to is the sandbox.
+> On that host the driver is not needed either: 0.29.0 under gVisor on
+> 610.57.04 gives 0.755.
+
 > **Correction (2026-11-03, F047).** Copied from F040. The graph-arm CV band of the
 > deficit sessions is **3.73--13.92%**, not 3.73--10.38% as written below: the
 > 09-23 session (13.92%) is the upper end. The disjointness claim is unaffected.

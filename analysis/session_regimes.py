@@ -72,6 +72,24 @@ def _platform(r: dict) -> str:
     return r.get("platform") or "modal"
 
 
+def _sandbox(r: dict) -> str:
+    """Container runtime family. Modal runs GPU Functions under gVisor with
+    nvproxy (support reply, 2026-11-03), unrecorded from inside, so Modal
+    records are "gvisor". GCP records before the `sandbox` field ran under
+    Docker's default runtime, runc; later ones say which runtime ran."""
+    if _platform(r) == "modal":
+        return "gvisor"
+    s = r.get("sandbox") or "runc"
+    return "gvisor" if s.startswith("runsc") else s
+
+
+def _sandbox_build(r: dict) -> str:
+    """The gVisor build, display only: Modal's is not public and not recorded."""
+    if _platform(r) == "modal":
+        return "Modal's"
+    return r.get("sandbox") or "runc"
+
+
 def load(gpu: str | None = BASELINE_GPU,
          mech: str = BASELINE_MECH,
          platform: str | None = BASELINE_PLATFORM) -> dict[tuple, list[dict]]:
@@ -175,6 +193,9 @@ def configuration_table() -> list[dict]:
                 # the field, so Modal's CPU is unrecorded ("?"), not unequal.
                 "cpus": r.get("cpus_visible", "?"),
                 "engine": (cfg.get("engine_ref") or "").replace("vllm-", ""),
+                # cloud/gcp/f046_pin_range_buf.py: 0.29.0 with 0.30.0's pin.
+                "patch": "F046" if (r.get("image") or "").endswith("-f046") else "none",
+                "sandbox": _sandbox(r), "build": _sandbox_build(r),
                 "driver": env.get("driver"),
                 "gpu": (env.get("gpu") or "").replace("NVIDIA ", ""),
                 "mech": cfg.get("mechanism"), "arms": {}})
@@ -191,6 +212,29 @@ def configuration_table() -> list[dict]:
                                       d["session"]))
 
 
+COMMON_FACTORS = ("platform", "sandbox", "driver", "engine", "patch", "gpu", "mech")
+
+
+def deficit_common(cfgs: list[dict]) -> dict:
+    """What every deficit session shares, and which parity sessions share it too.
+
+    deficit_conjunction() asks for ONE configuration common to every deficit
+    session. Since the 2026-11-03 GCP legs there is none: deficits occur on two
+    platforms and two drivers. This asks the weaker question that still has an
+    answer: which factor values are common to all deficit sessions, and does
+    any parity session also have all of them? Those parity sessions are what
+    the shared factors fail to explain.
+    """
+    deficit = [c for c in cfgs if c["regime"] == "deficit"]
+    shared = {f: deficit[0][f] for f in COMMON_FACTORS
+              if deficit and all(c[f] == deficit[0][f] for c in deficit)}
+    parity = [c for c in cfgs if c["regime"] == "parity"]
+    unexplained = [c for c in parity if all(c[f] == v for f, v in shared.items())]
+    escapes = {f: [c for c in parity if c[f] != v] for f, v in shared.items()}
+    return {"shared": shared, "deficit": deficit, "unexplained": unexplained,
+            "escapes": escapes}
+
+
 def deficit_conjunction(cfgs: list[dict]) -> dict:
     """Which configuration do all deficit sessions share, and do its
     one-factor neighbours escape it?
@@ -199,7 +243,7 @@ def deficit_conjunction(cfgs: list[dict]) -> dict:
     one) and, for each factor, the sessions that differ from it in that
     factor alone.
     """
-    FACTORS = ("platform", "engine", "driver", "gpu", "mech")
+    FACTORS = ("platform", "sandbox", "engine", "patch", "driver", "gpu", "mech")
     deficit = [c for c in cfgs if c["regime"] == "deficit"]
     if not deficit:
         return {"shared": None}
@@ -453,12 +497,33 @@ def main() -> int:
           "## What every deficit session has in common", "",
           "All sessions that measured both arms, on every card and mechanism, "
           "with the host driver each record stores under `env.driver`.", "",
-          "| platform | cpus | gpu | driver | engine | mechanism | session | ratio | regime |",
-          "|---|---|---|---|---|---|---|---|---|"]
+          "| platform | runtime | gVisor build | cpus | gpu | driver | engine | patch | mechanism | session | ratio | regime |",
+          "|---|---|---|---|---|---|---|---|---|---|---|---|"]
     cfgs = configuration_table()
     for c in cfgs:
-        L.append(f"| {c['platform']} | {c['cpus']} | {c['gpu']} | {c['driver']} | {c['engine']} "
+        L.append(f"| {c['platform']} | {c['sandbox']} | {c['build']} | {c['cpus']} | {c['gpu']} "
+                 f"| {c['driver']} | {c['engine']} | {c['patch']} "
                  f"| {c['mech']} | {c['session']} | **{c['ratio']:.3f}** | {c['regime']} |")
+    cm = deficit_common(cfgs)
+    if cm["shared"]:
+        sh = cm["shared"]
+        L += ["", f"No single configuration is shared by all {len(cm['deficit'])} deficit sessions. "
+              "The factor values they do all share: **"
+              + ", ".join(f"{f} {v}" for f, v in sh.items()) + "**.", "",
+              "Parity sessions that differ from that in at least one shared factor:", "",
+              "| factor | parity value(s) | sessions |", "|---|---|---|"]
+        for f, nb in cm["escapes"].items():
+            if nb:
+                L.append(f"| {f} | {', '.join(sorted({str(c[f]) for c in nb}))} | {len(nb)} |")
+        if cm["unexplained"]:
+            L += ["", f"**{len(cm['unexplained'])} parity sessions share every one of those values** "
+                  "and are not explained by them: "
+                  + ", ".join(f"{c['platform']} {c['session']} (driver {c['driver']}, ratio {c['ratio']:.3f})"
+                              for c in cm["unexplained"]) + ". "
+                  "On Modal the sandbox build changes with the driver and is not public, so "
+                  "these sessions may differ in a factor this table cannot record. No "
+                  "upstream gVisor build tested reproduces their parity "
+                  "(analysis/out/tables/sandbox_legs.md).", ""]
     dc = deficit_conjunction(cfgs)
     if dc["shared"]:
         sh = dc["shared"]

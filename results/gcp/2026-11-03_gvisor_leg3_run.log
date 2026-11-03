@@ -1,0 +1,102 @@
+
+==========
+== CUDA ==
+==========
+
+CUDA Version 13.0.3
+
+Container image Copyright (c) 2016-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+This container image and its contents are governed by the NVIDIA Deep Learning Container License.
+By pulling and using the container, you accept the terms and conditions of this license:
+https://developer.nvidia.com/ngc/nvidia-deep-learning-container-license
+
+A copy of this license is made available in this container at /NGC-DL-CONTAINER-LICENSE for your convenience.
+
+/opt/venv/lib/python3.11/site-packages/modal/_functions.py:2153: UserWarning: The boot_variance function is executing locally and will not have access to the mounted Volume or NetworkFileSystem data
+  warnings.warn(
+Already up to date.
+concurrency x CUDA-graph test: 12 boots x 2 arms x 1 mechanisms ['dflash']
+cell[dflash]: dflash|bf16|auto|FLASHINFER
+
+  dflash  default        boot 1 c=1      78.16 tok/s  tau=4.115
+  dflash  default        boot 1 c=16    799.84 tok/s  tau=4.198
+  dflash  default        boot 1 c=64   1631.30 tok/s  tau=4.178
+  dflash  default        boot 2 c=1      81.83 tok/s  tau=4.115
+  dflash  default        boot 2 c=16    807.49 tok/s  tau=4.198
+  dflash  default        boot 2 c=64   1679.35 tok/s  tau=4.187
+  dflash  default        boot 3 c=1      81.77 tok/s  tau=4.115
+  dflash  default        boot 3 c=16    807.45 tok/s  tau=4.198
+  dflash  default        boot 3 c=64   1651.28 tok/s  tau=4.184
+  dflash  default        boot 4 c=1      81.75 tok/s  tau=4.115
+  dflash  default        boot 4 c=16    803.96 tok/s  tau=4.197
+  dflash  default        boot 4 c=64   1672.33 tok/s  tau=4.193
+  dflash  default        boot 5 c=1      81.76 tok/s  tau=4.115
+  dflash  default        boot 5 c=16    806.84 tok/s  tau=4.198
+  dflash  default        boot 5 c=64   1641.38 tok/s  tau=4.179
+  dflash  default        boot 6 c=1      81.81 tok/s  tau=4.115
+  dflash  default        boot 6 c=16    809.88 tok/s  tau=4.198
+  dflash  default        boot 6 c=64   1676.12 tok/s  tau=4.180
+  dflash  default        boot 7 c=1      80.87 tok/s  tau=4.070
+  dflash  default        boot 7 c=16    809.86 tok/s  tau=4.173
+  dflash  default        boot 7 c=64   1649.88 tok/s  tau=4.177
+  dflash  default        boot 8 c=1      81.88 tok/s  tau=4.115
+  dflash  default        boot 8 c=16    812.99 tok/s  tau=4.197
+  dflash  default        boot 8 c=64   1676.77 tok/s  tau=4.169
+  dflash  default        boot 9 c=1      81.87 tok/s  tau=4.133
+  dflash  default        boot 9 c=16    794.07 tok/s  tau=4.186
+  dflash  default        boot 9 c=64   1654.26 tok/s  tau=4.192
+  dflash  default        boot 10 c=1      81.87 tok/s  tau=4.115
+  dflash  default        boot 10 c=16    808.06 tok/s  tau=4.198
+  dflash  default        boot 10 c=64   1669.31 tok/s  tau=4.187
+  dflash  default        boot 11 c=1      81.86 tok/s  tau=4.115
+  dflash  default        boot 11 c=16    796.16 tok/s  tau=4.186
+  dflash  default        boot 11 c=64   1635.14 tok/s  tau=4.164
+  dflash  default        boot 12 c=1      81.89 tok/s  tau=4.133
+  dflash  default        boot 12 c=16    794.32 tok/s  tau=4.186
+  dflash  default        boot 12 c=64   1636.96 tok/s  tau=4.174
+  dflash  enforce_eager  boot 1 c=1      74.99 tok/s  tau=4.163
+  dflash  enforce_eager  boot 1 c=16    784.15 tok/s  tau=4.188
+  dflash  enforce_eager  boot 1 c=64   1661.77 tok/s  tau=4.174
+  dflash  enforce_eager  boot 2 c=1      78.42 tok/s  tau=4.163
+  dflash  enforce_eager  boot 2 c=16    792.72 tok/s  tau=4.188
+  dflash  enforce_eager  boot 2 c=64   1696.30 tok/s  tau=4.190
+  dflash  enforce_eager  boot 3 c=1      78.80 tok/s  tau=4.163
+  dflash  enforce_eager  boot 3 c=16    794.94 tok/s  tau=4.194
+  dflash  enforce_eager  boot 3 c=64   1607.15 tok/s  tau=4.155
+  dflash  enforce_eager  boot 4 c=1      78.40 tok/s  tau=4.154
+  dflash  enforce_eager  boot 4 c=16    778.96 tok/s  tau=4.187
+  dflash  enforce_eager  boot 4 c=64   1617.29 tok/s  tau=4.198
+  dflash  enforce_eager  boot 5 c=1      78.39 tok/s  tau=4.163
+  dflash  enforce_eager  boot 5 c=16    788.68 tok/s  tau=4.199
+  dflash  enforce_eager  boot 5 c=64   1673.83 tok/s  tau=4.190
+  dflash  enforce_eager  boot 6 c=1      78.09 tok/s  tau=4.163
+  dflash  enforce_eager  boot 6 c=16    788.13 tok/s  tau=4.205
+  dflash  enforce_eager  boot 6 c=64   1620.37 tok/s  tau=4.171
+  dflash  enforce_eager  boot 7 c=1      78.68 tok/s  tau=4.163
+  dflash  enforce_eager  boot 7 c=16    794.07 tok/s  tau=4.188
+  dflash  enforce_eager  boot 7 c=64   1666.64 tok/s  tau=4.178
+  dflash  enforce_eager  boot 8 c=1      78.79 tok/s  tau=4.163
+  dflash  enforce_eager  boot 8 c=16    793.57 tok/s  tau=4.194
+  dflash  enforce_eager  boot 8 c=64   1623.22 tok/s  tau=4.156
+  dflash  enforce_eager  boot 9 c=1      78.85 tok/s  tau=4.163
+  dflash  enforce_eager  boot 9 c=16    791.35 tok/s  tau=4.188
+  dflash  enforce_eager  boot 9 c=64   1597.89 tok/s  tau=4.178
+  dflash  enforce_eager  boot 10 c=1      79.32 tok/s  tau=4.163
+  dflash  enforce_eager  boot 10 c=16    794.57 tok/s  tau=4.194
+  dflash  enforce_eager  boot 10 c=64   1641.50 tok/s  tau=4.186
+  dflash  enforce_eager  boot 11 c=1      79.23 tok/s  tau=4.163
+  dflash  enforce_eager  boot 11 c=16    793.36 tok/s  tau=4.194
+  dflash  enforce_eager  boot 11 c=64   1646.08 tok/s  tau=4.175
+  dflash  enforce_eager  boot 12 c=1      78.21 tok/s  tau=4.163
+  dflash  enforce_eager  boot 12 c=16    777.40 tok/s  tau=4.190
+  dflash  enforce_eager  boot 12 c=64   1586.77 tok/s  tau=4.181
+
+default/eager within this container (ratio < 0.95 = deficit):
+ mechanism  conc   default     eager  default/eager
+---------------------------------------------------
+    dflash     1      81.4      78.3         1.040
+    dflash    16     804.2     789.3         1.019
+    dflash    64    1656.2    1636.6         1.012
+
+One mechanism (dflash). Pass --sweep dflash,none for the 2x2 that tests whether the regime is speculation-specific.

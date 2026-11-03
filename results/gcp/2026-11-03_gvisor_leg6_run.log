@@ -1,0 +1,112 @@
+
+==========
+== CUDA ==
+==========
+
+CUDA Version 13.0.3
+
+Container image Copyright (c) 2016-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+This container image and its contents are governed by the NVIDIA Deep Learning Container License.
+By pulling and using the container, you accept the terms and conditions of this license:
+https://developer.nvidia.com/ngc/nvidia-deep-learning-container-license
+
+A copy of this license is made available in this container at /NGC-DL-CONTAINER-LICENSE for your convenience.
+
+/opt/venv/lib/python3.11/site-packages/modal/_functions.py:2153: UserWarning: The boot_variance function is executing locally and will not have access to the mounted Volume or NetworkFileSystem data
+  warnings.warn(
+Already up to date.
+concurrency x CUDA-graph test: 12 boots x 2 arms x 1 mechanisms ['dflash']
+cell[dflash]: dflash|bf16|auto|FLASHINFER
+
+  dflash  default        boot 1 c=1      55.86 tok/s  tau=4.143
+  dflash  default        boot 1 c=16    627.98 tok/s  tau=4.156
+  dflash  default        boot 1 c=64   1525.06 tok/s  tau=4.179
+  dflash  default        boot 2 c=1      58.20 tok/s  tau=4.175
+  dflash  default        boot 2 c=16    657.52 tok/s  tau=4.161
+  dflash  default        boot 2 c=64   1524.10 tok/s  tau=4.188
+  dflash  default        boot 3 c=1      57.97 tok/s  tau=4.175
+  dflash  default        boot 3 c=16    652.98 tok/s  tau=4.178
+  dflash  default        boot 3 c=64   1498.50 tok/s  tau=4.188
+  dflash  default        boot 4 c=1      58.92 tok/s  tau=4.143
+  dflash  default        boot 4 c=16    652.41 tok/s  tau=4.153
+  dflash  default        boot 4 c=64   1518.15 tok/s  tau=4.179
+  dflash  default        boot 5 c=1      58.31 tok/s  tau=4.175
+  dflash  default        boot 5 c=16    659.78 tok/s  tau=4.164
+  dflash  default        boot 5 c=64   1543.40 tok/s  tau=4.184
+  dflash  default        boot 6 c=1      58.37 tok/s  tau=4.175
+  dflash  default        boot 6 c=16    660.83 tok/s  tau=4.161
+  dflash  default        boot 6 c=64   1544.10 tok/s  tau=4.189
+  dflash  default        boot 7 c=1      57.69 tok/s  tau=4.175
+  dflash  default        boot 7 c=16    656.94 tok/s  tau=4.161
+  dflash  default        boot 7 c=64   1543.29 tok/s  tau=4.188
+  dflash  default        boot 8 c=1      57.51 tok/s  tau=4.139
+  dflash  default        boot 8 c=16    646.58 tok/s  tau=4.195
+  dflash  default        boot 8 c=64   1570.94 tok/s  tau=4.190
+  dflash  default        boot 9 c=1      57.53 tok/s  tau=4.139
+  dflash  default        boot 9 c=16    659.02 tok/s  tau=4.180
+  dflash  default        boot 9 c=64   1536.45 tok/s  tau=4.161
+  dflash  default        boot 10 c=1      57.93 tok/s  tau=4.175
+  dflash  default        boot 10 c=16    654.91 tok/s  tau=4.164
+  dflash  default        boot 10 c=64   1510.04 tok/s  tau=4.187
+  dflash  default        boot 11 c=1      57.91 tok/s  tau=4.175
+  dflash  default        boot 11 c=16    655.73 tok/s  tau=4.161
+  dflash  default        boot 11 c=64   1493.66 tok/s  tau=4.163
+  dflash  default        boot 12 c=1      57.05 tok/s  tau=4.175
+  dflash  default        boot 12 c=16    642.72 tok/s  tau=4.178
+  dflash  default        boot 12 c=64   1483.04 tok/s  tau=4.170
+  dflash  enforce_eager  boot 1 c=1      74.58 tok/s  tau=4.163
+  dflash  enforce_eager  boot 1 c=16    778.56 tok/s  tau=4.188
+  dflash  enforce_eager  boot 1 c=64   1646.32 tok/s  tau=4.175
+  dflash  enforce_eager  boot 2 c=1      77.68 tok/s  tau=4.163
+  dflash  enforce_eager  boot 2 c=16    789.96 tok/s  tau=4.188
+  dflash  enforce_eager  boot 2 c=64   1651.83 tok/s  tau=4.183
+  dflash  enforce_eager  boot 3 c=1      77.85 tok/s  tau=4.163
+  dflash  enforce_eager  boot 3 c=16    783.15 tok/s  tau=4.205
+  dflash  enforce_eager  boot 3 c=64   1644.53 tok/s  tau=4.192
+  dflash  enforce_eager  boot 4 c=1      77.77 tok/s  tau=4.163
+  dflash  enforce_eager  boot 4 c=16    790.87 tok/s  tau=4.185
+  dflash  enforce_eager  boot 4 c=64   1668.18 tok/s  tau=4.174
+  dflash  enforce_eager  boot 5 c=1      77.87 tok/s  tau=4.163
+  dflash  enforce_eager  boot 5 c=16    784.31 tok/s  tau=4.199
+  dflash  enforce_eager  boot 5 c=64   1631.42 tok/s  tau=4.185
+  dflash  enforce_eager  boot 6 c=1      78.51 tok/s  tau=4.163
+  dflash  enforce_eager  boot 6 c=16    786.76 tok/s  tau=4.199
+  dflash  enforce_eager  boot 6 c=64   1674.28 tok/s  tau=4.178
+  dflash  enforce_eager  boot 7 c=1      77.99 tok/s  tau=4.163
+  dflash  enforce_eager  boot 7 c=16    791.01 tok/s  tau=4.188
+  dflash  enforce_eager  boot 7 c=64   1673.26 tok/s  tau=4.173
+  dflash  enforce_eager  boot 8 c=1      77.83 tok/s  tau=4.163
+  dflash  enforce_eager  boot 8 c=16    778.63 tok/s  tau=4.187
+  dflash  enforce_eager  boot 8 c=64   1679.24 tok/s  tau=4.183
+  dflash  enforce_eager  boot 9 c=1      77.59 tok/s  tau=4.163
+  dflash  enforce_eager  boot 9 c=16    783.75 tok/s  tau=4.199
+  dflash  enforce_eager  boot 9 c=64   1604.24 tok/s  tau=4.175
+  dflash  enforce_eager  boot 10 c=1      78.61 tok/s  tau=4.163
+  dflash  enforce_eager  boot 10 c=16    790.98 tok/s  tau=4.185
+  dflash  enforce_eager  boot 10 c=64   1621.16 tok/s  tau=4.176
+  dflash  enforce_eager  boot 11 c=1      77.45 tok/s  tau=4.163
+  dflash  enforce_eager  boot 11 c=16    788.43 tok/s  tau=4.188
+  dflash  enforce_eager  boot 11 c=64   1616.79 tok/s  tau=4.154
+  dflash  enforce_eager  boot 12 c=1      77.94 tok/s  tau=4.163
+  dflash  enforce_eager  boot 12 c=16    790.26 tok/s  tau=4.188
+  dflash  enforce_eager  boot 12 c=64   1672.97 tok/s  tau=4.181
+
+default/eager within this container (ratio < 0.95 = deficit):
+ mechanism  conc   default     eager  default/eager
+---------------------------------------------------
+    dflash     1      57.8      77.6         0.744
+    dflash    16     652.3     786.4         0.829
+    dflash    64    1524.2    1648.7         0.925
+
+One mechanism (dflash). Pass --sweep dflash,none for the 2x2 that tests whether the regime is speculation-specific.
+===
+/data/gv1.start 2026-11-03T03:28:47Z
+/data/gv2.start 2026-11-03T05:07:49Z
+/data/gv3.start 2026-11-03T06:55:32Z
+/data/gv4.start 2026-11-03T08:28:58Z
+/data/gv5.start 2026-11-03T10:13:52Z
+/data/gv6.start 2026-11-03T11:51:05Z
+===
+6.8.0-1070-gcp
+GPU-8e3f74b9-3a97-0a87-df25-3459cebe7833, 1322623024184
