@@ -25,6 +25,12 @@ supersedes: []
 superseded_by: []
 ---
 
+> **Followed by F051 (2026-11-04).** Modal attributes its 610.57.04 parity to a
+> gVisor hugepage change (google/gvisor#16008, #16009). Upstream 20261102.0,
+> which contains both, leaves 0.29.0 deficient on a second card (0.734, 0.729),
+> but the host never allocated shared-memory huge pages, so that explanation
+> is untested rather than refuted.
+
 ## Claim
 
 Six containers on one GCP L4 (GPU-8e3f74b9-3a97-0a87-df25-3459cebe7833,

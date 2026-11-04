@@ -41,6 +41,7 @@ wrong turns and what caught them — is part of the evidence.
 | [`F045`](F045-one-starved-cpu-does-not-produce-the-deficit.md) | Pinned to one vCPU -- torch at one thread, as on Modal -- driver 580.95.05 on a GCP L4 is still at parity (ratio 1.028, 95% CI [1.012, 1.044]; graph-arm CV 0.95%), so one starved CPU does not produce the deficit; of F044's two platform candidates the sandbox is left, though a fractional CPU quota, unlike a pinned core, was not tested | established | medium |
 | [`F046`](F046-vllm-030-pins-per-step-decode-copies.md) | vLLM 0.30.0 pins two host buffers that FlashInfer's per-step decode planner copies to the GPU with non_blocking=True -- an internal arange buffer and kv_lens -- with comments saying the pinning keeps "the copy async"; in 0.29.0 neither is pinned, so every decode step makes a non-blocking copy from pageable memory, which CUDA stages synchronously; a code-grounded candidate for why 0.30.0 removed the deficit, not tested | superseded | low |
 | [`F048`](F048-the-deficit-reproduces-under-gvisor-off-modal.md) | The CUDA-graph deficit reproduces off Modal under upstream gVisor -- vLLM 0.29.0 on a GCP L4 gives a graph/eager ratio of 0.726-0.755 under two gVisor releases and two host drivers, against 1.018 under runc on the same card -- and vLLM 0.30.0 under the same gVisor is at parity (1.040); the sandbox is necessary on this host and the unsupported driver ABI is not, but the deficit sessions' boot-to-boot dispersion did not reproduce, and Modal's own parity on driver 610.57.04 is not explained by any upstream gVisor build tested | established | medium |
+| [`F051`](F051-modal-hugepage-explanation-not-reproduced.md) | Modal attributes its late-October parity to a gVisor change that lets GPU-shared memory use huge pages (google/gvisor#16008 and #16009, upstream; #16215, unmerged); off Modal, upstream release-20261102.0, which contains the two merged changes, leaves vLLM 0.29.0 deficient on a second card (0.734, and 0.729 with host shmem huge pages set to advise), but the host never allocated shared-memory huge pages, so the explanation is neither confirmed nor refuted | established | medium |
 
 ## Method
 
@@ -81,4 +82,4 @@ wrong turns and what caught them — is part of the evidence.
 
 ---
 
-50 findings: 28 result, 12 method, 1 gap, 9 retraction.
+51 findings: 29 result, 12 method, 1 gap, 9 retraction.

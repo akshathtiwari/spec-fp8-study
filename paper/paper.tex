@@ -32,58 +32,32 @@
 
 \begin{abstract}
 \noindent
-Speculative decoding and FP8 quantization are both standard in production
-LLM serving, and their interaction is almost always reported from single
-runs. We set out to measure that interaction on Ada-class hardware and
-could not, four times, until the measurement apparatus itself was fixed.
-
-We identify and quantify four confounds on vLLM 0.29.0 / NVIDIA L4 (SM89).
-First, attention-backend selection is \emph{conditioned on KV-cache dtype},
-so an FP8-versus-BF16 comparison under default settings silently swaps the
-attention kernel as well; target and draft models select backends
-independently, so pinning one does not pin the other. Second, speculative
-throughput of an identical configuration falls into one of two regimes
-while acceptance does not. Across ten L4 sessions on Modal, the ratio of
-CUDA-graph to
-\tw{-{}-enforce-eager} throughput measured in the same container falls into
-two disjoint regimes: three sessions at 0.487--0.768 and seven at
-1.003--1.039, with nothing between. The same partition separates
-boot-to-boot dispersion of the graph arm (3.73--13.92\% against
-0.82--1.95\%), so the deficit and the dispersion are one phenomenon rather
-than two findings ($p = 0.008$ under random assignment), and pooled over 128
-boots the two groups do not overlap at all. Every deficit session on Modal
-shares one configuration --- vLLM 0.29.0, DFlash, the L4 and NVIDIA driver
-580.95.05 --- and every Modal session differing from it in one factor is at
-parity. On a rented L4 the same configuration is at parity under Docker's
-default runtime (1.001) and deficient under the gVisor sandbox that Modal
-runs GPU functions in (0.736, against 1.018 under the default runtime on the
-same card), on either driver and under two gVisor releases (0.726--0.755),
-while vLLM 0.30.0 in the same sandbox is at parity (1.040). In the sandboxed
-deficit the graph arm's GPU is busy 62.2--63.2\% of the time against
-90.0--92.3\% at parity, at a higher clock and lower power: it is waiting on
-the host, not throttled. The sandbox is necessary and the driver is not.
-Modal's boot-to-boot dispersion does not reproduce, a candidate engine fix
-we backported changes nothing, and four Modal sessions on the later driver
-are at parity for a reason we cannot see.
-Third, acceptance
-length $\tau$ has a boot-to-boot \emph{coefficient of variation of 0.62\%}
-under repeated identical boots, which we could not find reported; our own
-FP8-precision comparison is unreplicated and we withdraw the equivalence
-reading we previously gave it.
-Fourth, the metric commonly called \emph{inter-token latency is, when
-computed from stream-arrival timestamps, inter-chunk latency}: a speculative step emits every accepted token in one
-stream chunk, so the measured gap exceeds the amortised production time
-per emitted token by roughly~$\tau$.
-
-The first three add error; the fourth reverses the ranking. Under a standard
-p95-ITL service objective, every speculative configuration we measured
-scores \emph{zero goodput at concurrency 64 while producing the most tokens
-per second in the grid}. We report FP8~$\times$~speculative results with three
-of the four controlled --- draft-side backend selection is not, because the
-engine offers no way to pin it --- and release the harness, the raw records, and the full
-history of our own corrections --- preserved analysis revisions, including
-two that withdrew headline claims of this paper, each traceable to the same
-error shape.
+Speculative decoding and FP8 quantization are standard in LLM serving, and
+their interaction is usually reported from single runs. Measuring it on
+vLLM 0.29.0 and an NVIDIA L4, we found four confounds larger than the effect.
+First, attention-backend selection is conditioned on KV-cache dtype, so an
+FP8-versus-BF16 comparison under defaults also swaps the attention kernel,
+and target and draft select independently. Second, speculative throughput
+falls into two disjoint regimes: across ten L4 sessions on Modal, with the
+ratio of CUDA-graph to \tw{-{}-enforce-eager} throughput measured in the same
+container, three sessions sit at 0.487--0.768 and seven at 1.003--1.039, with
+nothing between. An intervention on a rented L4 places the cause in the gVisor
+sandbox that Modal runs GPU functions in: on one card, vLLM 0.29.0 gives
+0.736 under gVisor and 1.018 under Docker's default runtime, vLLM 0.30.0 is
+at parity in the same sandbox (1.040), and in the deficit the GPU is idle
+about a third of the time, waiting on the host. Modal attributes the
+parity of its later sessions to a gVisor change that backs GPU-shared memory
+with huge pages; under the public release containing it the deficit
+persists on a second card, but the host never allocated such pages, so that
+explanation remains untested.
+Third, acceptance length $\tau$ has a boot-to-boot coefficient of variation
+of 0.62\%, and below 0.88\% in every session, which we could not find
+reported. Fourth, inter-token latency computed from stream arrivals is
+inter-chunk latency: a speculative step emits every accepted token in one
+chunk, so a p95-ITL objective scores the highest-throughput configuration in
+our grid at zero goodput. The first three add error; the fourth reverses the
+ranking. We release the harness, the raw records and every correction we
+made.
 \end{abstract}
 
 \section{Introduction}
@@ -118,9 +92,10 @@ fall into two disjoint regimes: ratio 0.487--0.768 with graph-arm CV
 3.73--13.92\%, or 1.003--1.039 with CV 0.82--1.95\%, with nothing between.
 On one rented card the deficit appears under gVisor and not under runc,
 follows the engine release and not the driver, and comes with a GPU idle a
-third of the time. Power throttling, CPU starvation, the driver and one
-candidate engine change are each ruled out by measurement; which part of the
-sandbox, and which change in vLLM 0.30.0, we do not identify. \tw{-{}-enforce-eager} removes the
+third of the time, on two cards. Power throttling, CPU starvation, the driver
+and one candidate engine change are each ruled out by measurement. The
+platform names a hugepage change in its sandbox as what restored parity; we
+could not exercise it off the platform. \tw{-{}-enforce-eager} removes the
 variance but is not a free control --- it costs FP8-weight configurations
 a fifth to a half of their throughput and cannot boot speculative FP8-KV
 cells at all on this card.
@@ -239,7 +214,7 @@ requested-versus-selected backend for \emph{a server} when there is no such
 thing as a server's backend --- there are two.
 
 \section{Confound 2: speculative throughput falls into one of two
-regimes, and the platform decides which}\label{sec:c2}
+regimes, and the sandbox decides which}\label{sec:c2}
 
 Booting an identical speculative configuration repeatedly produces widely
 scattered throughput while acceptance stays put --- in some container
@@ -307,15 +282,11 @@ configuration once gets a number from one of two separated populations,
 and which one depends on things that reader did not choose --- and, on a
 serverless platform, cannot see.
 
-\paragraph{What the split depends on.} This section's reading has changed
-three times, and the history is part of the result. Four revisions read the
-split as a regression in vLLM 0.29.0, fixed in 0.30.0. When three further
-0.29.0 sessions reached parity, the next revision withdrew that ($p = 0.238$
-for 3 deficit sessions of 6 on 0.29.0 against 0 of 3 on later releases) and,
-with it, two more readings: that the deficit is specific to the L4, and that
-it needs draft-model speculation. Both revisions missed a variable stored in
-every record. \textbf{Every session up to 4 October ran NVIDIA driver
-580.95.05; every session from 31 October ran 610.57.04.} Every deficit session
+\paragraph{What the split depends on.} Earlier readings of this split, first
+as a regression in vLLM 0.29.0 and then as a random session-scoped regime,
+compared sessions across two host drivers without knowing it.
+\textbf{Every session up to 4 October ran NVIDIA driver 580.95.05; every
+session from 31 October ran 610.57.04.} Every deficit session
 on Modal shares one configuration, and every Modal session that differs from
 it in exactly one factor is at parity:
 
@@ -342,11 +313,10 @@ $^\ast$Not a one-factor change; see the n-gram paragraph below.
 $^\dagger$Two factors: Modal runs GPU functions under gVisor, and these ran
 under Docker's default runtime. Both GCP rows use driver 580.95.05 installed
 by hand.
-The withdrawals had compared sessions across two drivers without knowing it.
-Within one driver, two of the three readings hold: on 580.95.05, vLLM 0.29.0
-is deficient in 3 sessions of 3 against 0 of 2 for 0.30.0, and the L4 in 3 of
-3 against 0 of 1 for the A10. The third does not, because switching to n-gram
-changes more than the mechanism. The engine logs see none of it: across 140
+Within one driver, the engine release and the card each separate the
+regimes: on 580.95.05, vLLM 0.29.0 is deficient in 3 sessions of 3 against 0
+of 2 for 0.30.0, and the L4 in 3 of 3 against 0 of 1 for the A10. n-gram does
+not, because it changes more than the mechanism. The engine logs see none of it: across 140
 graph-arm logs, not one message separates Modal's deficit configuration from
 any of its neighbours.
 
@@ -488,9 +458,43 @@ sessions scattered from boot to boot (graph-arm CV 3.73--13.92\%); the
 sandboxed deficit here does not (0.91--1.73\%), so on Modal something else,
 plausibly a shared host, added the dispersion. And four Modal sessions on
 610.57.04 with vLLM 0.29.0 are at parity (1.003--1.015) while sharing every
-factor we can record with the deficit sessions, the sandbox included. No
-upstream gVisor build we ran reproduces their parity. Modal's later build is
-not public, and whatever changed in it is the remaining unknown.
+factor we can record with the deficit sessions, the sandbox included.
+
+Modal's explanation for the second (support correspondence, 4 November
+2026) is that its late-October gVisor build lets memory shared with the GPU
+use huge pages, through two changes now upstream: one gives shared
+anonymous memory huge pages when a fill is not hugepage-aligned
+(google/gvisor\#16008), the other aligns nvproxy's mirrors of pinned
+application memory to huge pages (\#16009). Upstream release-20261026.0
+contains the first, and release-20261102.0 both. We ran both on a second
+card, with a rule committed before the machine existed:
+
+\begin{center}\small
+\begin{tabular}{llrr}
+\toprule
+gVisor & Host shared-memory THP & Ratio [95\%] & Graph util\\
+\midrule
+10-26 & never & \textbf{0.734} [0.719, 0.748] & 62.5\%\\
+11-02 & never & \textbf{0.734} [0.719, 0.750] & 62.1\%\\
+11-02 & advise$^\P$ & \textbf{0.729} [0.717, 0.742] & 61.9\%\\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent
+$^\P$Exploratory, its reading committed after the first two rows and
+before it ran. Driver 610.57.04, vLLM 0.29.0, 12 boots per arm.
+
+The deficit replicates on the second card, with the same idle-GPU signature
+(61.9--63.2\% across every sandboxed deficit container on both cards). It
+survives the release that contains both changes. But the test does not reach
+the mechanism. With the host's shared-memory transparent huge pages at
+Ubuntu's default, \tw{never}, gVisor cannot obtain huge pages at all; set to
+\tw{advise}, the host still reported 0\,kB of shared-memory huge pages mid-run.
+\#16009's own benchmark also relies on a third change, \#16215, which aligns
+shared anonymous mappings and is not merged upstream. So Modal's explanation
+is consistent with everything we measured and untested by it: its
+precondition, hugepage-backed GPU-shared memory, was never met.
 
 \textbf{The methodological point does not depend on that unknown.} A
 measurement on a serverless GPU platform includes a layer the user can
@@ -499,59 +503,16 @@ and the change moved the CUDA-graph path's throughput by up to a factor of
 two. An earlier revision attributed the effect to memory capacity, which was
 also wrong: both cards report \textbf{22.5\,GiB}.
 
-\paragraph{An earlier revision of this paper reported only the first row.}
-It gave 13.92\% as \emph{the} boot dispersion of this configuration. Nine
-sessions later the same quantity ranges from 0.82\% to 13.92\%, a factor of
-seventeen, and which value a single session returns is settled by its regime.
-Quoting one number for it was wrong, and so was quoting a range as if the
-distribution were continuous: it is bimodal.
-
-We applied that standard to our own new figures rather than only to the old
-one. An earlier version of this section reported the 0.30.0 result from a
-single session; by the argument above that is a draw, so we measured it again
-on another card before quoting it. A dispersion measured once is a draw, not
-a property --- the same error as reporting a mean from one run, applied one
-level up --- and it survived four revisions of this paper because a clean
-number with $n=12$ does not look like it needs replicating.
-
-Two measurement choices matter here, and we got both wrong in earlier
-revisions. First, we report CV rather than a max/min range: a range grows
-with sample size by construction, so ranges from arms with different boot
-counts cannot be compared. Second, we restrict to \emph{fixed-prompt}
-boots. Pooling in grid records, whose repeats draw different prompts by
-design, mixes prompt variation into what is meant to be boot variation and
-inflated this figure to 29.92\%. The pooled number is reported separately in
-the artifact and is not a boot-dispersion estimate.
-
-The modes above are \emph{sessions}. Within a single session the boots
-themselves are not bimodal, and an earlier draft of this paper claimed they
-were. Pooling the default-arm boots available at the time that claim was
-examined, at concurrency 1 (n = 23):
-\[
-\begin{aligned}
-&24.8\;\; 28.4\;\; 29.5\;\; 31.9\;\; 32.1\;\; 33.2\;\; 37.0\;\; 39.1\;\; 40.6\;\; 41.1\\
-&41.3\;\; 43.7\;\; 44.2\;\; 44.5\;\; 45.5\;\; 47.3\;\; 50.7\;\; 60.8\;\; 61.2\;\; 62.0\;\; 64.7\;\; 66.5\;\; 73.6
-\end{aligned}
-\]
-
-\textbf{We previously reported this as bimodal and retract that.} An
-earlier draft claimed two discrete modes, on the basis of five boots with a
-gap in the middle. At n = 23 the gap is filled: fitting one versus two
-Gaussian components gives BIC 190.50 against 192.10, a $\Delta$BIC of
-$-1.60$ \emph{favouring a single component}. The retraction is recorded in
-the artifact. It is the same error we document elsewhere in this paper —
-reading structure off a sample too small to support it — and we made it in
-our own headline.
-
-\textbf{This retraction stands, and it is not in tension with the regime
-separation above.} The two statements are about different levels. Boots
-within one session form a single continuous distribution; sessions fall into
-two separated groups. Sampling five boots from inside one wide deficit
-session produced a gap that looked like structure and was not, while the
-structure that does exist sits one level up and was invisible until we had
-replicated the whole session nine times over. Finding the right level took four
-revisions, and the error in both directions was the same: reading modality
-off whichever sample we happened to have.
+\paragraph{Three measurement choices.} We report CV rather than a max/min
+range, because a range grows with sample size. We use fixed-prompt boots
+only, because grid repeats draw different prompts by design, and pooling
+them mixes prompt variation into boot variation (29.92\% pooled, against
+13.92\% fixed-prompt in the same session). And a dispersion measured in one
+session is a draw: across sessions the same quantity ranges
+from 0.82\% to 13.92\%, a factor of seventeen, and the session's regime decides which.
+Within a session the boots are not bimodal --- at $n = 23$ one Gaussian
+component fits better than two ($\Delta$BIC $-1.60$) --- so the
+two-population structure is between sessions, not within them.
 
 \begin{figure}[h]\centering
 \includegraphics[width=0.86\textwidth]{figures/bimodality.pdf}
@@ -563,31 +524,21 @@ boot. \emph{This figure plots the 2026-09-23 session only, which is a deficit
 session.} Nine further sessions of the identical configuration give default
 arms from 0.82\% to 10.38\% CV, seven of them at parity with their eager
 control, so this distribution's width is a property of the session's regime
-and not of the configuration; see \S\ref{sec:c2}. Three earlier versions of this figure were wrong: one showed five boots
-and was captioned as two clusters; one pooled grid runs whose prompts differ
-and so plotted prompt variation alongside boot variation; and from v1.1.0 to
-v1.5.2 it plotted every session on both cards while this caption described
-one (F050).}
+and not of the configuration; see \S\ref{sec:c2}. Earlier versions of this figure were wrong in three ways, recorded in the
+artifact (F050).}
 \label{fig:bimodality}
 \end{figure}
 
-\paragraph{The dispersion is associated with the CUDA-graph path; we do
-not identify the mechanism.} vLLM emits, at every speculative boot, a
-warning that \tw{CUDAGraphMode.FULL\_AND\_PIECEWISE} is unsupported with
-spec-decode for the FlashInfer backend, and falls back. Pinning
-\tw{cudagraph\_mode: PIECEWISE} lands at the low end (30.04 versus a 30.57
-default mean). Disabling CUDA graphs collapses the dispersion to CV 1.44\%
-over 8 boots.
-
-That is localisation, not causation, and we are explicit about the gap.
-\tw{-{}-enforce-eager} changes the entire execution path: graph capture,
-memory reservation, boot feasibility (\S\ref{sec:results}) and FP8 kernel
-performance all move with it. We did not separate boot state from host
-state --- rented L4 instances differ in physical GPU, clock and power
-behaviour between runs, and we did not record GPU identity. The defensible
-claim is that \emph{the dispersion appeared in graph-enabled DFlash runs and
-collapsed under eager execution, and which graph, scheduler, allocator,
-kernel or host property is responsible remains unknown.}
+\paragraph{The effect lives on the CUDA-graph path.} vLLM emits, at every
+speculative boot, a warning that \tw{CUDAGraphMode.FULL\_AND\_PIECEWISE} is
+unsupported with spec-decode for the FlashInfer backend, and falls back to
+piecewise graphs. Pinning \tw{cudagraph\_mode: PIECEWISE} lands at the low end
+(30.04 versus a 30.57 default mean), and disabling CUDA graphs collapses the
+dispersion to CV 1.44\% over 8 boots. \tw{-{}-enforce-eager} changes more than
+graphs --- memory reservation, boot feasibility (\S\ref{sec:results}) and FP8
+kernel performance move with it --- so on its own this localises the effect
+to the graph path without naming a mechanism. The sandbox legs above say
+what that path pays for under gVisor.
 
 \paragraph{The sharpest instance.} One content-addressed cell
 (\tw{dflash\,|\,bf16\,|\,fp8\_e4m3\,|\,FLASHINFER}, graphs on) was measured
@@ -622,10 +573,8 @@ happened to land, not about the flag.
 
 What is stable, within a deficit session, is the \emph{ordering}: CV 13.92\%
 over 12 default boots against 1.44\% over 8 eager boots, and every eager boot
-exceeds every default boot. \textbf{That ordering is regime-conditional, and
-an earlier revision of this section overstated it} by reporting that the
-default arm disperses more than its eager control ``in every session we have
-run'' on the strength of four sessions. It holds in all 3 deficit sessions
+exceeds every default boot. \textbf{That ordering is regime-conditional.}
+It holds in all 3 deficit sessions
 (13.92 vs 1.44; 3.73 vs 1.69; 10.38 vs 6.25) and in only 3 of the 7 parity
 sessions (1.53 vs 1.24; 1.95 vs 1.02; 0.82 vs 0.75; the other four invert).
 In the parity regime both
@@ -636,53 +585,22 @@ decoding faster by a stated factor --- it makes it \emph{reproducible}, and
 whatever throughput it gains is however far down the distribution the
 default would otherwise have fallen.
 
-Our first write-up of this section led with $2.38\times$, obtained by
-comparing against an arm we assumed representative, which was one draw from
-the wide distribution this same section describes.
 
-\paragraph{It may be specific to draft-model speculation; our evidence is
-weaker than we first reported.} Running the identical protocol with n-gram
-(prompt-lookup) speculation gives CV 2.67\% across twelve boots against
-DFlash's 13.92\%, and no benefit from \tw{-{}-enforce-eager}. But those
-twelve n-gram boots pool two container sessions (CV 3.19\% at $n=4$ and
-1.55\% at $n=8$), and neither is a session that produced a DFlash deficit.
-Both n-gram sessions therefore sit in the parity regime, where DFlash itself
-gives 0.82--1.95\%. \textbf{Under the regime account this comparison carries
-almost no information:} if n-gram entered the deficit regime at DFlash's
-observed rate of 3 in 10, two sessions would both land in parity with
-probability $(7/10)^2 = 0.49$. Observing two quiet n-gram sessions is thus an
-unremarkable outcome even if n-gram is affected exactly as DFlash is. The
-comparison is cross-session and cross-regime, and the localisation is
-suggestive at best. These are the same
-fact arriving twice: if throughput is already reproducible, there is nothing
-for the flag to stabilise. As a measurement sanity check, n-gram's acceptance is deterministic
-($\tau = 1.732$ on every boot, spread $1.000\times$) where DFlash's spans
-4.0914--4.1479 over the same fixed-prompt boots, which is what a
-prompt-matching mechanism should do. (The wider 4.09--4.43 seen elsewhere in
-our records spans different prompt sets and is not comparable.)
 
-Twelve boots cannot prove absence; they bound it. At matched $n=12$, DFlash
-gives CV 13.92\% and n-gram 2.67\%, a factor of five apart. That argument
-holds only against DFlash's noisiest session: matched against a parity
-session the two are 0.86\% and 2.67\%, and the comparison reverses --- DFlash
-is the quieter of the pair. We report this as a weak localisation and note
-that settling it requires n-gram and DFlash measured in the \emph{same}
-session, and specifically in a \emph{deficit} session, which we have not
-done. The
-consequence is that a claim like ours has to name the mechanism:
-``speculative throughput is unreproducible'' would be refuted by the first
-reader who tries prompt-lookup.
-
-\textbf{The n-gram comparison is also confounded, in a way only the engine
-logs show.} Selecting n-gram makes vLLM fall back to its V1 model runner and
-disable async scheduling; every n-gram log records both substitutions, and no
-DFlash log records either. The n-gram sessions therefore changed three things
-at once, and their parity cannot localise the deficit to draft-model
-speculation. This is Confound~1's shape again --- change one setting and the
-engine substitutes a component --- in a different component. The
-non-speculative cell has no such problem: it runs the same V2 runner with
-async scheduling on, which is why it, not n-gram, is the control in our
-within-container comparisons.
+\paragraph{Whether it is specific to draft-model speculation is not
+settled.} n-gram (prompt-lookup) speculation gives CV 2.67\% over twelve
+boots against DFlash's 13.92\%, and no benefit from \tw{-{}-enforce-eager}.
+That comparison carries little information. Both n-gram sessions sit in the
+parity regime, where DFlash itself gives 0.82--1.95\%, and if n-gram entered
+the deficit regime at DFlash's rate of 3 in 10, two sessions would both land
+at parity with probability $(7/10)^2 = 0.49$. Selecting n-gram also makes
+vLLM fall back to its V1 model runner with async scheduling off --- every
+n-gram log records both, and no DFlash log records either --- so those
+sessions changed three things at once: Confound~1's shape again, in a
+different component. The non-speculative cell, which keeps the V2 runner
+and async scheduling, is the within-container control instead. As a sanity
+check, n-gram's acceptance is deterministic ($\tau = 1.732$ on every boot),
+as a prompt-matching mechanism's should be.
 
 \section{Confound 3: acceptance dispersion is small, and had not been
 measured}\label{sec:c3}
@@ -719,7 +637,7 @@ Ten sessions, three engine releases: mean $\tau$ spans 4.0702--4.1675, a
 range of 2.4\%, and no session disperses by more than 0.88\%. This is the contrast that makes \S\ref{sec:c2} worth
 reporting, and it is now the cleaner of the two findings. On the same boots,
 acceptance is reproducible and reproducibly quiet while throughput dispersion
-ranges over a factor of sixteen. Whatever varies between sessions is not
+ranges over a factor of seventeen. Whatever varies between sessions is not
 changing which tokens the drafter gets accepted; it is changing how fast they
 are produced.
 
@@ -732,20 +650,12 @@ regime both are stable and there is no contrast to draw. The $\tau$ result
 holds across all ten sessions regardless; what varies is how much work it
 does.
 
-\paragraph{We previously called this a ``noise floor'' and withdraw that.}
-An earlier revision reported the \emph{range} of four boots, 1.32\%, and
-described it as a floor below which effects were ``unfalsifiable''. That was
-wrong in three ways, and we state them because the error is instructive.
-
-A range is not a dispersion statistic that can be compared or reused: it
-grows with sample size by construction. Measured again at $n = 12$, the same
-quantity's range is \textbf{1.38\%} --- it increased, which is what ranges
-do and what floors do not. Second, a detection threshold depends on
-variance, sample size, power and the chosen test, none of which a range
-encodes; effects below it are not unfalsifiable, they are undetected at that
-$n$. Third, we transplanted a figure measured at $\tau \approx 4.1$ on
-GSM8K at 768 tokens onto an earlier result measured at $\tau \approx 2.71$
-on a different prompt set at 256 tokens.
+\paragraph{A dispersion is not a detection floor.} A range over a few boots
+(1.32\% over four, \textbf{1.38\%} over twelve) grows with $n$ and encodes no
+variance, power or test, so it cannot mark a threshold below which effects
+are unfalsifiable; they are only undetected at that $n$. And a figure
+measured at $\tau \approx 4.1$ on GSM8K at 768 tokens says nothing about a
+comparison at $\tau \approx 2.71$ on a different prompt set at 256 tokens.
 
 \paragraph{What the data supports, and what it does not.} It is tempting
 to convert 0.62\% into a detection threshold and declare the 0.7\% FP8
@@ -757,8 +667,7 @@ $\tau \approx 4.1$. The 0.7\% precision effect comes from \emph{single-boot}
 cells at $\tau \approx 2.71$ on a different prompt set at a 256-token
 budget. There are not twelve boots per precision arm; there is one. Using
 dispersion measured at one operating point as an uncertainty bound for a
-comparison made at another is precisely the transplant we criticise two
-paragraphs above, and an earlier revision of this paper did it anyway.
+comparison made at another is precisely the transplant described above.
 
 The defensible statement is therefore weaker and shorter: \emph{our FP8
 precision comparison is unreplicated, and cannot establish either a
@@ -771,11 +680,9 @@ $\tau$ takes exactly \textbf{two distinct values}, 4.0914 (nine boots) and
 occasional discrete shifts, so modelling it as Gaussian measurement noise
 was the wrong frame independently of the sample-size error.
 
-\paragraph{What survives.} We withdraw a previously-published claim of ours
-that backend choice perturbs $\tau$ by 2.25\%. That figure came from
-\emph{one boot per backend}, and a single boot is not a basis for a timing
-claim on this stack (\S\ref{sec:c2}). It is withdrawn because it is
-unreplicated, which needs no appeal to a floor.
+\paragraph{A withdrawn claim.} An earlier version of this paper reported
+that backend choice perturbs $\tau$ by 2.25\%. That came from one boot per
+backend, and it is withdrawn as unreplicated.
 
 \paragraph{What we would claim, narrowly.} We could not find a published
 dispersion estimate for $\tau$ under repeated identical boots, and effects
@@ -960,7 +867,8 @@ boot-unstable --- tight within a boot (20.2 and 20.5 tok/s on grid 1's two
 repeats) and $1.4\times$ between them.
 
 This study therefore found \emph{two} unstable dimensions, each with a stable
-partner: speculation is unreproducible with CUDA graphs on and stable with them off;
+partner: on Modal, speculation is unreproducible with CUDA graphs on and stable
+with them off;
 FP8 weights are stable with graphs on and unstable with them off. Neither is
 visible in a single boot, and neither predicts the other.
 
@@ -1153,9 +1061,9 @@ where this paper meets that standard. \emph{Replicated:} the existence of two di
 throughput regimes and the default/eager ratio within each (eleven sessions
 on Modal, three engine releases, 3 deficit and 8 parity); the absence of
 the deficit under runc off Modal (three GCP sessions on three cards, all at
-parity); the sandboxed deficit (four gVisor containers on one card, two
-releases, two drivers, 0.726--0.755, with the same utilisation signature in
-each); acceptance dispersion
+parity); the sandboxed deficit (seven gVisor containers on two cards,
+three releases, two drivers, 0.726--0.755, with the same utilisation
+signature in each); acceptance dispersion
 (ten sessions, below 0.88\% in every one); the refutation of power
 throttling (two deficit sessions, both arms, plus four parity sessions); the eager penalty
 on FP8 weights, whose direction reproduces across two independent grids
@@ -1233,28 +1141,18 @@ choice shifts GSM8K accuracy by up to 16.6 percentage points, and that
 \emph{disabling CUDA graphs} shifts accuracy ``by up to $+0.15\%$''. They
 measure no throughput or latency at all.
 
-That pairing is worth stating plainly. The execution-path switch that moves
-output agreement by 0.15\% is the same switch across which we measure
-throughput dispersion of 0.86--13.92\% depending on which regime the
-session lands in (\S\ref{sec:c2}), on the same model family and the same GPU
-architecture. We do not read this as a contradiction: they are two
-different quantities, and a switch may reasonably leave one alone while
-moving the other. We read it as the clearest available evidence that the
-throughput axis of this switch has not been examined --- a careful,
-multi-seed, cross-engine reproducibility study probed CUDA graphs and
-reported a null, because the quantity it measured was not the one that moves.
+The same switch that moves their output agreement by 0.15\% moves our
+throughput by a factor of up to two, with graph-arm dispersion of
+0.82--13.92\% depending on the session's regime (\S\ref{sec:c2}), on the same
+model family and GPU architecture. They are different quantities, and a
+careful multi-seed study probed CUDA graphs and reported a null because the
+quantity it measured was not the one that moves.
 
-Chen~\cite{chen2026integer} supplies the complementary observation at the
+Chen~\cite{chen2026integer} makes the complementary observation at the
 kernel level, also on SM89: two nominally interchangeable INT8 GEMM kernels
-in vLLM agree on no sequence in 64, while each arm reproduces itself
-\emph{bit-for-bit across cold restarts}. Byte-identical output across boots
-and unreproducible throughput across boots are therefore both properties of
-this stack, and a study that establishes the first says nothing about the
-second. We note that Chen reports FP8 GEMM divergence growing with reduction
-depth where INT8 stays at parts-per-million; that is element-level
-disagreement between implementations, and our \S\ref{sec:results} accuracy
-null is an end-to-end task measurement, so the two do not speak to each
-other directly.
+in vLLM agree on no sequence in 64, while each reproduces itself
+bit-for-bit across cold restarts. Byte-identical output across boots and
+unreproducible throughput across boots are both properties of this stack.
 
 \textbf{On client-side measurement artifacts.}
 Chandrasekar and Kramberger~\cite{chandrasekar2026bias} show that a
@@ -1327,10 +1225,16 @@ findings they summarise.
 than suppress them: findings F009 and F014 rest on probe output predating
 the harness's per-measurement recording, so their numbers are not
 independently checkable from the repository. Neither is cited in this paper.
-The remaining twenty-seven findings resolve to stored records.
+Every other finding resolves to stored records.
 \tw{paper/build.sh} stops the build on any \emph{additional, undisclosed}
 defect; the two above are an explicit allowance, so the gate is against
 regression rather than against a nonzero count.
+
+\paragraph{This is the final version.} Version 2.0.0 closes the study. The
+repository is frozen at that tag: no further measurements will be added, and
+the questions left open above --- the hugepage mechanism and which change
+between vLLM 0.29.0 and 0.30.0 removes the deficit --- are stated as open
+rather than pursued.
 
 \paragraph{What content-addressing does and does not prove.} A
 \tw{cell\_id} guarantees two records came from the same \emph{declared}
@@ -1345,6 +1249,33 @@ of dollars. The error analysis in \S\ref{sec:c1}--\S\ref{sec:c4} is what that
 budget can establish, and on the evidence of \S\ref{sec:related} it is what
 the field is missing --- rather than another single-run speedup number
 measured on hardware most readers cannot rent.
+
+\section{Conclusion}\label{sec:conclusion}
+
+We set out to measure how FP8 quantization interacts with speculative
+decoding on an L4, and most of what we can report is what stood between the
+question and an answer. Each confound has the same shape: a comparison held
+something fixed by assumption that the system was varying underneath it.
+The attention backend moved with the KV dtype. Throughput moved with a
+sandbox the user cannot see, which on one rented card costs vLLM 0.29.0's
+CUDA-graph path 30\% and leaves its GPU idle a third of the time.
+The fix Modal names for its own platform, huge pages for memory shared with
+the GPU, could not be exercised off it, so the last link is the platform's
+word rather than our measurement.
+Acceptance length barely moved at all, which is why it, and not throughput,
+is the quantity that replicates. And the latency metric most serving
+benchmarks report measures stream chunks, not tokens, so under speculation
+it ranks configurations backwards.
+
+Three practices would have caught the first three sooner. Measure the control in the same
+container as the treatment, so that a card, a host or a sandbox moves both
+arms together and cancels in the ratio. Replicate the session, not only the
+boot, because the regime is a property of the session. And record the
+environment a result was measured in --- the backend actually selected, the
+host driver, the container runtime --- because every correction in this
+study came from a variable that had been recorded and not yet read, or not
+recorded and had to be measured. The fourth needed only that a metric be
+checked against what it claims to count.
 
 \begin{thebibliography}{9}\small
 

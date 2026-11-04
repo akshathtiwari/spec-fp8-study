@@ -1,5 +1,7 @@
 # What You Are Actually Measuring When You Benchmark Speculative Decoding Under FP8
 
+> **Final version, frozen.** v2.0.0 (2026-11-04) is the last release of this study. No further measurements will be added. Cite the concept DOI [10.5281/zenodo.23033168](https://doi.org/10.5281/zenodo.23033168) or the v2.0.0 version DOI shown on that record.
+
 An independent measurement study of speculative decoding and FP8 quantization
 on vLLM 0.29.0 / NVIDIA L4 (SM89), with the harness, the raw records, and the
 full history of its own corrections.
@@ -30,14 +32,15 @@ obscured:
    throughput splits into 0.487-0.768 or 1.003-1.039 with nothing between,
    and over 128 boots the groups do not overlap. Every deficit session on
    Modal shares one configuration (vLLM 0.29.0, DFlash, L4, NVIDIA driver
-   580.95.05). On a rented GCP L4 that configuration is at parity under runc
-   (1.001) and deficient under gVisor, the sandbox Modal runs GPU functions
-   in: 0.736 against 1.018 under runc on the same card, 0.726-0.755 across
-   two gVisor releases and two drivers, while vLLM 0.30.0 in the same
-   sandbox is at parity (1.040). The deficit graph arm's GPU is busy 62-63%
-   of the time against 90-92% at parity: waiting on the host, not
-   throttled. Modal's dispersion does not reproduce, and why Modal's later
-   sessions are at parity is not known (F042-F049).
+   580.95.05). On rented GCP L4s that configuration is at parity under runc
+   (1.001, 1.018) and deficient under gVisor, the sandbox Modal runs GPU
+   functions in: 0.726-0.755 across seven containers, two cards, three gVisor
+   releases and two drivers, while vLLM 0.30.0 in the same sandbox is at
+   parity (1.040). The deficit graph arm's GPU is busy 62-63% of the time
+   against 90-92% at parity: waiting on the host, not throttled. Modal
+   attributes its own later parity to a gVisor hugepage change; the public
+   release containing it did not remove the deficit off Modal, but the host
+   never allocated the huge pages, so that is untested (F042-F051).
 
 3. **Acceptance (tau) has a boot-to-boot CV under 0.88% in every session
    we have run** -- nine sessions, three engine releases, both throughput

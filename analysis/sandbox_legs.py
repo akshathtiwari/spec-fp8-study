@@ -29,6 +29,15 @@ ROOT = Path(__file__).resolve().parent.parent
 OUT = ROOT / "analysis" / "out" / "tables" / "sandbox_legs.md"
 T95 = {8: 2.365, 10: 2.262, 11: 2.228, 12: 2.201}
 
+#: Host transparent-huge-page setting for shared memory
+#: (/sys/kernel/mm/transparent_hugepage/shmem_enabled), which records do not
+#: carry. Read on the 2026-11-04 VM before and during its legs; see
+#: results/gcp/2026-11-04_hugepage_leg*_run.log and the addendum in
+#: results/gcp/2026-11-04_hugepage_decision_rule.txt. Earlier VMs used the
+#: same image family, whose default is "never", but did not read it.
+SHMEM_THP = {"2026-11-04T11-10Z": "never", "2026-11-04T12-48Z": "never",
+             "2026-11-04T14-24Z": "advise"}
+
 
 def sandbox(r: dict) -> str:
     return r.get("sandbox") or "runc"
@@ -65,6 +74,7 @@ def rows() -> list[dict]:
             "session": r["probe_run"][:17], "sandbox": sandbox(r), "engine": variant(r),
             "driver": env.get("driver"), "card": (env.get("gpu_uuid") or "")[:12],
             "cpus": r.get("cpus_visible"), "omp": r.get("omp_num_threads"),
+            "shmem": SHMEM_THP.get(r["probe_run"][:17], "not read"),
             "arms": defaultdict(list), "tau": defaultdict(list), "gpu": defaultdict(list)})
         if r.get("arm") in ("default", "enforce_eager"):
             d["arms"][r["arm"]].append(r["throughput"]["output_tokens_per_s"])
@@ -108,10 +118,10 @@ def main() -> None:
          "default (CUDA graphs) over `--enforce-eager` throughput in the same container; "
          "the interval is conservative (ratio of opposite ends of each arm's t-interval). "
          "Records without a `sandbox` field ran under Docker's default runtime, runc.", "",
-         "| session | runtime | driver | engine | card | cpus | OMP | graph tok/s (CV) | eager tok/s (CV) | ratio [95%] | regime | graph util | graph clock | graph power |",
-         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
+         "| session | runtime | driver | engine | card | shmem THP | cpus | OMP | graph tok/s (CV) | eager tok/s (CV) | ratio [95%] | regime | graph util | graph clock | graph power |",
+         "|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|"]
     for d in R:
-        L.append(f"| {d['session']} | {d['sandbox']} | {d['driver']} | {d['engine']} | {d['card']} "
+        L.append(f"| {d['session']} | {d['sandbox']} | {d['driver']} | {d['engine']} | {d['card']} | {d['shmem']} "
                  f"| {d['cpus']} | {d['omp'] or '-'} | {d['graph']:.1f} ({d['graph_cv']:.2f}%) "
                  f"| {d['eager']:.1f} ({d['eager_cv']:.2f}%) "
                  f"| **{d['ratio']:.3f}** [{d['lo']:.3f}, {d['hi']:.3f}] | {d['regime']} "
@@ -152,6 +162,16 @@ def main() -> None:
             L.append(f"- Graph-arm CV under gVisor: {min(d['graph_cv'] for d in g):.2f}--"
                      f"{max(d['graph_cv'] for d in g):.2f}%, against 3.73--13.92% in Modal's deficit "
                      "sessions. The ratio reproduces; the dispersion does not.")
+    hp = [d for d in R if d["session"].startswith("2026-11-04")]
+    if hp:
+        L += ["", f"## The 2026-11-04 legs: one card ({', '.join(sorted({d['card'] for d in hp}))}), "
+              "Modal's hugepage explanation", ""]
+        for d in hp:
+            L.append(f"- {d['sandbox']}, shmem THP {d['shmem']}: **{d['ratio']:.3f}** "
+                     f"[{d['lo']:.3f}, {d['hi']:.3f}], graph-arm util {d['util']:.1f}%.")
+        L.append("- release-20261102.0 contains google/gvisor#16008 and #16009; #16215, which "
+                 "#16009's benchmark also needed, is unmerged. With shmem THP at advise the host "
+                 "still showed ShmemHugePages 0 kB mid-run, so the hugepage path was not exercised.")
     OUT.parent.mkdir(parents=True, exist_ok=True)
     OUT.write_text("\n".join(L) + "\n")
     print(f"  wrote {OUT.relative_to(ROOT)} ({len(R)} sessions)")

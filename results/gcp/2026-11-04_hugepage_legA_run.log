@@ -1,0 +1,108 @@
+
+==========
+== CUDA ==
+==========
+
+CUDA Version 13.0.3
+
+Container image Copyright (c) 2016-2023, NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+
+This container image and its contents are governed by the NVIDIA Deep Learning Container License.
+By pulling and using the container, you accept the terms and conditions of this license:
+https://developer.nvidia.com/ngc/nvidia-deep-learning-container-license
+
+A copy of this license is made available in this container at /NGC-DL-CONTAINER-LICENSE for your convenience.
+
+/opt/venv/lib/python3.11/site-packages/modal/_functions.py:2153: UserWarning: The boot_variance function is executing locally and will not have access to the mounted Volume or NetworkFileSystem data
+  warnings.warn(
+Already up to date.
+concurrency x CUDA-graph test: 12 boots x 2 arms x 1 mechanisms ['dflash']
+cell[dflash]: dflash|bf16|auto|FLASHINFER
+
+  dflash  default        boot 1 c=1      55.28 tok/s  tau=4.032
+  dflash  default        boot 1 c=16    628.27 tok/s  tau=4.192
+  dflash  default        boot 1 c=64   1524.74 tok/s  tau=4.177
+  dflash  default        boot 2 c=1      58.19 tok/s  tau=4.173
+  dflash  default        boot 2 c=16    653.22 tok/s  tau=4.198
+  dflash  default        boot 2 c=64   1628.76 tok/s  tau=4.160
+  dflash  default        boot 3 c=1      57.37 tok/s  tau=4.171
+  dflash  default        boot 3 c=16    643.47 tok/s  tau=4.159
+  dflash  default        boot 3 c=64   1498.06 tok/s  tau=4.174
+  dflash  default        boot 4 c=1      58.52 tok/s  tau=4.175
+  dflash  default        boot 4 c=16    657.88 tok/s  tau=4.170
+  dflash  default        boot 4 c=64   1531.52 tok/s  tau=4.171
+  dflash  default        boot 5 c=1      58.18 tok/s  tau=4.175
+  dflash  default        boot 5 c=16    661.00 tok/s  tau=4.174
+  dflash  default        boot 5 c=64   1554.12 tok/s  tau=4.159
+  dflash  default        boot 6 c=1      58.06 tok/s  tau=4.175
+  dflash  default        boot 6 c=16    664.75 tok/s  tau=4.214
+  dflash  default        boot 6 c=64   1627.91 tok/s  tau=4.179
+  dflash  default        boot 7 c=1      57.87 tok/s  tau=4.143
+  dflash  default        boot 7 c=16    649.16 tok/s  tau=4.140
+  dflash  default        boot 7 c=64   1617.00 tok/s  tau=4.183
+  dflash  default        boot 8 c=1      57.75 tok/s  tau=4.175
+  dflash  default        boot 8 c=16    634.83 tok/s  tau=4.169
+  dflash  default        boot 8 c=64   1579.97 tok/s  tau=4.173
+  dflash  default        boot 9 c=1      57.79 tok/s  tau=4.175
+  dflash  default        boot 9 c=16    671.85 tok/s  tau=4.214
+  dflash  default        boot 9 c=64   1559.37 tok/s  tau=4.172
+  dflash  default        boot 10 c=1      58.42 tok/s  tau=4.175
+  dflash  default        boot 10 c=16    657.58 tok/s  tau=4.172
+  dflash  default        boot 10 c=64   1614.71 tok/s  tau=4.151
+  dflash  default        boot 11 c=1      58.23 tok/s  tau=4.143
+  dflash  default        boot 11 c=16    653.54 tok/s  tau=4.188
+  dflash  default        boot 11 c=64   1626.13 tok/s  tau=4.175
+  dflash  default        boot 12 c=1      57.36 tok/s  tau=4.175
+  dflash  default        boot 12 c=16    653.79 tok/s  tau=4.172
+  dflash  default        boot 12 c=64   1609.58 tok/s  tau=4.181
+  dflash  enforce_eager  boot 1 c=1      74.91 tok/s  tau=4.163
+  dflash  enforce_eager  boot 1 c=16    788.59 tok/s  tau=4.194
+  dflash  enforce_eager  boot 1 c=64   1684.74 tok/s  tau=4.201
+  dflash  enforce_eager  boot 2 c=1      78.82 tok/s  tau=4.163
+  dflash  enforce_eager  boot 2 c=16    800.71 tok/s  tau=4.188
+  dflash  enforce_eager  boot 2 c=64   1691.48 tok/s  tau=4.178
+  dflash  enforce_eager  boot 3 c=1      78.82 tok/s  tau=4.163
+  dflash  enforce_eager  boot 3 c=16    798.46 tok/s  tau=4.188
+  dflash  enforce_eager  boot 3 c=64   1670.00 tok/s  tau=4.172
+  dflash  enforce_eager  boot 4 c=1      78.82 tok/s  tau=4.163
+  dflash  enforce_eager  boot 4 c=16    782.34 tok/s  tau=4.190
+  dflash  enforce_eager  boot 4 c=64   1733.38 tok/s  tau=4.163
+  dflash  enforce_eager  boot 5 c=1      78.56 tok/s  tau=4.163
+  dflash  enforce_eager  boot 5 c=16    795.11 tok/s  tau=4.199
+  dflash  enforce_eager  boot 5 c=64   1719.00 tok/s  tau=4.166
+  dflash  enforce_eager  boot 6 c=1      79.33 tok/s  tau=4.163
+  dflash  enforce_eager  boot 6 c=16    800.96 tok/s  tau=4.194
+  dflash  enforce_eager  boot 6 c=64   1644.19 tok/s  tau=4.177
+  dflash  enforce_eager  boot 7 c=1      79.20 tok/s  tau=4.163
+  dflash  enforce_eager  boot 7 c=16    801.13 tok/s  tau=4.194
+  dflash  enforce_eager  boot 7 c=64   1660.18 tok/s  tau=4.174
+  dflash  enforce_eager  boot 8 c=1      79.06 tok/s  tau=4.154
+  dflash  enforce_eager  boot 8 c=16    788.08 tok/s  tau=4.191
+  dflash  enforce_eager  boot 8 c=64   1685.22 tok/s  tau=4.172
+  dflash  enforce_eager  boot 9 c=1      79.40 tok/s  tau=4.163
+  dflash  enforce_eager  boot 9 c=16    796.27 tok/s  tau=4.205
+  dflash  enforce_eager  boot 9 c=64   1693.37 tok/s  tau=4.175
+  dflash  enforce_eager  boot 10 c=1      79.21 tok/s  tau=4.163
+  dflash  enforce_eager  boot 10 c=16    801.99 tok/s  tau=4.188
+  dflash  enforce_eager  boot 10 c=64   1702.81 tok/s  tau=4.204
+  dflash  enforce_eager  boot 11 c=1      79.02 tok/s  tau=4.163
+  dflash  enforce_eager  boot 11 c=16    796.81 tok/s  tau=4.199
+  dflash  enforce_eager  boot 11 c=64   1684.70 tok/s  tau=4.177
+  dflash  enforce_eager  boot 12 c=1      79.60 tok/s  tau=4.163
+  dflash  enforce_eager  boot 12 c=16    801.52 tok/s  tau=4.185
+  dflash  enforce_eager  boot 12 c=64   1664.06 tok/s  tau=4.204
+
+default/eager within this container (ratio < 0.95 = deficit):
+ mechanism  conc   default     eager  default/eager
+---------------------------------------------------
+    dflash     1      57.8      78.7         0.734
+    dflash    16     652.4     796.0         0.820
+    dflash    64    1581.0    1686.1         0.938
+
+One mechanism (dflash). Pass --sweep dflash,none for the 2x2 that tests whether the regime is speculation-specific.
+===
+== gVisor sees the GPU? ==
+[    0.000000] Starting gVisor...
+[    0.468102] Preparing for the zombie uprising...
+610.57.04, NVIDIA L4
+== nvproxy's own verdict on the driver ==
