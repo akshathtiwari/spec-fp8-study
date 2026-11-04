@@ -35,3 +35,32 @@ Rule (ratio = default/eager at concurrency 1):
 
 Prior: leaning A deficit, B parity (Modal's statement plus the mechanism fits
 F048's idle-GPU signature). Medium confidence.
+
+ADDENDUM 1, committed 2026-11-04 after legs A and B and BEFORE any further measurement:
+  Results (card GPU-94fbf18f-fbf0-1f81-808a-042a54a26d05, asia-northeast1-c,
+  610.57.04, THREADS1, 12 + 12 boots, fidelity checks passed on both):
+    leg A  runsc 20261026.0   ratio 0.734   graph-arm util 62.5%
+    leg B  runsc 20261102.0   ratio 0.734   graph-arm util 62.1%
+  Pre-registered reading: "A < 0.95 and B < 0.95 -> upstream 20261102.0 does
+  not reproduce Modal's parity; Modal's explanation is not confirmed off Modal."
+  That reading stands for legs A and B as run.
+
+  Found after B, before any further run: this host has
+  /sys/kernel/mm/transparent_hugepage/shmem_enabled = never (Ubuntu default)
+  and ShmemHugePages 0 kB. #16009's own benchmark ran with shmem_enabled=advise,
+  and states that #16008 and #16215 are also needed;
+  #16215 ("mm: hugepage-align shared anonymous mappings") is NOT merged
+  upstream, so no public release contains it. Leg B therefore could not
+  exercise the hugepage path at all; it tests the release, not the mechanism.
+
+  EXPLORATORY follow-up, same VM and card, readings fixed here:
+    leg B'  runsc 20261102.0 with shmem_enabled=advise (set via sysfs, no reboot).
+            B' >= 0.95 -> with host shmem huge pages, 20261102.0 removes the
+                          deficit; run leg C to attribute it.
+            B' <  0.95 -> not reproduced with the public release and host advise;
+                          #16215 (unpublished) and Modal's own patches remain
+                          untested. Stop.
+    leg C   (only if B' >= 0.95) runsc 20261026.0 with shmem_enabled=advise.
+            C <  0.95 -> the release change (consistent with #16009) is needed
+                         as well as the host setting.
+            C >= 0.95 -> the host setting alone removes it; #16009 not shown.
