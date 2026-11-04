@@ -1,0 +1,37 @@
+Pre-registered 2026-11-04, committed before the VM for this run was created.
+
+Why: Modal support (2026-11-04) says its late-October gVisor build lets memory
+shared with the GPU use huge pages, that all of our 2026-10-31 and 2026-11-01
+sessions ran on it, and that the changes are upstream:
+  google/gvisor#16008  fsutil: use huge pages for the aligned middle of unaligned fills
+  google/gvisor#16009  nvproxy: hugepage-align application memory mirrors
+Checked against upstream: release-20261026.0 (commit e8a2a288) contains #16008
+and not #16009; release-20261102.0 (commit 7a675ac6) contains both. F048 leg 6
+ran 20261026.0 and was deficient (0.744).
+
+Prediction under test (Modal's, stated here as ours to check): vLLM 0.29.0 is
+at parity under 20261102.0 and deficient under 20261026.0, on the same card.
+
+Run, one new GCP L4 VM, driver 610.57.04 (nvproxy-supported), the F048 image
+(vLLM 0.29.0), THREADS1, dflash, default + enforce_eager, 12 boots each:
+  leg A  runsc release-20261026.0   (control: F048 leg 6 on a new card)
+  leg B  runsc release-20261102.0
+Fidelity: dmesg is gVisor's; nvproxy reports 610.57.04 without the
+"not officially supported" warning; no "Reducing Torch threads" line.
+
+Rule (ratio = default/eager at concurrency 1):
+  A < 0.95 and B >= 0.95
+      -> on one card, the change from 20261026.0 to 20261102.0 removes the
+         deficit. Between those releases the candidate Modal names is #16009;
+         the release range contains other commits too, so the claim is "the
+         20261026.0 -> 20261102.0 range, consistent with #16009", not #16009
+         alone. Graph-arm GPU utilisation is predicted to return to ~90%.
+  A < 0.95 and B < 0.95
+      -> upstream 20261102.0 does not reproduce Modal's parity; Modal's
+         explanation is not confirmed off Modal. Reported as such.
+  A >= 0.95
+      -> this card does not reproduce leg 6; B cannot be read as a fix.
+         Reported as a failed control; no claim about the hugepage change.
+
+Prior: leaning A deficit, B parity (Modal's statement plus the mechanism fits
+F048's idle-GPU signature). Medium confidence.
