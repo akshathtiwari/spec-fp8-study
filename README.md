@@ -1,6 +1,6 @@
 # What You Are Actually Measuring When You Benchmark Speculative Decoding Under FP8
 
-> **Final version, frozen.** v2.0.0 (2026-11-04) is the last release of this study. No further measurements will be added. Cite the concept DOI [10.5281/zenodo.23033168](https://doi.org/10.5281/zenodo.23033168) or the v2.0.0 version DOI shown on that record.
+> **Final version.** v2.0.0 (2026-11-04) is the last measurement release of this study; no further measurements will be added. v2.0.1 (2026-11-10) corrects three stale statements in the paper and changes nothing else. Cite the concept DOI [10.5281/zenodo.23033168](https://doi.org/10.5281/zenodo.23033168) or the version DOI shown on that record.
 
 An independent measurement study of speculative decoding and FP8 quantization
 on vLLM 0.29.0 / NVIDIA L4 (SM89), with the harness, the raw records, and the

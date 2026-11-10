@@ -13,13 +13,13 @@ abstract: >-
   identified and quantified: attention-backend selection is conditioned on
   KV-cache dtype, so a precision A/B is also a kernel A/B; speculative
   throughput falls into one of two disjoint regimes, and an intervention on
-  rented hardware shows the deficit regime depends on the serverless
-  platform it was measured on, not on the driver alone; acceptance length
-  has a boot-to-boot CV below 0.88% in all nine sessions measured; and
+  rented hardware places the deficit regime in the gVisor sandbox the
+  serverless platform runs GPU functions in, not in the driver; acceptance
+  length has a boot-to-boot CV below 0.88% in all ten sessions measured; and
   "inter-token latency" computed from stream-arrival timestamps is
   inter-chunk latency under speculation, which inverts a p95-ITL goodput
   ranking rather than merely adding error to it. Released with the harness,
-  the raw append-only records, the analysis scripts, and 45 findings,
+  the raw append-only records, the analysis scripts, and 51 findings,
   including formal retractions and revisions of earlier readings.
 type: software
 authors:
@@ -38,8 +38,8 @@ identifiers:
 repository-code: https://github.com/akshathtiwari/spec-fp8-study
 license: MIT
 license-url: https://github.com/akshathtiwari/spec-fp8-study/blob/main/LICENSE
-version: 2.0.0
-date-released: "2026-11-04"
+version: 2.0.1
+date-released: "2026-11-10"
 keywords:
   - speculative decoding
   - FP8 quantization

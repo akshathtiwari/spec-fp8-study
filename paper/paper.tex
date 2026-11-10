@@ -1028,21 +1028,22 @@ checkpoint, one engine release (vLLM 0.29.0), one principal workload
 behaviour all depend on engine version, kernels, GPU architecture and model,
 so none of these findings should be assumed to transfer. What transfers is
 the \emph{class} of measurement error, not the magnitudes.
-\item \textbf{Boot and host effects are not separated.} Runs used rented
-instances; we did not record GPU serial, clocks or power state, so a
-host-to-host component cannot be distinguished from a boot-to-boot one in
-\S\ref{sec:c2}.
+\item \textbf{Boot and host effects are only partly separated.} Runs used
+rented instances; GPU identity was recorded only from 29 September and clocks
+and power only from 4 October, so for the earlier sessions a host-to-host
+component cannot be distinguished from a boot-to-boot one in \S\ref{sec:c2}.
 \item \textbf{Configuration identity is not byte identity.} Our
 \tw{cell\_id} hashes the declared configuration; model revisions are
 declared as \tw{main}, a mutable ref, and dependencies as open ranges. We
 resolved the commits post hoc and their upstream modification dates precede
 every run, but the harness did not record them at launch. See
 \tw{docs/reproducibility.md}.
-\item \textbf{The mechanism is unidentified.} We show that the dispersion
-is present with CUDA graphs enabled and collapses under eager execution. We
-do not show which graph, scheduler, allocator, kernel or host property is
-responsible, and we did not record GPU identity, so a host-to-host component
-is not excluded.
+\item \textbf{The mechanism is only partly identified.} The deficit appears
+under gVisor with vLLM 0.29.0, and not under runc or with 0.30.0
+(\S\ref{sec:c2}), but not every such session shows it. We do not show which
+part of the sandbox, or which change in vLLM 0.30.0, is responsible, and the
+boot-to-boot dispersion on Modal, which the sandbox does not reproduce, has no
+identified cause.
 \item \textbf{Mechanisms are not established} for the FP8-KV boot failure or
 the FP8-weight eager penalty. Both are observed and reproduced; neither was
 profiled. We state the readings we find plausible and mark them as readings.
@@ -1190,9 +1191,8 @@ claim no novelty there.
 SD measurements to $R^2 = 0.997$ using a single-sweep methodology with no
 repeated runs and no discussion of CUDA graphs. Our \S\ref{sec:c2} identifies
 an error term that such a protocol cannot see. We do not claim their results
-are wrong --- they measure A100/H100 where we measure L4, and
-\S\ref{sec:c2} localises the effect to draft-model speculation --- only that
-the term is unmeasured and worth checking.
+are wrong --- they measure A100/H100 where we measure L4 --- only that the
+term is unmeasured and worth checking.
 
 \textbf{On hardware.} Liu et al.\ use H100; Kong et al.\ use A100 and H100;
 both use FP16 KV. The regime where KV capacity actually binds, and where FP8
@@ -1230,11 +1230,11 @@ Every other finding resolves to stored records.
 defect; the two above are an explicit allowance, so the gate is against
 regression rather than against a nonzero count.
 
-\paragraph{This is the final version.} Version 2.0.0 closes the study. The
-repository is frozen at that tag: no further measurements will be added, and
-the questions left open above --- the hugepage mechanism and which change
-between vLLM 0.29.0 and 0.30.0 removes the deficit --- are stated as open
-rather than pursued.
+\paragraph{This is the final version.} Version 2.0.0 closes the study: no
+further measurements will be added, and the questions left open above --- the
+hugepage mechanism and which change between vLLM 0.29.0 and 0.30.0 removes
+the deficit --- are stated as open rather than pursued. Version 2.0.1 corrects
+three statements that had gone stale and changes nothing else.
 
 \paragraph{What content-addressing does and does not prove.} A
 \tw{cell\_id} guarantees two records came from the same \emph{declared}
